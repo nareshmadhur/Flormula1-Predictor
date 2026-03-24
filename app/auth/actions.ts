@@ -1,6 +1,7 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
+import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 
@@ -35,8 +36,8 @@ export async function signup(formData: FormData) {
     }
   }
 
-  const origin = process.env.NEXT_PUBLIC_SITE_URL || 
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+  const headersList = await headers()
+  const origin = headersList.get('origin') || 'http://localhost:3000'
 
   const { error } = await supabase.auth.signUp({
     email: data.email,
