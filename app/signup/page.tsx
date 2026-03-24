@@ -3,8 +3,32 @@ import { signup } from '@/app/auth/actions'
 export default function SignupPage({
   searchParams,
 }: {
-  searchParams: { error: string }
+  searchParams: { error: string; message?: string }
 }) {
+  if (searchParams.message) {
+    return (
+      <div className="flex-1 flex flex-col w-full px-8 sm:max-w-md justify-center gap-2 mx-auto animate-in fade-in duration-500 mt-20">
+        <div className="bg-card border border-white/10 p-8 rounded-3xl shadow-2xl text-center">
+          <h1 className="text-3xl font-black italic tracking-tighter mb-4 text-green-500">CHECK YOUR EMAIL</h1>
+          <p className="text-lg text-slate-300 mb-4">
+            We've sent a confirmation link to your inbox.
+          </p>
+          <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl text-blue-300 text-sm mb-6 text-left">
+            <p className="font-bold mb-1 flex items-center">
+              <span className="mr-2 text-xl">⚠️</span> Important:
+            </p>
+            Please check your <strong>Spam</strong> or <strong>Junk</strong> folder if you don't see it. 
+            <br/><br/>
+            The email will be from <span className="font-bold text-white">Supabase</span>.
+          </div>
+          <p className="text-slate-400 text-sm">
+            Once confirmed, you can <a href="/login" className="text-red-500 hover:text-red-400 font-bold hover:underline transition-colors">sign in here</a>.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex-1 flex flex-col w-full px-8 sm:max-w-md justify-center gap-2 mx-auto animate-in fade-in duration-500 mt-20">
       <div className="bg-card border border-white/10 p-8 rounded-3xl shadow-2xl">

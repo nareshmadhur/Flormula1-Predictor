@@ -35,14 +35,25 @@ export async function signup(formData: FormData) {
     }
   }
 
-  const { error } = await supabase.auth.signUp(data)
+  const origin = process.env.NEXT_PUBLIC_SITE_URL || 
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : 'http://localhost:3000')
+
+  const { error } = await supabase.auth.signUp({
+    email: data.email,
+    password: data.password,
+    options: {
+      emailRedirectTo: `${origin}/auth/callback`,
+      data: {
+        display_name: data.options.data.display_name,
+      }
+    }
+  })
 
   if (error) {
     redirect('/signup?error=Could not sign up user')
   }
 
-  revalidatePath('/', 'layout')
-  redirect('/predictions')
+  redirect('/signup?message=Check email to continue')
 }
 
 export async function signout() {
