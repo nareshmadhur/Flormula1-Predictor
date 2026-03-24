@@ -234,6 +234,54 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
 
         {/* Results Entry */}
         <div className="space-y-6">
+
+          {/* Proxy Prediction Form */}
+          <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl">
+             <h2 className="text-xl font-bold mb-4 flex items-center"><Plus className="w-5 h-5 mr-2 text-red-500" /> Log Historic Prediction</h2>
+             <p className="text-sm text-slate-400 mb-4">Select a user to manually insert or override their exact podium prediction for this race.</p>
+             <form action={proxyPrediction} className="space-y-4">
+                 <input type="hidden" name="race_id" value={race.id} />
+                 
+                 <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Select User</label>
+                    <select name="user_id" required defaultValue="" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2">
+                      <option value="" disabled className="bg-slate-900 text-white">Choose user</option>
+                      {profiles?.map((p: any) => (
+                        <option key={p.id} value={p.id} className="bg-slate-900 text-white">{p.display_name || p.email}</option>
+                      ))}
+                    </select>
+                 </div>
+
+                 <div className="grid grid-cols-3 gap-2">
+                     <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">P1</label>
+                        <select name="p1" required defaultValue="" className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-2 text-sm">
+                           <option value="" disabled>---</option>
+                           {drivers?.map((d: any) => <option key={d.id} value={d.id} className="bg-slate-900 text-white">{d.code}</option>)}
+                        </select>
+                     </div>
+                     <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">P2</label>
+                        <select name="p2" required defaultValue="" className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-2 text-sm">
+                           <option value="" disabled>---</option>
+                           {drivers?.map((d: any) => <option key={d.id} value={d.id} className="bg-slate-900 text-white">{d.code}</option>)}
+                        </select>
+                     </div>
+                     <div>
+                        <label className="block text-xs font-bold text-slate-500 mb-1">P3</label>
+                        <select name="p3" required defaultValue="" className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-2 text-sm">
+                           <option value="" disabled>---</option>
+                           {drivers?.map((d: any) => <option key={d.id} value={d.id} className="bg-slate-900 text-white">{d.code}</option>)}
+                        </select>
+                     </div>
+                 </div>
+
+                 <button type="submit" className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl px-4 py-3 mt-2 transition-colors">
+                   Submit Prediction for User
+                 </button>
+             </form>
+          </div>
+
           <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl">
              <h2 className="text-xl font-bold mb-4 flex items-center"><CheckCircle className="w-5 h-5 mr-2 text-red-500" /> Official Results</h2>
              
