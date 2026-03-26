@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { isPast } from 'date-fns'
 import { Flag, Lock, AlertCircle } from 'lucide-react'
 import PredictionForm from './prediction-form'
+import { getEffectiveRaceStatus } from '@/utils/race-status'
 
 export default async function PredictPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
@@ -26,7 +27,8 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
     return <div className="text-center p-12 text-slate-400">Race not found.</div>
   }
 
-  const isLocked = isPast(new Date(race.prediction_lock_at)) || race.status === 'locked'
+  const effectiveStatus = getEffectiveRaceStatus(race)
+  const isLocked = effectiveStatus === 'locked' || effectiveStatus === 'completed' || effectiveStatus === 'cancelled'
 
   // Fetch drivers list
   const { data: drivers } = await supabase

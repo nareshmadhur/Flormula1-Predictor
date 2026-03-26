@@ -2,6 +2,7 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
+import { getEffectiveRaceStatus } from '@/utils/race-status'
 
 export async function createRace(formData: FormData) {
   const supabase = await createClient()
@@ -18,11 +19,17 @@ export async function createRace(formData: FormData) {
   const raceName = formData.get('race_name') as string
   const circuitId = formData.get('circuit_id') as string
   const raceStartAt = new Date(formData.get('race_start_at') as string)
-  
+  const fp1At = formData.get('fp1_at') as string | null
+  const fp2At = formData.get('fp2_at') as string | null
+  const fp3At = formData.get('fp3_at') as string | null
+  const qualiAt = formData.get('quali_at') as string | null
+  const sprintAt = formData.get('sprint_at') as string | null
+  const sprintQualiAt = formData.get('sprint_quali_at') as string | null
+
   // By default, lock predictions 5 minutes before the race starts
   const lockAt = new Date(raceStartAt.getTime() - 5 * 60000)
 
-  const { error } = await supabase.from('races').insert({
+  const newRace: any = {
     season,
     round,
     race_name: raceName,
@@ -30,7 +37,36 @@ export async function createRace(formData: FormData) {
     race_start_at: raceStartAt.toISOString(),
     prediction_lock_at: lockAt.toISOString(),
     status: 'upcoming'
-  })
+  }
+
+  if (fp1At) newRace.fp1_at = fp1At
+  if (fp2At) newRace.fp2_at = fp2At
+  if (fp3At) newRace.fp3_at = fp3At
+  if (qualiAt) newRace.quali_at = qualiAt
+  if (sprintAt) newRace.sprint_at = sprintAt
+  if (sprintQualiAt) newRace.sprint_quali_at = sprintQualiAt
+
+  let { error } = await supabase.from('races').insert(newRace)
+
+  // If optional columns don't exist yet, retry without them
+  if (error && error.code === 'PGRST204' && error.message?.includes('fp1_at')) {
+    console.warn('Optional session columns not yet in schema, retrying without them', error)
+    const baseRace = {
+      season,
+      round,
+      race_name: raceName,
+      circuit_id: circuitId,
+      race_start_at: raceStartAt.toISOString(),
+      prediction_lock_at: lockAt.toISOString(),
+      status: 'upcoming'
+    }
+    const retryResult = await supabase.from('races').insert(baseRace)
+    if (retryResult.error) {
+      console.error('Failed to create race', retryResult.error)
+      throw new Error('Failed to create race')
+    }
+    error = null
+  }
 
   if (error) {
     console.error('Failed to create race', error)
@@ -147,4 +183,89 @@ export async function updateBonusQuestion(formData: FormData) {
   }
 
   revalidatePath(`/admin/races/${raceId}`)
+}
+
+/**
+ * Updates race statuses based on time logic
+ * This should be called periodically to ensure race statuses are accurate
+ */
+export async function updateRaceStatuses() {
+  const supabase = await createClient()
+
+  // Get all races
+  const { data: races, error } = await supabase
+    .from('races')
+    .select('*')
+
+  if (error) {
+    console.error('Error fetching races for status update:', error)
+    return { error: 'Failed to fetch races' }
+  }
+
+  if (!races) {
+    return { success: true, message: 'No races found' }
+  }
+
+  const updates = []
+
+  for (const race of races) {
+    const effectiveStatus = getEffectiveRaceStatus(race)
+
+    // Only update if the effective status differs from stored status
+    // and we're not overriding a manually set 'scored' status
+    if (effectiveStatus !== race.status && race.status !== 'scored') {
+      updates.push({
+        id: race.id,
+        status: effectiveStatus
+      })
+    }
+  }
+
+  if (updates.length === 0) {
+    return { success: true, message: 'All race statuses are up to date' }
+  }
+
+  // Update races in batches
+  const { error: updateError } = await supabase
+    .from('races')
+    .upsert(updates, { onConflict: 'id' })
+
+  if (updateError) {
+    console.error('Error updating race statuses:', updateError)
+    return { error: 'Failed to update race statuses' }
+  }
+
+  return {
+    success: true,
+    message: `Updated ${updates.length} race statuses`,
+    updates
+  }
+}
+
+/**
+ * Cancels a race (sets status to cancelled)
+ */
+export async function cancelRace(raceId: string) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+
+  if (!user) throw new Error('Unauthorized')
+
+  // Verify Admin
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  if (profile?.role !== 'admin') throw new Error('Forbidden')
+
+  const { error } = await supabase
+    .from('races')
+    .update({ status: 'cancelled' })
+    .eq('id', raceId)
+
+  if (error) {
+    console.error('Failed to cancel race', error)
+    throw new Error('Failed to cancel race')
+  }
+
+  revalidatePath('/admin')
+  revalidatePath('/predictions')
+  revalidatePath('/')
 }

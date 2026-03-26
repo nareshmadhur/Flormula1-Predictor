@@ -1,9 +1,10 @@
 import { createClient } from '@/utils/supabase/server'
-import { createRace } from '@/app/actions/admin'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { Plus, Settings, ChevronRight } from 'lucide-react'
-import { format } from 'date-fns'
+import { Settings, ChevronRight } from 'lucide-react'
+import { getEffectiveRaceStatus } from '@/utils/race-status'
+import { CreateRaceForm } from '@/components/ui/create-race-form'
+import { MaintenanceSection } from '@/components/ui/maintenance-section'
 
 export const revalidate = 0
 
@@ -51,11 +52,11 @@ export default async function AdminDashboardPage() {
       </div>
 
       <div className="grid md:grid-cols-3 gap-8">
-        
+
         {/* Race List (Left/Main col) */}
         <div className="md:col-span-2 space-y-4">
           <h2 className="text-xl font-bold mb-4">Season Calendar</h2>
-          
+
           <div className="bg-card border border-white/5 rounded-2xl shadow-xl overflow-hidden divide-y divide-white/5">
             {(!races || races.length === 0) ? (
               <div className="p-8 text-center text-slate-500 italic">No races defined.</div>
@@ -69,15 +70,16 @@ export default async function AdminDashboardPage() {
                      <div className="text-lg font-bold">{race.race_name}</div>
                      <div className="text-slate-400 text-sm">{race.circuits?.name} {race.circuits?.emoji}</div>
                    </div>
-                   
+
                    <div className="flex items-center space-x-6 mt-4 sm:mt-0">
                      <div className="hidden sm:block text-right">
                        <div className="text-xs text-slate-500 uppercase font-bold">Status</div>
                        <div className={`text-sm font-medium ${
-                         race.status === 'scored' ? 'text-green-500' :
-                         race.status === 'upcoming' ? 'text-amber-500' : 'text-slate-400'
+                         getEffectiveRaceStatus(race) === 'scored' ? 'text-green-500' :
+                         getEffectiveRaceStatus(race) === 'cancelled' ? 'text-red-400' :
+                         getEffectiveRaceStatus(race) === 'upcoming' ? 'text-amber-500' : 'text-slate-400'
                        }`}>
-                         {race.status.toUpperCase()}
+                         {getEffectiveRaceStatus(race).toUpperCase()}
                        </div>
                      </div>
                      <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-red-500 transition-colors" />
@@ -88,9 +90,9 @@ export default async function AdminDashboardPage() {
           </div>
         </div>
 
-        {/* Right col: Utilities & Create */}
+        {/* Right col: Utilities */}
         <div className="space-y-6">
-          
+
           <Link href="/admin/data" className="bg-card border border-white/5 p-6 rounded-2xl shadow-xl hover:bg-white/[0.02] transition-colors flex items-center justify-between group block">
              <div>
                <h2 className="text-xl font-bold mb-1">Grid Data</h2>
@@ -99,42 +101,15 @@ export default async function AdminDashboardPage() {
              <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-red-500 transition-colors" />
           </Link>
 
-          <h2 className="text-xl font-bold mb-4 pt-4 border-t border-white/10">Add Race</h2>
-          <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl">
-             <form action={createRace} className="space-y-4">
-               <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Season Year</label>
-                  <input name="season" type="number" defaultValue={2024} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2" />
-               </div>
-               <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Round Number</label>
-                  <input name="round" type="number" required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2" />
-               </div>
-               <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Race Name</label>
-                  <input name="race_name" type="text" placeholder="e.g. Bahrain Grand Prix" required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2" />
-               </div>
-               <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Circuit</label>
-                  <select name="circuit_id" required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2">
-                    <option value="">Select Circuit</option>
-                    {circuits?.map((c: any) => (
-                      <option key={c.id} value={c.id}>{c.name} {c.emoji}</option>
-                    ))}
-                  </select>
-               </div>
-               <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Race Start (UTC)</label>
-                  <input name="race_start_at" type="datetime-local" required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm" />
-               </div>
-               
-               <button type="submit" className="w-full bg-red-600 hover:bg-red-500 text-white font-black text-lg italic tracking-widest rounded-xl px-4 py-4 mt-6 transition-all flex justify-center items-center shadow-[0_0_15px_rgba(239,68,68,0.3)] hover:shadow-[0_0_25px_rgba(239,68,68,0.5)]">
-                 <Plus className="w-6 h-6 mr-2" /> CREATE RACE
-               </button>
-             </form>
-          </div>
+          <MaintenanceSection />
+
         </div>
 
+      </div>
+
+      <div className="space-y-6">
+        <h2 className="text-xl font-bold">Create New Race</h2>
+        <CreateRaceForm circuits={circuits || []} />
       </div>
     </div>
   )

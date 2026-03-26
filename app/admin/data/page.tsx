@@ -1,49 +1,70 @@
-import { createClient } from '@/utils/supabase/server'
+'use client'
+
+import { createClient } from '@/utils/supabase/client'
 import { redirect } from 'next/navigation'
 import { Database, Plus, Trash2, Power } from 'lucide-react'
-import { addDriver, toggleDriverActive, deleteDriver } from '@/app/actions/admin-data'
+import { ToggleDriverButton } from './toggle-driver-button'
+import { DeleteDriverButton } from './delete-driver-button'
+import { AddDriverForm } from './add-driver-form'
+import { useState, useEffect } from 'react'
 
-export const revalidate = 0
-
-// Small wrapper form components for the Server Actions
-function ToggleDriverButton({ id, active }: { id: string, active: boolean }) {
-  return (
-    <form action={async () => {
-      'use server'
-      await toggleDriverActive(id, active)
-    }}>
-      <button className={`p-2 rounded-lg transition-colors ${active ? 'bg-green-500/10 text-green-500 hover:bg-green-500/20' : 'bg-slate-800 text-slate-500 hover:bg-slate-700'}`}>
-        <Power className="w-4 h-4" />
-      </button>
-    </form>
-  )
+export default function AdminDataPage() {
+  return <AdminDataPageClient />
 }
 
-function DeleteDriverButton({ id }: { id: string }) {
-  return (
-    <form action={async () => {
-      'use server'
-      await deleteDriver(id)
-    }}>
-      <button className="p-2 bg-red-500/10 text-red-500 hover:bg-red-500/20 rounded-lg transition-colors">
-        <Trash2 className="w-4 h-4" />
-      </button>
-    </form>
-  )
-}
+function AdminDataPageClient() {
+  const [data, setData] = useState<{
+    constructors: any[],
+    drivers: any[],
+    profile: any,
+    user: any
+  } | null>(null)
+  const [loading, setLoading] = useState(true)
 
-export default async function AdminDataPage() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  useEffect(() => {
+    async function fetchData() {
+      const supabase = createClient()
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) {
+        redirect('/login')
+        return
+      }
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') {
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+      if (profile?.role !== 'admin') {
+        setData({ constructors: [], drivers: [], profile: null, user: null })
+        setLoading(false)
+        return
+      }
+
+      const { data: constructors } = await supabase.from('constructors').select('*').order('name')
+      const { data: drivers } = await supabase.from('drivers').select('*, constructors(name, short_code)').order('full_name')
+
+      setData({
+        constructors: constructors || [],
+        drivers: drivers || [],
+        profile,
+        user
+      })
+      setLoading(false)
+    }
+
+    fetchData()
+  }, [])
+
+  if (loading) {
+    return <div className="p-20 text-center text-slate-400">Loading...</div>
+  }
+
+  if (!data?.user) {
+    redirect('/login')
+  }
+
+  if (data?.profile?.role !== 'admin') {
     return <div className="p-20 text-center text-red-500 font-bold">Access Denied</div>
   }
 
-  const { data: constructors } = await supabase.from('constructors').select('*').order('name')
-  const { data: drivers } = await supabase.from('drivers').select('*, constructors(name, short_code)').order('full_name')
+  const { constructors, drivers } = data
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -102,40 +123,7 @@ export default async function AdminDataPage() {
           </div>
         </div>
 
-        {/* Add Driver Forms */}
-        <div className="space-y-4">
-          <h2 className="text-xl font-bold mb-4">Add Driver</h2>
-          <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl">
-             <form action={addDriver} className="space-y-4">
-               <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Full Name</label>
-                  <input name="full_name" placeholder="e.g. Max Verstappen" required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2" />
-               </div>
-               <div className="grid grid-cols-2 gap-4">
-                 <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-1">Code</label>
-                    <input name="code" placeholder="VER" required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 uppercase" />
-                 </div>
-                 <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-1">Emoji</label>
-                    <input name="emoji" placeholder="🇳🇱" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2" />
-                 </div>
-               </div>
-               <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Constructor</label>
-                  <select name="constructor_id" required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2">
-                    <option value="" disabled className="bg-slate-900 text-white">Select Constructor</option>
-                    {constructors?.map((c: any) => (
-                      <option key={c.id} value={c.id} className="bg-slate-900 text-white">{c.name}</option>
-                    ))}
-                  </select>
-               </div>
-               <button type="submit" className="w-full bg-amber-600 hover:bg-amber-500 text-white font-black italic tracking-widest text-base rounded-xl px-4 py-3 mt-4 transition-all flex justify-center items-center shadow-lg hover:shadow-amber-500/30">
-                 <Plus className="w-5 h-5 mr-2" /> CREATE DRIVER
-               </button>
-             </form>
-          </div>
-        </div>
+        <AddDriverForm constructors={constructors || []} />
 
       </div>
     </div>

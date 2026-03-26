@@ -80,7 +80,7 @@ export default function PredictionForm({
         value={value} 
         onChange={(e) => onChange(e.target.value)}
         disabled={isLocked}
-        className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-medium appearance-none focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none transition-all disabled:opacity-50"
+        className="w-full bg-black/40 border border-white/10 rounded-xl p-4 text-white font-medium appearance-none focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none transition-all disabled:opacity-50 touch-target text-base"
       >
         <option value="" disabled className="bg-slate-900 text-white">Select Driver</option>
         {drivers?.map((d: any) => (
@@ -127,7 +127,7 @@ export default function PredictionForm({
                      <label 
                        key={opt.id} 
                        className={`
-                         flex items-center p-4 rounded-xl border cursor-pointer transition-all
+                         flex items-center p-4 rounded-xl border cursor-pointer transition-all touch-target
                          ${bonusAnswers[q.id] === opt.id 
                            ? 'bg-red-500/20 border-red-500 text-white' 
                            : 'bg-black/30 border-white/5 hover:border-white/20 text-slate-300'}

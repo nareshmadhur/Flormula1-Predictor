@@ -3,6 +3,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { isPast } from 'date-fns'
+import { getEffectiveRaceStatus } from '@/utils/race-status'
 
 export async function submitPrediction(formData: FormData) {
   const supabase = await createClient()
@@ -29,14 +30,15 @@ export async function submitPrediction(formData: FormData) {
   // Verify the lock time
   const { data: race } = await supabase
     .from('races')
-    .select('prediction_lock_at, status')
+    .select('*')
     .eq('id', raceId)
     .single()
 
   if (!race) return { error: 'Race not found' }
-  
-  if (isPast(new Date(race.prediction_lock_at)) || race.status === 'locked') {
-    return { error: 'Predictions for this race are locked.' }
+
+  const effectiveStatus = getEffectiveRaceStatus(race)
+  if (effectiveStatus === 'locked' || effectiveStatus === 'completed' || effectiveStatus === 'cancelled') {
+    return { error: 'Predictions for this race are not available.' }
   }
 
   // UPSERT the prediction

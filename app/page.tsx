@@ -2,20 +2,22 @@ import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { Flag, Timer, ChevronRight, Trophy } from 'lucide-react'
 import { format, isPast } from 'date-fns'
+import { getEffectiveRaceStatus } from '@/utils/race-status'
 
 export const revalidate = 0
 
 export default async function HomePage() {
   const supabase = await createClient()
 
-  // Get next upcoming race
+  // Get next upcoming race (time-based filtering)
   const { data: upcomingRaces } = await supabase
     .from('races')
     .select(`*, circuits(name, country, emoji)`)
-    .eq('status', 'upcoming')
+    .gte('race_start_at', new Date().toISOString()) // Only future races
+    .neq('status', 'cancelled') // Exclude cancelled races
     .order('race_start_at', { ascending: true })
     .limit(1)
-  
+
   const nextRace = upcomingRaces?.[0]
 
   // Get top 5 leaderboard

@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { History, ChevronRight } from 'lucide-react'
 import Link from 'next/link'
+import { getEffectiveRaceStatus } from '@/utils/race-status'
 
 export const revalidate = 0
 
@@ -83,7 +84,7 @@ export default async function UserHistoryPage() {
                  ) : (
                    <div className="flex gap-4 items-center">
                      <div className="bg-black/30 border border-amber-500/20 text-amber-500 p-4 rounded-xl text-center font-bold text-sm h-full flex flex-col justify-center">
-                       {p.races?.status === 'completed' ? 'Awaiting Score' : 'Upcoming Race'}
+                       {getEffectiveRaceStatus(p.races) === 'completed' ? 'Awaiting Score' : 'Upcoming Race'}
                      </div>
                    </div>
                  )}

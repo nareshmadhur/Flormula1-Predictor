@@ -3,6 +3,7 @@ import Link from 'next/link'
 import { Calendar, MapPin, ChevronRight, Lock } from 'lucide-react'
 import { format, isPast } from 'date-fns'
 import { redirect } from 'next/navigation'
+import { getEffectiveRaceStatus } from '@/utils/race-status'
 
 export const revalidate = 0
 
@@ -14,15 +15,21 @@ export default async function UpcomingRacesPage() {
     redirect('/login')
   }
 
-  // Fetch upcoming races
+  // Fetch races that haven't started yet (time-based filtering)
   const { data: races, error } = await supabase
     .from('races')
     .select(`
       *,
       circuits(name, country, emoji)
     `)
-    .in('status', ['upcoming', 'locked'])
+    .gte('race_start_at', new Date().toISOString()) // Only future races
     .order('race_start_at', { ascending: true })
+
+  // Filter to only show races that are actually available for predictions
+  const availableRaces = races?.filter(race => {
+    const status = getEffectiveRaceStatus(race)
+    return status === 'upcoming' || status === 'locked'
+  }) || []
 
   // Fetch user's existing predictions to show checkmarks
   const { data: predictions } = await supabase
@@ -47,8 +54,9 @@ export default async function UpcomingRacesPage() {
             <p className="text-slate-500 mt-2">Check back later when the season calendar is updated.</p>
           </div>
         ) : (
-          races.map((race: any) => {
-            const isLocked = isPast(new Date(race.prediction_lock_at)) || race.status === 'locked'
+          availableRaces.map((race: any) => {
+            const effectiveStatus = getEffectiveRaceStatus(race)
+            const isLocked = effectiveStatus === 'locked'
             const hasPredicted = predictedRaceIds.has(race.id)
 
             return (

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { AlertCircle, Plus, CheckCircle, Calculator, Edit3, Settings, Users } from 'lucide-react'
 import { revalidatePath } from 'next/cache'
 import DeleteRaceButton from './delete-button'
+import CancelRaceButton from './cancel-button'
 import BonusQuestionCard from './bonus-question-card'
 import { updateRace } from '@/app/actions/admin'
 import { calculateRaceScoresAction } from '@/app/actions/scoring'
@@ -155,6 +156,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
               <span className={`px-3 py-1 rounded-lg text-sm font-bold border ${
                  race.status === 'scored' ? 'bg-green-500/20 text-green-500 border-green-500/30' :
                  race.status === 'completed' ? 'bg-blue-500/20 text-blue-500 border-blue-500/30' :
+                 race.status === 'cancelled' ? 'bg-red-400/20 text-red-400 border-red-400/30' :
                  'bg-slate-800 text-slate-300'
               }`}>
                 Status: {race.status.toUpperCase()}
@@ -165,7 +167,10 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
               </span>
             </div>
           </div>
-          <DeleteRaceButton raceId={race.id} />
+          <div className="flex space-x-2">
+            <CancelRaceButton raceId={race.id} raceStatus={race.status} />
+            <DeleteRaceButton raceId={race.id} />
+          </div>
         </div>
       </div>
 
