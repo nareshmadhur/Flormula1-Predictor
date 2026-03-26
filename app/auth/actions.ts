@@ -51,7 +51,8 @@ export async function signup(formData: FormData) {
   })
 
   if (error) {
-    redirect('/signup?error=Could not sign up user')
+    console.error('Signup error:', error)
+    redirect(`/signup?error=${encodeURIComponent(error.message)}`)
   }
 
   redirect('/signup?message=Check email to continue')
