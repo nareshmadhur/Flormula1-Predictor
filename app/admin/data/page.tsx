@@ -2,23 +2,52 @@
 
 import { createClient } from '@/utils/supabase/client'
 import { redirect } from 'next/navigation'
-import { Database, Plus, Trash2, Power } from 'lucide-react'
+import { Database } from 'lucide-react'
 import { ToggleDriverButton } from './toggle-driver-button'
 import { DeleteDriverButton } from './delete-driver-button'
 import { AddDriverForm } from './add-driver-form'
 import { useState, useEffect } from 'react'
+import type { User } from '@supabase/supabase-js'
+
+type AdminProfile = {
+  role?: 'user' | 'admin' | null
+  tenant_id?: string | null
+  admin_scope?: 'platform' | 'tenant' | null
+}
+
+type Constructor = {
+  id: string
+  name: string
+  short_code: string
+  emoji?: string | null
+}
+
+type DriverRow = {
+  id: string
+  full_name: string
+  code: string
+  emoji?: string | null
+  active: boolean
+  constructors?: {
+    name?: string | null
+    short_code?: string | null
+  } | null
+}
+
+type AdminDataState = {
+  constructors: Constructor[]
+  drivers: DriverRow[]
+  profile: AdminProfile | null
+  user: User | null
+  isPlatformAdmin: boolean
+}
 
 export default function AdminDataPage() {
   return <AdminDataPageClient />
 }
 
 function AdminDataPageClient() {
-  const [data, setData] = useState<{
-    constructors: any[],
-    drivers: any[],
-    profile: any,
-    user: any
-  } | null>(null)
+  const [data, setData] = useState<AdminDataState | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -30,9 +59,29 @@ function AdminDataPageClient() {
         return
       }
 
-      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-      if (profile?.role !== 'admin') {
-        setData({ constructors: [], drivers: [], profile: null, user: null })
+      let profileQuery = await supabase
+        .from('profiles')
+        .select('role, tenant_id, admin_scope')
+        .eq('id', user.id)
+        .single()
+
+      if (profileQuery.error && profileQuery.error.message?.includes('admin_scope')) {
+        profileQuery = await supabase
+          .from('profiles')
+          .select('role, tenant_id')
+          .eq('id', user.id)
+          .single()
+      }
+
+      const profile = profileQuery.data as AdminProfile | null
+      const isPlatformAdmin =
+        profile?.role === 'admin' &&
+        (profile.admin_scope
+          ? profile.admin_scope === 'platform'
+          : !profile?.tenant_id)
+
+      if (!isPlatformAdmin) {
+        setData({ constructors: [], drivers: [], profile: null, user: null, isPlatformAdmin: false })
         setLoading(false)
         return
       }
@@ -44,7 +93,8 @@ function AdminDataPageClient() {
         constructors: constructors || [],
         drivers: drivers || [],
         profile,
-        user
+        user,
+        isPlatformAdmin,
       })
       setLoading(false)
     }
@@ -60,8 +110,8 @@ function AdminDataPageClient() {
     redirect('/login')
   }
 
-  if (data?.profile?.role !== 'admin') {
-    return <div className="p-20 text-center text-red-500 font-bold">Access Denied</div>
+  if (!data?.isPlatformAdmin) {
+    return <div className="p-20 text-center text-red-500 font-bold">Platform admin access required</div>
   }
 
   const { constructors, drivers } = data
@@ -92,7 +142,7 @@ function AdminDataPageClient() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5 text-sm">
-                  {drivers?.map((d: any) => (
+                  {drivers?.map((d) => (
                     <tr key={d.id} className="hover:bg-white/[0.02] transition-colors">
                       <td className="p-4 flex items-center space-x-3">
                          <span className="text-2xl">{d.emoji}</span>

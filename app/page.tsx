@@ -2,17 +2,40 @@ import { createClient } from '@/utils/supabase/server'
 import Link from 'next/link'
 import { Flag, Timer, ChevronRight, Trophy } from 'lucide-react'
 import { format, isPast } from 'date-fns'
-import { getEffectiveRaceStatus } from '@/utils/race-status'
+import { getCurrentSeason } from '@/utils/season'
+import { getProfileDisplayName } from '@/utils/profile-name'
 
 export const revalidate = 0
 
+type LeaderboardEntry = {
+  user_id: string
+  total_points: number
+  profiles?: {
+    display_name?: string | null
+    email?: string | null
+  } | Array<{
+    display_name?: string | null
+    email?: string | null
+  }> | null
+}
+
+function getLeaderboardProfile(entry: LeaderboardEntry) {
+  if (Array.isArray(entry.profiles)) {
+    return entry.profiles[0] || null
+  }
+
+  return entry.profiles || null
+}
+
 export default async function HomePage() {
   const supabase = await createClient()
+  const currentSeason = await getCurrentSeason(supabase)
 
   // Get next upcoming race (time-based filtering)
   const { data: upcomingRaces } = await supabase
     .from('races')
     .select(`*, circuits(name, country, emoji)`)
+    .eq('season', currentSeason)
     .gte('race_start_at', new Date().toISOString()) // Only future races
     .neq('status', 'cancelled') // Exclude cancelled races
     .order('race_start_at', { ascending: true })
@@ -23,7 +46,8 @@ export default async function HomePage() {
   // Get top 5 leaderboard
   const { data: leaderboard } = await supabase
     .from('leaderboard_cache')
-    .select(`user_id, total_points, profiles(display_name)`)
+    .select(`user_id, total_points, profiles(display_name, email)`)
+    .eq('season', currentSeason)
     .order('total_points', { ascending: false })
     .limit(5)
 
@@ -31,6 +55,7 @@ export default async function HomePage() {
   const { data: latestScoredRaces } = await supabase
     .from('races')
     .select(`*, circuits(name, country, emoji)`)
+    .eq('season', currentSeason)
     .eq('status', 'scored')
     .order('race_start_at', { ascending: false })
     .limit(1)
@@ -77,9 +102,14 @@ export default async function HomePage() {
               </div>
 
               <div>
-                <Link href={`/race/${nextRace.id}/predict`} className="inline-flex items-center justify-center bg-red-600 hover:bg-red-700 text-white font-bold text-lg px-8 py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(239,68,68,0.4)] hover:shadow-[0_0_30px_rgba(239,68,68,0.6)] hover:scale-105">
-                  Predict Podium Now <ChevronRight className="ml-2 w-6 h-6" />
-                </Link>
+                <div className="flex flex-wrap gap-3">
+                  <Link href={`/race/${nextRace.id}`} className="inline-flex items-center justify-center bg-red-600 hover:bg-red-700 text-white font-bold text-lg px-8 py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(239,68,68,0.4)] hover:shadow-[0_0_30px_rgba(239,68,68,0.6)] hover:scale-105">
+                    Open Race Hub <ChevronRight className="ml-2 w-6 h-6" />
+                  </Link>
+                  <Link href={`/race/${nextRace.id}/predict`} className="inline-flex items-center justify-center border border-white/10 bg-black/30 hover:bg-white/10 text-white font-bold text-lg px-8 py-4 rounded-xl transition-all">
+                    Go To Prediction Page
+                  </Link>
+                </div>
               </div>
             </div>
           ) : (
@@ -108,15 +138,21 @@ export default async function HomePage() {
             {(!leaderboard || leaderboard.length === 0) ? (
               <p className="text-slate-500 text-sm italic">No points scored yet.</p>
             ) : (
-              leaderboard.map((entry: any, index: number) => (
-                <div key={entry.user_id} className="flex justify-between items-center bg-black/20 p-3 rounded-lg border border-white/5">
+              leaderboard.map((entry: LeaderboardEntry, index: number) => {
+                const profile = getLeaderboardProfile(entry)
+
+                return (
+                  <div key={entry.user_id} className="flex justify-between items-center bg-black/20 p-3 rounded-lg border border-white/5">
                   <div className="flex items-center space-x-3">
                     <span className="w-6 text-center font-bold text-slate-400">{index + 1}</span>
-                    <span className="font-semibold">{entry.profiles?.display_name || 'Anonymous'}</span>
+                    <span className="font-semibold">
+                      {getProfileDisplayName(profile?.display_name, profile?.email)}
+                    </span>
                   </div>
                   <span className="font-black text-red-500">{entry.total_points} pt</span>
                 </div>
-              ))
+                )
+              })
             )}
           </div>
         </section>
@@ -135,7 +171,7 @@ export default async function HomePage() {
                 <div className="text-slate-400 text-sm">{latestScored.circuits?.name} {latestScored.circuits?.emoji}</div>
               </div>
               
-              <Link href={`/race/${latestScored.id}/predict`} className="inline-block mt-4 text-slate-300 hover:text-white underline decoration-slate-600 underline-offset-4">
+              <Link href={`/race/${latestScored.id}`} className="inline-block mt-4 text-slate-300 hover:text-white underline decoration-slate-600 underline-offset-4">
                 View Race Details
               </Link>
             </div>

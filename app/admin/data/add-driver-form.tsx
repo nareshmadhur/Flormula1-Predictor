@@ -2,20 +2,34 @@
 
 import { Plus } from 'lucide-react'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { addDriver } from '@/app/actions/admin-data'
 
-export function AddDriverForm({ constructors }: { constructors: any[] }) {
+type ConstructorOption = {
+  id: string
+  name: string
+}
+
+export function AddDriverForm({ constructors }: { constructors: ConstructorOption[] }) {
+  const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
+  const [formKey, setFormKey] = useState(0)
 
   const handleSubmit = async (formData: FormData) => {
     if (isSubmitting) return
     setIsSubmitting(true)
+    setFeedback(null)
     try {
       await addDriver(formData)
-      // Refresh the page to show updated data
-      window.location.reload()
+      setFeedback({ type: 'success', message: 'Driver added to the reference data.' })
+      setFormKey((current) => current + 1)
+      router.refresh()
     } catch (error) {
-      console.error('Error adding driver:', error)
+      setFeedback({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'Failed to add driver.',
+      })
     } finally {
       setIsSubmitting(false)
     }
@@ -25,7 +39,19 @@ export function AddDriverForm({ constructors }: { constructors: any[] }) {
     <div className="space-y-4">
       <h2 className="text-xl font-bold mb-4">Add Driver</h2>
       <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl">
-         <form action={handleSubmit} className="space-y-4">
+         {feedback && (
+           <div
+             className={`mb-4 rounded-xl border px-4 py-3 text-sm font-medium ${
+               feedback.type === 'success'
+                 ? 'border-green-500/30 bg-green-500/10 text-green-300'
+                 : 'border-red-500/30 bg-red-500/10 text-red-300'
+             }`}
+           >
+             {feedback.message}
+           </div>
+         )}
+
+         <form key={formKey} action={handleSubmit} className="space-y-4">
            <div>
               <label className="block text-sm font-medium text-slate-400 mb-1">Full Name</label>
               <input
@@ -66,7 +92,7 @@ export function AddDriverForm({ constructors }: { constructors: any[] }) {
                 disabled={isSubmitting}
               >
                 <option value="" disabled className="bg-slate-900 text-white">Select Constructor</option>
-                {constructors?.map((c: any) => (
+                {constructors?.map((c) => (
                   <option key={c.id} value={c.id} className="bg-slate-900 text-white">{c.name}</option>
                 ))}
               </select>

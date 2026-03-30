@@ -1,270 +1,192 @@
 # FLO-RMULA 1 Predictions App
 
-A modern, high-performance web application designed for predicting Formula 1 race outcomes. Users can predict the podium finishers (P1, P2, P3) and answer custom bonus questions for each race. Admins can manage the season schedule, score predictions, and maintain the underlying grid roster.
+FLO-RMULA 1 is a Formula 1 prediction pool built with Next.js and Supabase. Users submit podium picks and bonus answers for each race, follow their season from a dashboard, and review scored results once admins publish official outcomes.
 
-## ✨ Features
+## Current Product
 
-### For Users
-- **🏎️ Race Predictions**: Predict podium positions (P1, P2, P3) for upcoming F1 races
-- **🎯 Bonus Questions**: Answer custom multiple-choice questions for extra points
-- **📊 Global Leaderboard**: Track your ranking against other predictors
-- **📱 Mobile-First Design**: Fully responsive design optimized for all devices
-- **🔒 Secure Authentication**: Supabase-powered user accounts with secure login
-- **📈 Personal History**: View your prediction history and performance stats
-- **⏰ Smart Lock Times**: Predictions automatically lock 5 minutes before race start
+### User Experience
+- Season dashboard for the current season
+- Podium prediction flow for open races
+- Locked, completed, and scored race states with read-only summaries
+- Bonus question support per race
+- Personal history page
+- Tenant and global leaderboard views with smart defaults
+- Email/password authentication with Supabase
 
-### For Admins
-- **⚙️ Race Management**: Create and configure races with custom lock times
-- **👥 User Administration**: Manage user accounts and permissions
-- **📊 Scoring Engine**: Automated scoring with detailed result tracking
-- **🗂️ Reference Data**: Manage drivers, constructors, and circuits
-- **📋 Bonus Question Builder**: Create custom questions with multiple options
-- **📈 Analytics Dashboard**: Monitor user engagement and prediction trends
+### Admin Experience
+- In-app admin navigation for platform admins
+- Tenant and account access management in `/admin/tenants`
+- Race calendar management
+- Bonus question management per race
+- Official result entry
+- Score calculation and leaderboard cache rebuild
+- Driver reference data management
+- Manual maintenance action for race status updates
 
-## � User Journeys
+## Product Shape
 
-### New User Registration Journey
-1. **Discovery**: User finds the app through social media, racing forums, or search
-2. **Sign Up**: User creates account with email/password or social login
-3. **Email Verification**: User verifies email address to activate account
-4. **Welcome**: User lands on predictions page with guided tour
-5. **First Prediction**: User makes their first race prediction
-6. **Engagement**: User checks leaderboard and sees their initial ranking
+The app currently uses one shared F1 race calendar and one shared official result source.
 
-### Regular User Prediction Journey
-1. **Login**: User logs in with existing credentials
-2. **Browse Races**: User views upcoming races on predictions page
-3. **Select Race**: User chooses a race to predict (before lock time)
-4. **Make Predictions**: User selects P1, P2, P3 drivers from dropdowns
-5. **Answer Bonus Questions**: User answers custom multiple-choice questions
-6. **Submit**: User submits predictions with confirmation feedback
-7. **Track Progress**: User monitors leaderboard position throughout season
+Current tenant model:
+- one tenant per account
+- shared global race calendar and shared official results
+- tenant-specific competition context layered on top of shared race data
+- global leaderboard = all tenants combined
+- tenant leaderboard = only users in that tenant
+- signed-in tenant members default to their tenant leaderboard, while platform admins and unassigned users default to global
+- platform admins can also belong to a tenant and participate in the pool; platform rights come from `admin_scope`, not from being unassigned
 
-### Admin Management Journey
-1. **Admin Login**: Admin logs in with elevated permissions
-2. **Dashboard Overview**: Admin views system status and recent activity
-3. **Race Management**: Admin creates/configures new races with lock times
-4. **Data Maintenance**: Admin updates driver/constructor reference data
-5. **Scoring**: Admin scores completed races and bonus questions
-6. **User Management**: Admin monitors user activity and handles issues
-7. **Analytics Review**: Admin analyzes prediction trends and user engagement
+This keeps scheduling, timing, and future automated race-data ingestion centralized instead of duplicating race operations per tenant.
 
-### Mobile User Journey
-1. **Mobile Access**: User accesses app on mobile device
-2. **Touch Navigation**: User navigates with touch-friendly interface
-3. **Quick Predictions**: User makes predictions with optimized mobile forms
-4. **Real-time Updates**: User receives push notifications for race results
-5. **Social Sharing**: User shares predictions/results on social media
+## Roles And Permissions
 
-### Power User Journey
-1. **Advanced Analysis**: User studies historical data and driver performance
-2. **Strategic Predictions**: User makes calculated predictions based on research
-3. **Season Planning**: User plans prediction strategy for entire season
-4. **Performance Tracking**: User analyzes personal prediction accuracy
-5. **Community Engagement**: User discusses strategies with other predictors
-## 🔄 User Journey Enhancements
+- `user`
+  Can access the private competition experience only after tenant assignment.
+- `admin` with `admin_scope = platform`
+  Acts as the platform admin. Can manage tenants, shared race data, scoring, and reference data for the whole product, while still optionally belonging to a tenant as a participant.
+- `admin` with `admin_scope = tenant`
+  Is explicitly scoped away from platform-wide control. The role is assignable from the admin access workspace now, with tenant-scoped tooling expanding in `P1`.
 
-### High Priority Improvements
-- **Push Notifications**: Real-time notifications for race results and leaderboard changes
-- **Social Features**: Allow users to share predictions and compare with friends
-- **Prediction Streaks**: Track and reward consecutive correct predictions
-- **Advanced Analytics**: Detailed performance statistics and prediction patterns
-- **Race Reminders**: Automated reminders before prediction deadlines
+In practical terms:
+- race schedules, bonus questions, official results, and scoring inputs are entered once by a platform admin and reused by all tenants
+- tenant membership only affects competition context and leaderboard slicing
+- missing public display names fall back to a sanitized email-derived predictor name instead of `Anonymous`
+- app-visible profiles are treated as confirmed users only; pending email confirmations should not appear in admin account lists
 
-### Medium Priority Improvements
-- **Prediction Templates**: Save favorite prediction combinations for quick reuse
-- **Historical Comparisons**: Compare current predictions against past performance
-- **Driver Insights**: Show driver statistics and recent form
-- **Season Challenges**: Special prediction challenges with bonus rewards
-- **Mobile App**: Native mobile app for iOS and Android
+Detailed execution tracking lives in [docs/roadmap/README.md](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/README.md>).
 
-### Low Priority Improvements
-- **AI Predictions**: AI-powered prediction suggestions based on historical data
-- **Live Scoring**: Real-time scoring updates during races
-- **Prediction Markets**: Allow users to bet virtual points on predictions
-- **Custom Leaderboards**: Create private leaderboards for groups/friends
-- **Integration APIs**: Third-party integrations with racing data providers
+## Core Journeys
 
-### Technical Enhancements Needed
-- **Real-time Updates**: Implement WebSocket connections for live data
-- **Caching Strategy**: Optimize database queries and implement Redis caching
-- **Progressive Web App**: Add PWA features for offline functionality
-- **Advanced Search**: Full-text search for drivers, races, and users
-- **Data Visualization**: Interactive charts for performance analytics
-## �🚀 Quick Start
+### User
+1. Sign up and confirm email.
+2. Get assigned to a tenant by a platform admin.
+3. Sign in and land on the season dashboard at `/predictions`.
+4. Open the next race and submit podium picks plus bonus answers.
+5. Revisit the same race after lock to see the submitted entry.
+6. Return after scoring to see official results and point breakdown.
+7. Use `/leaderboard` to switch between tenant and global standings when comparison matters.
+
+### Platform Admin
+1. Sign in as a platform admin.
+2. Open `Admin` from the main navigation.
+3. Open `/admin/tenants` to create tenants and set each account's role, admin scope, and tenant assignment.
+4. Create or update races for the season.
+5. Add bonus questions and official answers.
+6. Save official podium results.
+7. Calculate scores and refresh the leaderboard.
+
+## Technical Overview
+
+- Framework: Next.js 16 App Router
+- UI: React 19, TypeScript, Tailwind CSS 4
+- Backend: Supabase Auth + Postgres + RLS
+- Data writes: Server Actions
+- Session handling: Supabase SSR helpers
+- Caching: `revalidatePath` and `leaderboard_cache`
+
+Important app areas:
+- `app/page.tsx`: public homepage
+- `app/predictions/page.tsx`: authenticated season dashboard
+- `app/race/[id]/predict/page.tsx`: race lifecycle view
+- `app/leaderboard/page.tsx`: current-season leaderboard
+- `app/admin/*`: admin workflows
+- `app/actions/*`: server actions
+- `supabase/migrations/*`: schema and data model
+
+## Data Model
+
+Core tables:
+- `profiles`
+- `races`
+- `predictions`
+- `prediction_bonus_answers`
+- `bonus_questions`
+- `bonus_options`
+- `race_results`
+- `race_bonus_answers`
+- `user_race_scores`
+- `leaderboard_cache`
+- `drivers`
+- `constructors`
+- `circuits`
+
+Notes:
+- predictions are unique per `user_id + race_id`
+- scores are unique per `user_id + race_id`
+- leaderboard cache is unique per `season + user_id`
+- shared race data is tenant-agnostic
+- tenant membership lives on `profiles.tenant_id`
+- explicit admin scope lives on `profiles.admin_scope`
+
+## Scoring
+
+- 3 points for an exact podium position
+- 1 point for the right driver in the wrong podium position
+- bonus points come from the question configuration
+- prediction lock defaults to 5 minutes before race start
+
+## Setup
 
 ### Prerequisites
 - Node.js 18+
-- npm or yarn
-- Supabase account
+- npm
+- Supabase project
 
-### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd flormula1-predictor
-   ```
-
-2. **Install dependencies**
-   ```bash
-   npm install
-   ```
-
-3. **Set up environment variables**
-   Create a `.env.local` file with your Supabase credentials:
-   ```bash
-   NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
-   NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
-   SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
-   ```
-
-4. **Seed reference data**
-   ```bash
-   node scripts/seed-official.mjs
-   ```
-
-5. **Start development server**
-   ```bash
-   npm run dev
-   ```
-
-6. **Open your browser**
-   Navigate to [http://localhost:3000](http://localhost:3000)
-
-## 📱 Mobile Responsiveness
-
-This application is fully optimized for mobile devices with:
-
-- **Responsive Design**: Adapts seamlessly from mobile to desktop
-- **Touch-Friendly**: All interactive elements meet minimum 44px touch target requirements
-- **No Zoom Issues**: Prevents unwanted zoom when focusing form inputs on iOS
-- **Optimized Navigation**: Mobile-optimized navbar with proper spacing
-- **Readable Typography**: Appropriate font sizes for all screen sizes
-
-## 🏗️ Technical Architecture
-
-- **Framework**: Next.js 16 (App Router)
-- **Frontend**: React 19, TypeScript, Tailwind CSS
-- **Backend**: Supabase (PostgreSQL + Auth + RLS)
-- **Icons**: Lucide React
-- **Deployment**: Optimized for Vercel/Node.js environments
-- **Data Fetching**: Server-side rendering with Next.js Server Actions
-- **Caching**: Intelligent cache invalidation with `revalidatePath`
-
-## 🗄️ Database Schema
-
-The application uses PostgreSQL with Row Level Security (RLS) ensuring users can only modify their own predictions while allowing public reads on leaderboards and reference data.
-
-### Core Tables
-- `profiles` - User profiles and authentication data
-- `races` - Race schedule and configuration
-- `predictions` - User podium predictions
-- `prediction_bonus_answers` - User bonus question responses
-- `drivers` - F1 driver information
-- `constructors` - F1 team information
-- `circuits` - Race circuit details
-- `bonus_questions` - Custom questions per race
-- `bonus_options` - Answer options for bonus questions
-- `race_results` - Official race results
-- `race_bonus_answers` - Official bonus question answers
-- `user_race_scores` - Individual race scoring
-- `leaderboard_cache` - Global leaderboard data
-
-## 🎯 Scoring System
-
-- **Podium Points**: 3 points for exact position, 1 point for correct driver in wrong position
-- **Bonus Points**: Configurable points for correct bonus question answers
-- **Lock Timing**: Predictions must be submitted before the 5-minute lock period
-- **Real-time Updates**: Leaderboard updates immediately after scoring
-
-## 🔧 Development
-
-### Available Scripts
+### Install
 ```bash
-npm run dev      # Start development server
-npm run build    # Build for production
-npm run start    # Start production server
-npm run lint     # Run ESLint
+npm install
 ```
 
-### Project Structure
-```
-├── app/                    # Next.js app directory
-│   ├── admin/             # Admin-only pages
-│   ├── api/               # API routes
-│   ├── auth/              # Authentication pages
-│   ├── leaderboard/       # Leaderboard page
-│   ├── predictions/       # User predictions page
-│   └── race/[id]/         # Race-specific pages
-├── components/            # Reusable React components
-├── utils/                 # Utility functions
-├── actions/               # Server actions
-├── scripts/               # Database seeding scripts
-└── supabase/              # Database configuration
-```
+### Environment
 
-## 🚀 Deployment
+Create `.env.local`:
 
-### Vercel (Recommended)
-1. Connect your GitHub repository to Vercel
-2. Add environment variables in Vercel dashboard
-3. Deploy automatically on push to main branch
-
-### Manual Deployment
 ```bash
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+```
+
+### Seed Data
+
+Example:
+
+```bash
+node scripts/seed-official.mjs
+```
+
+### Run
+```bash
+npm run dev
+```
+
+## Available Scripts
+
+```bash
+npm run dev
 npm run build
 npm run start
+npm run lint
 ```
 
-## 🐛 Troubleshooting
+## Known Gaps
 
-### Common Issues
+- No automated test suite is currently included.
+- Some repo-wide lint issues still exist outside the most recently updated files.
+- Race schedule and results are still managed manually.
+- Tenant-scoped admin tooling is still early; platform admins currently have the fuller operational workspace.
 
-**Database Connection Issues**
-- Verify your Supabase credentials in `.env.local`
-- Ensure your Supabase project is active
-- Check Row Level Security policies
+## Roadmap
 
-**Build Errors**
-- Clear node_modules: `rm -rf node_modules && npm install`
-- Check Node.js version (requires 18+)
-- Verify TypeScript types
+### Step 1
+- completed foundation and safety work for tenants, private competition guards, and platform-admin boundaries
 
-**Mobile Display Issues**
-- Ensure viewport meta tag is present
-- Check CSS media queries
-- Verify touch target sizes (minimum 44px)
+### Step 2
+- improve tenant product experience
+- expand tenant-facing admin tools and clearer tenant/global context
+- deepen scored-race explanations and post-race usability
 
-**Authentication Problems**
-- Clear browser cache and cookies
-- Check Supabase auth configuration
-- Verify user roles and permissions
-
-## 🤝 Contributing
-
-1. Fork the repository
-2. Create a feature branch: `git checkout -b feature/your-feature`
-3. Make your changes and test thoroughly
-4. Run linting: `npm run lint`
-5. Commit your changes: `git commit -m 'Add your feature'`
-6. Push to your branch: `git push origin feature/your-feature`
-7. Create a Pull Request
-
-### Development Guidelines
-- Follow TypeScript best practices
-- Use Tailwind CSS for styling
-- Ensure mobile responsiveness
-- Test on multiple devices and browsers
-- Follow existing code patterns
-
-## 📄 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-- Formula 1 for the amazing sport
-- Supabase for the excellent backend platform
-- Next.js team for the amazing framework
-- Tailwind CSS for the utility-first styling approach
+### Step 3
+- public result pages and visibility mechanics
+- automated schedule and timing ingestion
+- reminder and retention loops

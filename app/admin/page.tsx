@@ -5,27 +5,35 @@ import { Settings, ChevronRight } from 'lucide-react'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { CreateRaceForm } from '@/components/ui/create-race-form'
 import { MaintenanceSection } from '@/components/ui/maintenance-section'
+import { getAdminAccessContext } from '@/utils/admin-access'
 
 export const revalidate = 0
 
+type AdminRace = {
+  id: string
+  round: number
+  season: number
+  race_name: string
+  status: 'upcoming' | 'locked' | 'completed' | 'scored' | 'cancelled'
+  race_start_at: string
+  prediction_lock_at: string
+  circuits?: {
+    name?: string | null
+    emoji?: string | null
+  } | null
+}
+
 export default async function AdminDashboardPage() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const access = await getAdminAccessContext(supabase)
 
-  if (!user) redirect('/login')
+  if (!access) redirect('/login')
 
-  // Verify Admin status
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
-
-  if (profile?.role !== 'admin') {
+  if (!access.isPlatformAdmin) {
     return (
       <div className="flex flex-col items-center justify-center p-20 text-center">
-         <h1 className="text-3xl font-bold text-red-500 mb-4">Access Denied</h1>
-         <p className="text-slate-400">You must be an administrator to view this page.</p>
+         <h1 className="text-3xl font-bold text-red-500 mb-4">Platform Admin Only</h1>
+         <p className="text-slate-400">Race control is limited to platform admins.</p>
          <Link href="/" className="mt-6 text-slate-300 underline">Return Home</Link>
       </div>
     )
@@ -39,6 +47,8 @@ export default async function AdminDashboardPage() {
 
   // Fetch circuits for the 'create' form
   const { data: circuits } = await supabase.from('circuits').select('*').order('name')
+  const { count: tenantCount } = await supabase.from('tenants').select('*', { count: 'exact', head: true })
+  const typedRaces = (races || []) as AdminRace[]
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -61,7 +71,7 @@ export default async function AdminDashboardPage() {
             {(!races || races.length === 0) ? (
               <div className="p-8 text-center text-slate-500 italic">No races defined.</div>
             ) : (
-              races.map((race: any) => (
+              typedRaces.map((race) => (
                  <Link href={`/admin/races/${race.id}`} key={race.id} className="flex flex-col sm:flex-row justify-between sm:items-center p-6 hover:bg-white/[0.02] transition-colors group">
                    <div className="space-y-1">
                      <div className="text-xs font-bold text-red-500 uppercase tracking-widest">
@@ -97,6 +107,14 @@ export default async function AdminDashboardPage() {
              <div>
                <h2 className="text-xl font-bold mb-1">Grid Data</h2>
                <p className="text-sm text-slate-400">Manage Drivers & Teams</p>
+             </div>
+             <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-red-500 transition-colors" />
+          </Link>
+
+          <Link href="/admin/tenants" className="bg-card border border-white/5 p-6 rounded-2xl shadow-xl hover:bg-white/[0.02] transition-colors flex items-center justify-between group block">
+             <div>
+               <h2 className="text-xl font-bold mb-1">Tenants & Access</h2>
+               <p className="text-sm text-slate-400">{tenantCount || 0} tenants and account access controls</p>
              </div>
              <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-red-500 transition-colors" />
           </Link>

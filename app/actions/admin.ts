@@ -1,18 +1,29 @@
 'use server'
 
-import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
+import { rebuildLeaderboardForSeason } from '@/utils/leaderboard'
+import { assertPlatformAdmin } from '@/utils/admin-access'
+import { createClient } from '@/utils/supabase/server'
+
+type NewRacePayload = {
+  season: number
+  round: number
+  race_name: string
+  circuit_id: string
+  race_start_at: string
+  prediction_lock_at: string
+  status: 'upcoming'
+  fp1_at?: string
+  fp2_at?: string
+  fp3_at?: string
+  quali_at?: string
+  sprint_at?: string
+  sprint_quali_at?: string
+}
 
 export async function createRace(formData: FormData) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) throw new Error('Unauthorized')
-
-  // Verify Admin
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') throw new Error('Forbidden')
+  const { supabase } = await assertPlatformAdmin()
 
   const season = parseInt(formData.get('season') as string)
   const round = parseInt(formData.get('round') as string)
@@ -29,7 +40,7 @@ export async function createRace(formData: FormData) {
   // By default, lock predictions 5 minutes before the race starts
   const lockAt = new Date(raceStartAt.getTime() - 5 * 60000)
 
-  const newRace: any = {
+  const newRace: NewRacePayload = {
     season,
     round,
     race_name: raceName,
@@ -77,19 +88,23 @@ export async function createRace(formData: FormData) {
 }
 
 export async function deleteRace(formData: FormData) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Unauthorized')
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') throw new Error('Forbidden')
+  const { supabase } = await assertPlatformAdmin()
 
   const raceId = formData.get('race_id') as string
   if (!raceId) throw new Error('Missing race ID')
 
+  const { data: race } = await supabase
+    .from('races')
+    .select('season')
+    .eq('id', raceId)
+    .single()
+
+  if (!race) throw new Error('Race not found')
+
   const { error } = await supabase.from('races').delete().eq('id', raceId)
   if (error) throw new Error('Failed to delete race')
 
-  await supabase.from('leaderboard_cache').delete().eq('season', 2024)
+  await rebuildLeaderboardForSeason(supabase, race.season)
 
   revalidatePath('/admin')
   revalidatePath('/')
@@ -98,11 +113,7 @@ export async function deleteRace(formData: FormData) {
 }
 
 export async function updateRace(formData: FormData) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Unauthorized')
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') throw new Error('Forbidden')
+  const { supabase } = await assertPlatformAdmin()
 
   const raceId = formData.get('race_id') as string
   const raceName = formData.get('race_name') as string
@@ -127,11 +138,7 @@ export async function updateRace(formData: FormData) {
 }
 
 export async function deleteBonusQuestion(formData: FormData) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Unauthorized')
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') throw new Error('Forbidden')
+  const { supabase } = await assertPlatformAdmin()
 
   const questionId = formData.get('question_id') as string
   const raceId = formData.get('race_id') as string
@@ -145,11 +152,7 @@ export async function deleteBonusQuestion(formData: FormData) {
 }
 
 export async function updateBonusQuestion(formData: FormData) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) throw new Error('Unauthorized')
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') throw new Error('Forbidden')
+  const { supabase } = await assertPlatformAdmin()
 
   const questionId = formData.get('question_id') as string
   const raceId = formData.get('race_id') as string
@@ -246,14 +249,7 @@ export async function updateRaceStatuses() {
  * Cancels a race (sets status to cancelled)
  */
 export async function cancelRace(raceId: string) {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  if (!user) throw new Error('Unauthorized')
-
-  // Verify Admin
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') throw new Error('Forbidden')
+  const { supabase } = await assertPlatformAdmin()
 
   const { error } = await supabase
     .from('races')

@@ -1,24 +1,55 @@
 import { createClient } from '@/utils/supabase/server'
 import { NextRequest, NextResponse } from 'next/server'
+import { rebuildLeaderboardForSeason } from '@/utils/leaderboard'
+import { getAdminAccessContext } from '@/utils/admin-access'
+
+type PredictionRow = {
+  id: string
+  user_id: string
+  p1_driver_id: string
+  p2_driver_id: string
+  p3_driver_id: string
+}
+
+type UserBonusAnswerRow = {
+  prediction_id: string
+  bonus_question_id: string
+  bonus_option_id: string
+}
+
+type CorrectBonusAnswerRow = {
+  bonus_question_id: string
+  correct_bonus_option_id: string
+  bonus_questions?: {
+    points?: number
+  } | null
+}
 
 export async function POST(request: NextRequest, props: { params: Promise<{ id: string }> }) {
   const params = await props.params;
   const raceId = params.id
 
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const access = await getAdminAccessContext(supabase)
 
-  if (!user) {
+  if (!access) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') {
+  if (!access.isPlatformAdmin) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  // Calculate scores
-  // Fetch official result
+  const { data: race } = await supabase
+    .from('races')
+    .select('season')
+    .eq('id', raceId)
+    .single()
+
+  if (!race) {
+    return NextResponse.json({ error: 'Race not found' }, { status: 404 })
+  }
+
   const { data: actualResult } = await supabase.from('race_results').select('*').eq('race_id', raceId).single()
   if (!actualResult) {
     return NextResponse.json({ error: 'Save official results first' }, { status: 400 })
@@ -36,19 +67,23 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
   if (!predictions || predictions.length === 0) {
     // Just mark as scored
     await supabase.from('races').update({ status: 'scored' }).eq('id', raceId)
+    await rebuildLeaderboardForSeason(supabase, race.season)
     return NextResponse.json({ status: 'No predictions to score' })
   }
 
   // Fetch all user bonus answers for these predictions
-  const predictionIds = predictions.map((p: any) => p.id)
+  const typedPredictions = (predictions || []) as PredictionRow[]
+  const predictionIds = typedPredictions.map((prediction) => prediction.id)
   const { data: userBonusAnswers } = await supabase
     .from('prediction_bonus_answers')
     .select('*')
     .in('prediction_id', predictionIds)
 
   const actualPodium = [actualResult.p1_driver_id, actualResult.p2_driver_id, actualResult.p3_driver_id]
+  const typedUserBonusAnswers = (userBonusAnswers || []) as UserBonusAnswerRow[]
+  const typedCorrectBonusAnswers = (correctBonusAnswers || []) as CorrectBonusAnswerRow[]
 
-  const scoresToUpsert = predictions.map((pred: any) => {
+  const scoresToUpsert = typedPredictions.map((pred) => {
     let podiumPoints = 0
     let bonusPoints = 0
     let exactHits = 0
@@ -65,13 +100,12 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
         }
     }
 
-    if (correctBonusAnswers && userBonusAnswers) {
-        const thisUserAnswers = userBonusAnswers.filter((a: any) => a.prediction_id === pred.id)
+    if (typedCorrectBonusAnswers.length > 0 && typedUserBonusAnswers.length > 0) {
+        const thisUserAnswers = typedUserBonusAnswers.filter((answer) => answer.prediction_id === pred.id)
         
-        for (const correctAns of correctBonusAnswers) {
-            const userAns = thisUserAnswers.find((a: any) => a.bonus_question_id === correctAns.bonus_question_id)
+        for (const correctAns of typedCorrectBonusAnswers) {
+            const userAns = thisUserAnswers.find((answer) => answer.bonus_question_id === correctAns.bonus_question_id)
             if (userAns && userAns.bonus_option_id === correctAns.correct_bonus_option_id) {
-                // @ts-ignore
                 bonusPoints += (correctAns.bonus_questions?.points || 1)
             }
         }
@@ -90,35 +124,7 @@ export async function POST(request: NextRequest, props: { params: Promise<{ id: 
 
   // Upsert user_race_scores
   await supabase.from('user_race_scores').upsert(scoresToUpsert, { onConflict: 'user_id, race_id' })
-
-  // Re-calculate Leaderboard Cache (simple approach: delete and re-insert for this season)
-  // To avoid complexity, since v1 only has one season (2024), we can just aggregate all scores for all users
-  const { data: allScores } = await supabase.from('user_race_scores').select('*')
-  
-  const leaderboardMap = new Map()
-  
-  allScores?.forEach((score: any) => {
-     if (!leaderboardMap.has(score.user_id)) {
-         leaderboardMap.set(score.user_id, {
-             season: 2024,
-             user_id: score.user_id,
-             total_points: 0,
-             exact_hits: 0,
-             races_scored: 0
-         })
-     }
-     const lb = leaderboardMap.get(score.user_id)
-     lb.total_points += score.total_points
-     lb.exact_hits += score.exact_hits
-     lb.races_scored += 1
-  })
-
-  // Clear and update leaderboard_cache for 2024
-  await supabase.from('leaderboard_cache').delete().eq('season', 2024)
-  if (leaderboardMap.size > 0) {
-      const lbInserts = Array.from(leaderboardMap.values())
-      await supabase.from('leaderboard_cache').insert(lbInserts)
-  }
+  await rebuildLeaderboardForSeason(supabase, race.season)
 
   // Update race status
   await supabase.from('races').update({ status: 'scored' }).eq('id', raceId)

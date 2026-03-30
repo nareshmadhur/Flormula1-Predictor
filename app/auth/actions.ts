@@ -16,7 +16,12 @@ export async function login(formData: FormData) {
   const { error } = await supabase.auth.signInWithPassword(data)
 
   if (error) {
-    redirect('/login?error=Could not authenticate user')
+    const errorMessage =
+      error.message.toLowerCase().includes('email not confirmed')
+        ? 'Check your email and confirm your account before signing in.'
+        : error.message || 'Could not authenticate user.'
+
+    redirect(`/login?error=${encodeURIComponent(errorMessage)}`)
   }
 
   revalidatePath('/', 'layout')

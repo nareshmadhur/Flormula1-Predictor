@@ -1,6 +1,7 @@
 'use client'
 
 import { useMemo, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { createRace } from '@/app/actions/admin'
 import { Plus } from 'lucide-react'
 
@@ -41,8 +42,10 @@ function parseCETDateTime(value: string) {
 }
 
 export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
+  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [schedulePreset, setSchedulePreset] = useState<'standard' | 'sprint' | 'custom'>('standard')
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null)
   const [formData, setFormData] = useState({
     race_name: '',
     round: '',
@@ -99,11 +102,15 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
     e.preventDefault()
     if (isLoading) return
     if (!isFormValid) {
-      alert('Please fill required fields: Race name, Round, Season, Circuit, Race date, and FP1.')
+      setFeedback({
+        type: 'error',
+        message: 'Please fill race name, round, season, circuit, race date, and FP1 before creating the race.',
+      })
       return
     }
 
     setIsLoading(true)
+    setFeedback(null)
     try {
       const submitFormData = new FormData()
       Object.entries(formData).forEach(([key, value]) => {
@@ -125,9 +132,13 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
         sprint_at: '',
         sprint_quali_at: ''
       })
-      window.location.reload()
+      setFeedback({ type: 'success', message: 'Race created and added to the season calendar.' })
+      router.refresh()
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'An error occurred while creating the race')
+      setFeedback({
+        type: 'error',
+        message: error instanceof Error ? error.message : 'An error occurred while creating the race.',
+      })
     } finally {
       setIsLoading(false)
     }
@@ -160,6 +171,18 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
         <option value="sprint">Sprint weekend (preset)</option>
         <option value="custom">Custom (manual entry)</option>
       </select>
+
+      {feedback && (
+        <div
+          className={`mb-4 rounded-xl border px-4 py-3 text-sm font-medium ${
+            feedback.type === 'success'
+              ? 'border-green-500/30 bg-green-500/10 text-green-300'
+              : 'border-red-500/30 bg-red-500/10 text-red-300'
+          }`}
+        >
+          {feedback.message}
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="grid grid-cols-2 gap-4">

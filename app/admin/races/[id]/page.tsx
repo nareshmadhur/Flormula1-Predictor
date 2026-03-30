@@ -1,30 +1,79 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { AlertCircle, Plus, CheckCircle, Calculator, Edit3, Settings, Users } from 'lucide-react'
+import { AlertCircle, Plus, CheckCircle, Calculator, Settings, Users } from 'lucide-react'
 import { revalidatePath } from 'next/cache'
 import DeleteRaceButton from './delete-button'
 import CancelRaceButton from './cancel-button'
 import BonusQuestionCard from './bonus-question-card'
 import { updateRace } from '@/app/actions/admin'
 import { calculateRaceScoresAction } from '@/app/actions/scoring'
+import { getAdminAccessContext } from '@/utils/admin-access'
+import { getProfileDisplayName } from '@/utils/profile-name'
 
 export const revalidate = 0
+
+type RaceRecord = {
+  id: string
+  round: number
+  race_name: string
+  status: 'upcoming' | 'locked' | 'completed' | 'scored' | 'cancelled'
+  circuit_id: string
+  race_start_at: string
+}
+
+type DriverRecord = {
+  id: string
+  code: string
+  full_name: string
+}
+
+type CircuitRecord = {
+  id: string
+  name: string
+  emoji?: string | null
+}
+
+type BonusOptionRecord = {
+  id: string
+  label?: string | null
+}
+
+type BonusQuestionRecord = {
+  id: string
+  question_text: string
+  bonus_options?: BonusOptionRecord[]
+}
+
+type RaceResultRecord = {
+  p1_driver_id?: string | null
+  p2_driver_id?: string | null
+  p3_driver_id?: string | null
+}
+
+type RaceBonusAnswerRecord = {
+  bonus_question_id: string
+  correct_bonus_option_id: string
+}
+
+type ProfileRecord = {
+  id: string
+  display_name?: string | null
+  email?: string | null
+}
 
 // Server actions for this page
 async function addBonusQuestion(formData: FormData) {
   'use server'
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') return
+  const access = await getAdminAccessContext(supabase)
+  if (!access?.isPlatformAdmin) return
 
   const raceId = formData.get('race_id') as string
   const questionText = formData.get('question_text') as string
   const points = parseInt(formData.get('points') as string)
   const optionLabels = Array.from(formData.getAll('options')) as string[]
 
-  const { data: question, error } = await supabase.from('bonus_questions').insert({
+  const { data: question } = await supabase.from('bonus_questions').insert({
     race_id: raceId,
     question_text: questionText,
     points
@@ -46,10 +95,8 @@ async function addBonusQuestion(formData: FormData) {
 async function saveResults(formData: FormData) {
   'use server'
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') return
+  const access = await getAdminAccessContext(supabase)
+  if (!access?.isPlatformAdmin) return
 
   const raceId = formData.get('race_id') as string
   const p1 = formData.get('p1_driver_id') as string
@@ -62,7 +109,7 @@ async function saveResults(formData: FormData) {
     p1_driver_id: p1,
     p2_driver_id: p2,
     p3_driver_id: p3,
-    entered_by: user.id
+    entered_by: access.userId
   }, { onConflict: 'race_id' })
 
   // Insert bonus answers
@@ -89,10 +136,8 @@ async function saveResults(formData: FormData) {
 export async function proxyPrediction(formData: FormData) {
   'use server'
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) return
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') return
+  const access = await getAdminAccessContext(supabase)
+  if (!access?.isPlatformAdmin) return
 
   const raceId = formData.get('race_id') as string
   const targetUserId = formData.get('user_id') as string
@@ -123,12 +168,11 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
   const { id } = params
   
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-  if (!user) redirect('/login')
+  const access = await getAdminAccessContext(supabase)
+  if (!access) redirect('/login')
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (profile?.role !== 'admin') {
-    return <div className="p-20 text-center text-red-500 font-bold">Access Denied</div>
+  if (!access.isPlatformAdmin) {
+    return <div className="p-20 text-center text-red-500 font-bold">Platform admin access required.</div>
   }
 
   const { data: race } = await supabase.from('races').select('*, circuits(name)').eq('id', id).single()
@@ -141,6 +185,14 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
   const { data: existingBonusAnswers } = await supabase.from('race_bonus_answers').select('*').eq('race_id', id)
   const { data: profiles } = await supabase.from('profiles').select('*').order('display_name')
 
+  const typedRace = race as RaceRecord
+  const typedDrivers = (drivers || []) as DriverRecord[]
+  const typedCircuits = (circuits || []) as CircuitRecord[]
+  const typedBonusQuestions = (bonusQuestions || []) as BonusQuestionRecord[]
+  const typedExistingResult = (existingResult || null) as RaceResultRecord | null
+  const typedExistingBonusAnswers = (existingBonusAnswers || []) as RaceBonusAnswerRecord[]
+  const typedProfiles = (profiles || []) as ProfileRecord[]
+
   const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true })
   const { count: predictionsCount } = await supabase.from('predictions').select('*', { count: 'exact', head: true }).eq('race_id', id)
 
@@ -150,16 +202,16 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
       <div>
         <div className="flex justify-between items-start">
           <div>
-            <div className="text-red-500 font-bold tracking-widest uppercase mb-1">Round {race.round}</div>
-            <h1 className="text-3xl font-black italic tracking-tighter">Manage {race.race_name}</h1>
+            <div className="text-red-500 font-bold tracking-widest uppercase mb-1">Round {typedRace.round}</div>
+            <h1 className="text-3xl font-black italic tracking-tighter">Manage {typedRace.race_name}</h1>
             <div className="flex items-center space-x-4 mt-2">
               <span className={`px-3 py-1 rounded-lg text-sm font-bold border ${
-                 race.status === 'scored' ? 'bg-green-500/20 text-green-500 border-green-500/30' :
-                 race.status === 'completed' ? 'bg-blue-500/20 text-blue-500 border-blue-500/30' :
-                 race.status === 'cancelled' ? 'bg-red-400/20 text-red-400 border-red-400/30' :
+                 typedRace.status === 'scored' ? 'bg-green-500/20 text-green-500 border-green-500/30' :
+                 typedRace.status === 'completed' ? 'bg-blue-500/20 text-blue-500 border-blue-500/30' :
+                 typedRace.status === 'cancelled' ? 'bg-red-400/20 text-red-400 border-red-400/30' :
                  'bg-slate-800 text-slate-300'
               }`}>
-                Status: {race.status.toUpperCase()}
+                Status: {typedRace.status.toUpperCase()}
               </span>
               <span className="flex items-center text-sm font-bold text-slate-300 bg-slate-800 px-3 py-1 rounded-lg border border-white/5">
                 <Users className="w-4 h-4 mr-2 text-slate-400" />
@@ -168,8 +220,8 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
             </div>
           </div>
           <div className="flex space-x-2">
-            <CancelRaceButton raceId={race.id} raceStatus={race.status} />
-            <DeleteRaceButton raceId={race.id} />
+            <CancelRaceButton raceId={typedRace.id} raceStatus={typedRace.status} />
+            <DeleteRaceButton raceId={typedRace.id} />
           </div>
         </div>
       </div>
@@ -181,22 +233,22 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
           <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl">
              <h2 className="text-xl font-bold mb-4 flex items-center"><Settings className="w-5 h-5 mr-2 text-red-500" /> Edit Race Details</h2>
              <form action={updateRace} className="space-y-4">
-               <input type="hidden" name="race_id" value={race.id} />
+               <input type="hidden" name="race_id" value={typedRace.id} />
                <div>
                   <label className="block text-sm font-medium text-slate-400 mb-1">Race Name</label>
-                  <input name="race_name" defaultValue={race.race_name} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2" />
+                  <input name="race_name" defaultValue={typedRace.race_name} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2" />
                </div>
                <div>
                   <label className="block text-sm font-medium text-slate-400 mb-1">Circuit</label>
-                  <select name="circuit_id" defaultValue={race.circuit_id} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2">
-                    {circuits?.map((c: any) => (
+                  <select name="circuit_id" defaultValue={typedRace.circuit_id} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2">
+                    {typedCircuits.map((c) => (
                       <option key={c.id} value={c.id} className="bg-slate-900 text-white">{c.name} {c.emoji}</option>
                     ))}
                   </select>
                </div>
                <div>
                   <label className="block text-sm font-medium text-slate-400 mb-1">Race Start (UTC)</label>
-                  <input name="race_start_at" type="datetime-local" defaultValue={new Date(race.race_start_at).toISOString().slice(0, 16)} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
+                  <input name="race_start_at" type="datetime-local" defaultValue={new Date(typedRace.race_start_at).toISOString().slice(0, 16)} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
                </div>
                <button className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl px-4 py-3 mt-4 transition-colors">
                  Update Details
@@ -212,14 +264,14 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
                <p className="text-slate-500 text-sm mb-6">No bonus questions defined for this race.</p>
              ) : (
                <div className="space-y-4 mb-6">
-                 {bonusQuestions?.map((q: any) => (
-                   <BonusQuestionCard key={q.id} question={q} raceId={race.id} />
+                 {typedBonusQuestions.map((q) => (
+                   <BonusQuestionCard key={q.id} question={q} raceId={typedRace.id} />
                  ))}
                </div>
              )}
 
              <form action={addBonusQuestion} className="space-y-3 pt-6 border-t border-white/10">
-                <input type="hidden" name="race_id" value={race.id} />
+                <input type="hidden" name="race_id" value={typedRace.id} />
                 <h3 className="text-sm font-bold text-slate-300">Add New Bonus Question</h3>
                 <input name="question_text" placeholder="Question Text" required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2" />
                 <input name="points" type="number" defaultValue={1} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2" />
@@ -245,14 +297,16 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
              <h2 className="text-xl font-bold mb-4 flex items-center"><Plus className="w-5 h-5 mr-2 text-red-500" /> Log Historic Prediction</h2>
              <p className="text-sm text-slate-400 mb-4">Select a user to manually insert or override their exact podium prediction for this race.</p>
              <form action={proxyPrediction} className="space-y-4">
-                 <input type="hidden" name="race_id" value={race.id} />
+                 <input type="hidden" name="race_id" value={typedRace.id} />
                  
                  <div>
                     <label className="block text-sm font-medium text-slate-400 mb-1">Select User</label>
                     <select name="user_id" required defaultValue="" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2">
                       <option value="" disabled className="bg-slate-900 text-white">Choose user</option>
-                      {profiles?.map((p: any) => (
-                        <option key={p.id} value={p.id} className="bg-slate-900 text-white">{p.display_name || p.email}</option>
+                      {typedProfiles.map((p) => (
+                        <option key={p.id} value={p.id} className="bg-slate-900 text-white">
+                          {getProfileDisplayName(p.display_name, p.email)}
+                        </option>
                       ))}
                     </select>
                  </div>
@@ -262,21 +316,21 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
                         <label className="block text-xs font-bold text-slate-500 mb-1">P1</label>
                         <select name="p1" required defaultValue="" className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-2 text-sm">
                            <option value="" disabled>---</option>
-                           {drivers?.map((d: any) => <option key={d.id} value={d.id} className="bg-slate-900 text-white">{d.code}</option>)}
+                           {typedDrivers.map((d) => <option key={d.id} value={d.id} className="bg-slate-900 text-white">{d.code}</option>)}
                         </select>
                      </div>
                      <div>
                         <label className="block text-xs font-bold text-slate-500 mb-1">P2</label>
                         <select name="p2" required defaultValue="" className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-2 text-sm">
                            <option value="" disabled>---</option>
-                           {drivers?.map((d: any) => <option key={d.id} value={d.id} className="bg-slate-900 text-white">{d.code}</option>)}
+                           {typedDrivers.map((d) => <option key={d.id} value={d.id} className="bg-slate-900 text-white">{d.code}</option>)}
                         </select>
                      </div>
                      <div>
                         <label className="block text-xs font-bold text-slate-500 mb-1">P3</label>
                         <select name="p3" required defaultValue="" className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-2 text-sm">
                            <option value="" disabled>---</option>
-                           {drivers?.map((d: any) => <option key={d.id} value={d.id} className="bg-slate-900 text-white">{d.code}</option>)}
+                           {typedDrivers.map((d) => <option key={d.id} value={d.id} className="bg-slate-900 text-white">{d.code}</option>)}
                         </select>
                      </div>
                  </div>
@@ -291,16 +345,16 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
              <h2 className="text-xl font-bold mb-4 flex items-center"><CheckCircle className="w-5 h-5 mr-2 text-red-500" /> Official Results</h2>
              
              <form action={saveResults} className="space-y-6">
-               <input type="hidden" name="race_id" value={race.id} />
+               <input type="hidden" name="race_id" value={typedRace.id} />
                
                <div className="space-y-4 bg-black/30 p-4 rounded-xl border border-white/5">
                  <h3 className="font-bold text-sm text-slate-300 uppercase">Podium</h3>
                  {[1, 2, 3].map(pos => (
                     <div key={pos}>
                       <label className="block text-xs font-bold text-slate-500 mb-1">P{pos}</label>
-                      <select name={`p${pos}_driver_id`} defaultValue={existingResult?.[`p${pos}_driver_id`] || ''} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2">
+                      <select name={`p${pos}_driver_id`} defaultValue={typedExistingResult?.[`p${pos}_driver_id` as keyof RaceResultRecord] || ''} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2">
                         <option value="" disabled className="bg-slate-900 text-white">Select Driver</option>
-                        {drivers?.map((d: any) => (
+                        {typedDrivers.map((d) => (
                           <option key={d.id} value={d.id} className="bg-slate-900 text-white">{d.code} - {d.full_name}</option>
                         ))}
                       </select>
@@ -308,17 +362,17 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
                  ))}
                </div>
 
-               {bonusQuestions && bonusQuestions.length > 0 && (
+               {typedBonusQuestions.length > 0 && (
                  <div className="space-y-4 bg-black/30 p-4 rounded-xl border border-white/5">
                    <h3 className="font-bold text-sm text-slate-300 uppercase">Bonus Answers</h3>
-                   {bonusQuestions.map((q: any) => {
-                     const existingAns = existingBonusAnswers?.find((a: any) => a.bonus_question_id === q.id)
+                   {typedBonusQuestions.map((q) => {
+                     const existingAns = typedExistingBonusAnswers.find((a) => a.bonus_question_id === q.id)
                      return (
                        <div key={q.id}>
                          <label className="block text-xs font-bold text-slate-500 mb-1">{q.question_text}</label>
                          <select name={`bonus_${q.id}`} defaultValue={existingAns?.correct_bonus_option_id || ''} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2">
                            <option value="" disabled className="bg-slate-900 text-white">Select Correct Option</option>
-                           {q.bonus_options?.map((o: any) => (
+                           {q.bonus_options?.map((o) => (
                              <option key={o.id} value={o.id} className="bg-slate-900 text-white">{o.label}</option>
                            ))}
                          </select>
@@ -341,8 +395,8 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
              </p>
 
              <form action={calculateRaceScoresAction}>
-                <input type="hidden" name="race_id" value={race.id} />
-                <button disabled={!existingResult} className="w-full bg-slate-100 hover:bg-white text-black font-black italic tracking-widest text-lg rounded-xl px-4 py-3 transition-transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed">
+                <input type="hidden" name="race_id" value={typedRace.id} />
+                <button disabled={!typedExistingResult} className="w-full bg-slate-100 hover:bg-white text-black font-black italic tracking-widest text-lg rounded-xl px-4 py-3 transition-transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed">
                   CALCULATE SCORES
                 </button>
              </form>

@@ -1,10 +1,65 @@
 import { createClient } from '@/utils/supabase/server'
-import { Trophy, Medal, Star } from 'lucide-react'
+import Link from 'next/link'
+import { Trophy, Medal } from 'lucide-react'
+import { getCurrentSeason } from '@/utils/season'
+import { getUserTenantContext } from '@/utils/tenant'
+import { getAdminAccessContext } from '@/utils/admin-access'
+import { TenantContextBanner } from '@/components/ui/tenant-context-banner'
+import { getProfileDisplayName } from '@/utils/profile-name'
 
 export const revalidate = 0 // always fetch fresh data for leaderboard
 
-export default async function LeaderboardPage() {
+type LeaderboardPageProps = {
+  searchParams: Promise<{
+    view?: string | string[] | undefined
+  }>
+}
+
+type LeaderboardEntry = {
+  user_id: string
+  total_points: number
+  exact_hits: number
+  races_scored: number
+  profiles?: {
+    display_name?: string | null
+    email?: string | null
+    tenant_id?: string | null
+  } | Array<{
+    display_name?: string | null
+    email?: string | null
+    tenant_id?: string | null
+  }> | null
+}
+
+function getLeaderboardProfile(entry: LeaderboardEntry) {
+  if (Array.isArray(entry.profiles)) {
+    return entry.profiles[0] || null
+  }
+
+  return entry.profiles || null
+}
+
+export default async function LeaderboardPage({ searchParams }: LeaderboardPageProps) {
   const supabase = await createClient()
+  const currentSeason = await getCurrentSeason(supabase)
+  const query = await searchParams
+  const requestedView = Array.isArray(query.view) ? query.view[0] : query.view
+  const { data: { user } } = await supabase.auth.getUser()
+  const access = user ? await getAdminAccessContext(supabase) : null
+  const tenantContext = user ? await getUserTenantContext(supabase, user.id) : {
+    tenantId: null,
+    tenantName: null,
+    tenantSlug: null,
+    role: null,
+  }
+  const canUseTenantView = Boolean(tenantContext.tenantId)
+  const defaultView = canUseTenantView && !access?.isPlatformAdmin ? 'tenant' : 'global'
+  const activeView =
+    requestedView === 'global'
+      ? 'global'
+      : requestedView === 'tenant' && canUseTenantView
+        ? 'tenant'
+        : defaultView
 
   // Fetch from the leaderboard cache or calculate. For v1, let's fetch from the cache.
   // Wait, we need to join with profiles to get display_name.
@@ -16,8 +71,9 @@ export default async function LeaderboardPage() {
       total_points,
       exact_hits,
       races_scored,
-      profiles ( display_name )
+      profiles ( display_name, email, tenant_id )
     `)
+    .eq('season', currentSeason)
     .order('total_points', { ascending: false })
     .order('exact_hits', { ascending: false })
 
@@ -25,14 +81,80 @@ export default async function LeaderboardPage() {
     console.error('Error fetching leaderboard:', error)
   }
 
+  const visibleLeaderboard = (leaderboard || []).filter((entry: LeaderboardEntry) => {
+    const profile = getLeaderboardProfile(entry)
+
+    if (activeView !== 'tenant') return true
+    return profile?.tenant_id === tenantContext.tenantId
+  })
+
+  const leaderboardTitle = activeView === 'tenant' && tenantContext.tenantName
+    ? `${tenantContext.tenantName.toUpperCase()} LEADERBOARD`
+    : 'GLOBAL LEADERBOARD'
+  const leaderboardSubtitle = activeView === 'tenant'
+    ? 'See who is leading inside your tenant competition.'
+    : canUseTenantView
+      ? 'Compare your tenant results against the full cross-tenant field.'
+      : 'See who is predicting the podium best across every tenant.'
+
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex items-center space-x-4">
         <Trophy className="w-10 h-10 text-yellow-500" />
         <div>
-          <h1 className="text-3xl font-black italic tracking-tighter">GLOBAL LEADERBOARD</h1>
-          <p className="text-slate-400">See who is predicting the podium best.</p>
+          <h1 className="text-3xl font-black italic tracking-tighter">{leaderboardTitle}</h1>
+          <p className="text-slate-400">{leaderboardSubtitle}</p>
         </div>
+      </div>
+
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-wrap items-center gap-3">
+          {canUseTenantView && (
+            <TenantContextBanner
+              tenantName={tenantContext.tenantName}
+              label={activeView === 'tenant' ? 'Viewing' : 'Your tenant'}
+            />
+          )}
+
+          {user && !canUseTenantView && !access?.isPlatformAdmin && (
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-300">
+              You can browse the global leaderboard while waiting for tenant assignment.
+            </div>
+          )}
+
+          {access?.isPlatformAdmin && (
+            <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200">
+              {canUseTenantView
+                ? 'Platform admins default to the global leaderboard, but can still switch into their tenant competition.'
+                : 'Platform admins default to the global leaderboard so race control stays cross-tenant.'}
+            </div>
+          )}
+        </div>
+
+        {canUseTenantView && (
+          <div className="inline-flex rounded-2xl border border-white/10 bg-black/20 p-1">
+            <Link
+              href="/leaderboard?view=tenant"
+              className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${
+                activeView === 'tenant'
+                  ? 'bg-red-600 text-white'
+                  : 'text-slate-300 hover:bg-white/5'
+              }`}
+            >
+              My Tenant
+            </Link>
+            <Link
+              href="/leaderboard?view=global"
+              className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${
+                activeView === 'global'
+                  ? 'bg-red-600 text-white'
+                  : 'text-slate-300 hover:bg-white/5'
+              }`}
+            >
+              Global
+            </Link>
+          </div>
+        )}
       </div>
 
       <div className="bg-card border border-white/5 rounded-2xl overflow-hidden shadow-2xl">
@@ -48,15 +170,18 @@ export default async function LeaderboardPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {(!leaderboard || leaderboard.length === 0) ? (
+              {visibleLeaderboard.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="p-8 text-center text-slate-500 italic">
                     No predictions scored yet. The season is waiting!
                   </td>
                 </tr>
               ) : (
-                leaderboard.map((entry: any, index: number) => (
-                  <tr key={entry.user_id} className="hover:bg-white/5 transition-colors">
+                visibleLeaderboard.map((entry: LeaderboardEntry, index: number) => {
+                  const profile = getLeaderboardProfile(entry)
+
+                  return (
+                    <tr key={entry.user_id} className="hover:bg-white/5 transition-colors">
                     <td className="p-4 text-center font-bold text-lg">
                       {index === 0 ? <Medal className="w-6 h-6 text-yellow-500 mx-auto" /> :
                        index === 1 ? <Medal className="w-6 h-6 text-slate-300 mx-auto" /> :
@@ -64,7 +189,9 @@ export default async function LeaderboardPage() {
                        <span className="text-slate-500">{index + 1}</span>}
                     </td>
                     <td className="p-4">
-                      <div className="font-semibold">{entry.profiles?.display_name || 'Anonymous'}</div>
+                      <div className="font-semibold">
+                        {getProfileDisplayName(profile?.display_name, profile?.email)}
+                      </div>
                     </td>
                     <td className="p-4 text-right font-black text-xl text-red-500">
                       {entry.total_points}
@@ -76,7 +203,8 @@ export default async function LeaderboardPage() {
                       {entry.races_scored}
                     </td>
                   </tr>
-                ))
+                  )
+                })
               )}
             </tbody>
           </table>

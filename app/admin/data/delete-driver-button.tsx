@@ -2,9 +2,11 @@
 
 import { Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { deleteDriver } from '@/app/actions/admin-data'
 
 export function DeleteDriverButton({ id }: { id: string }) {
+  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
 
   const handleClick = async () => {
@@ -14,8 +16,7 @@ export function DeleteDriverButton({ id }: { id: string }) {
     setIsLoading(true)
     try {
       await deleteDriver(id)
-      // Refresh the page to show updated data
-      window.location.reload()
+      router.refresh()
     } catch (error) {
       console.error('Error deleting driver:', error)
     } finally {

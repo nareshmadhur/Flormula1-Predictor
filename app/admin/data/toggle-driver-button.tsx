@@ -2,9 +2,11 @@
 
 import { Power } from 'lucide-react'
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { toggleDriverActive } from '@/app/actions/admin-data'
 
 export function ToggleDriverButton({ id, active }: { id: string, active: boolean }) {
+  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
 
   const handleClick = async () => {
@@ -12,8 +14,7 @@ export function ToggleDriverButton({ id, active }: { id: string, active: boolean
     setIsLoading(true)
     try {
       await toggleDriverActive(id, active)
-      // Refresh the page to show updated data
-      window.location.reload()
+      router.refresh()
     } catch (error) {
       console.error('Error toggling driver status:', error)
     } finally {

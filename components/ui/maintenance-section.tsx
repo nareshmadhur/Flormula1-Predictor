@@ -1,21 +1,33 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { updateRaceStatuses } from '@/app/actions/admin'
 import { RefreshCw } from 'lucide-react'
 
 export function MaintenanceSection() {
+  const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
+  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null)
 
   const handleUpdateStatuses = async () => {
     if (isLoading) return
 
     setIsLoading(true)
+    setMessage(null)
     try {
-      await updateRaceStatuses()
-      window.location.reload()
+      const result = await updateRaceStatuses()
+      if (result?.error) {
+        setMessage({ type: 'error', text: result.error })
+      } else {
+        setMessage({ type: 'success', text: result?.message || 'Race statuses updated.' })
+        router.refresh()
+      }
     } catch (error) {
-      alert(error instanceof Error ? error.message : 'An error occurred while updating statuses')
+      setMessage({
+        type: 'error',
+        text: error instanceof Error ? error.message : 'An error occurred while updating statuses.',
+      })
     } finally {
       setIsLoading(false)
     }
@@ -24,6 +36,18 @@ export function MaintenanceSection() {
   return (
     <div className="bg-card border border-white/5 p-6 rounded-2xl shadow-xl">
       <h2 className="text-xl font-bold mb-4">Maintenance</h2>
+
+      {message && (
+        <div
+          className={`mb-4 rounded-xl border px-4 py-3 text-sm font-medium ${
+            message.type === 'success'
+              ? 'border-green-500/30 bg-green-500/10 text-green-300'
+              : 'border-red-500/30 bg-red-500/10 text-red-300'
+          }`}
+        >
+          {message.text}
+        </div>
+      )}
 
       <button
         onClick={handleUpdateStatuses}
