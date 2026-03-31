@@ -29,6 +29,10 @@ export default async function AdminDashboardPage() {
 
   if (!access) redirect('/login')
 
+  if (access.isTenantAdmin) {
+    redirect('/admin/tenant')
+  }
+
   if (!access.isPlatformAdmin) {
     return (
       <div className="flex flex-col items-center justify-center p-20 text-center">
@@ -118,6 +122,16 @@ export default async function AdminDashboardPage() {
              </div>
              <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-red-500 transition-colors" />
           </Link>
+
+          {access.tenantId && (
+            <Link href="/admin/tenant" className="bg-card border border-white/5 p-6 rounded-2xl shadow-xl hover:bg-white/[0.02] transition-colors flex items-center justify-between group block">
+               <div>
+                 <h2 className="text-xl font-bold mb-1">Tenant Ops</h2>
+                 <p className="text-sm text-slate-400">Inspect the competition experience inside your own tenant</p>
+               </div>
+               <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-red-500 transition-colors" />
+            </Link>
+          )}
 
           <MaintenanceSection />
 

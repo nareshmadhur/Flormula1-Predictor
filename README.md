@@ -9,13 +9,14 @@ FLO-RMULA 1 is a Formula 1 prediction pool built with Next.js and Supabase. User
 - Podium prediction flow for open races
 - Locked, completed, and scored race states with read-only summaries
 - Bonus question support per race
-- Personal history page
+- Personal season history with missed-weekend visibility
 - Tenant and global leaderboard views with smart defaults
 - Email/password authentication with Supabase
 
 ### Admin Experience
-- In-app admin navigation for platform admins
+- In-app admin navigation for platform admins and tenant admins
 - Tenant and account access management in `/admin/tenants`
+- Tenant operations workspace in `/admin/tenant`
 - Race calendar management
 - Bonus question management per race
 - Official result entry
@@ -45,7 +46,7 @@ This keeps scheduling, timing, and future automated race-data ingestion centrali
 - `admin` with `admin_scope = platform`
   Acts as the platform admin. Can manage tenants, shared race data, scoring, and reference data for the whole product, while still optionally belonging to a tenant as a participant.
 - `admin` with `admin_scope = tenant`
-  Is explicitly scoped away from platform-wide control. The role is assignable from the admin access workspace now, with tenant-scoped tooling expanding in `P1`.
+  Is explicitly scoped away from platform-wide control. Can open `/admin/tenant` to monitor roster health, tenant standings, and race-entry coverage without touching shared race control.
 
 In practical terms:
 - race schedules, bonus questions, official results, and scoring inputs are entered once by a platform admin and reused by all tenants
@@ -74,6 +75,12 @@ Detailed execution tracking lives in [docs/roadmap/README.md](</Users/nareshmadh
 5. Add bonus questions and official answers.
 6. Save official podium results.
 7. Calculate scores and refresh the leaderboard.
+
+### Tenant Admin
+1. Sign in as a tenant admin.
+2. Open `Admin` from the main navigation.
+3. Land in `/admin/tenant` to inspect tenant roster health, leaderboard state, and race-entry coverage.
+4. Use the tenant leaderboard and season history to spot missed weekends and competition momentum.
 
 ## Technical Overview
 
@@ -174,7 +181,7 @@ npm run lint
 - No automated test suite is currently included.
 - Some repo-wide lint issues still exist outside the most recently updated files.
 - Race schedule and results are still managed manually.
-- Tenant-scoped admin tooling is still early; platform admins currently have the fuller operational workspace.
+- Tenant admins currently have a read-focused operations workspace; invitation and self-serve member management are still future work.
 
 ## Roadmap
 
@@ -182,9 +189,7 @@ npm run lint
 - completed foundation and safety work for tenants, private competition guards, and platform-admin boundaries
 
 ### Step 2
-- improve tenant product experience
-- expand tenant-facing admin tools and clearer tenant/global context
-- deepen scored-race explanations and post-race usability
+- completed tenant product experience work, including tenant ops, clearer tenant/global context, missed-weekend visibility, and richer scored-race recap
 
 ### Step 3
 - public result pages and visibility mechanics

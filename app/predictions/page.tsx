@@ -179,13 +179,19 @@ export default async function SeasonDashboardPage() {
   const openRaces = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'upcoming')
   const lockedRaces = typedRaces.filter((race) => {
     const status = getEffectiveRaceStatus(race)
-    return status === 'locked' || status === 'completed'
+    return (status === 'locked' || status === 'completed') && predictedRaceIds.has(race.id)
   })
   const scoredRaces = [...typedRaces]
-    .filter((race) => getEffectiveRaceStatus(race) === 'scored')
+    .filter((race) => getEffectiveRaceStatus(race) === 'scored' && predictedRaceIds.has(race.id))
+    .sort((left, right) => new Date(right.race_start_at).getTime() - new Date(left.race_start_at).getTime())
+  const missedRaces = [...typedRaces]
+    .filter((race) => {
+      const status = getEffectiveRaceStatus(race)
+      return (status === 'locked' || status === 'completed' || status === 'scored') && !predictedRaceIds.has(race.id)
+    })
     .sort((left, right) => new Date(right.race_start_at).getTime() - new Date(left.race_start_at).getTime())
 
-  const nextRace = openRaces[0] || lockedRaces[0] || scoredRaces[0] || null
+  const nextRace = openRaces[0] || lockedRaces[0] || missedRaces[0] || scoredRaces[0] || null
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -235,7 +241,7 @@ export default async function SeasonDashboardPage() {
             )}
           </div>
 
-          <div className="grid gap-4 sm:grid-cols-3 md:grid-cols-1">
+          <div className="grid gap-4 sm:grid-cols-2 md:grid-cols-1">
             <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
               <div className="flex items-center text-sm font-bold uppercase tracking-wider text-slate-500">
                 <Calendar className="mr-2 h-4 w-4 text-red-400" /> Open Predictions
@@ -256,6 +262,13 @@ export default async function SeasonDashboardPage() {
               </div>
               <div className="mt-3 text-4xl font-black italic text-white">{typedScores.length}</div>
               <p className="mt-2 text-sm text-slate-400">Races where your points are already final.</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
+              <div className="flex items-center text-sm font-bold uppercase tracking-wider text-slate-500">
+                <Clock3 className="mr-2 h-4 w-4 text-red-400" /> Missed Weekends
+              </div>
+              <div className="mt-3 text-4xl font-black italic text-white">{missedRaces.length}</div>
+              <p className="mt-2 text-sm text-slate-400">Closed races that counted without your prediction.</p>
             </div>
           </div>
         </div>
@@ -290,7 +303,7 @@ export default async function SeasonDashboardPage() {
       <section className="space-y-4">
         <div>
           <h2 className="text-2xl font-black italic tracking-tight">Awaiting Results</h2>
-          <p className="text-slate-400">Locked races and finished races that have not been scored yet.</p>
+          <p className="text-slate-400">Locked races and finished races where you already entered a prediction.</p>
         </div>
 
         {lockedRaces.length === 0 ? (
@@ -305,6 +318,30 @@ export default async function SeasonDashboardPage() {
                 race={race}
                 status={getEffectiveRaceStatus(race)}
                 hasPredicted={predictedRaceIds.has(race.id)}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-4">
+        <div>
+          <h2 className="text-2xl font-black italic tracking-tight">Missed Weekends</h2>
+          <p className="text-slate-400">Closed races that now sit in your season story as missed opportunities.</p>
+        </div>
+
+        {missedRaces.length === 0 ? (
+          <div className="rounded-2xl border border-white/5 bg-card p-8 text-center text-slate-400 shadow-xl">
+            You have not missed any race weekends this season.
+          </div>
+        ) : (
+          <div className="grid gap-6">
+            {missedRaces.slice(0, 5).map((race) => (
+              <RaceListCard
+                key={race.id}
+                race={race}
+                status={getEffectiveRaceStatus(race)}
+                hasPredicted={false}
               />
             ))}
           </div>

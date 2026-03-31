@@ -23,7 +23,7 @@ This folder is the working execution board for product and engineering increment
 | ID | Priority | Title | Sprint | Status |
 | --- | --- | --- | --- | --- |
 | [P0-001](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/increments/P0-001-tenant-foundation-and-safety.md>) | P0 | Tenant foundation and safety | SPR-001, SPR-002 | Completed |
-| [P1-001](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/increments/P1-001-tenant-product-experience.md>) | P1 | Tenant product experience | SPR-002 | In progress |
+| [P1-001](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/increments/P1-001-tenant-product-experience.md>) | P1 | Tenant product experience | SPR-002 | Completed |
 | [P2-001](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/increments/P2-001-visibility-and-automation.md>) | P2 | Visibility and automation | SPR-003 | Parked after first slice |
 
 ## Recommended Increment Template

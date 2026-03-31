@@ -1,11 +1,12 @@
 import { createClient } from '@/utils/supabase/server'
-import Link from 'next/link'
 import { Trophy, Medal } from 'lucide-react'
 import { getCurrentSeason } from '@/utils/season'
 import { getUserTenantContext } from '@/utils/tenant'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { TenantContextBanner } from '@/components/ui/tenant-context-banner'
 import { getProfileDisplayName } from '@/utils/profile-name'
+import { sortCompetitionStandings, getCompetitionRank } from '@/utils/competition'
+import { PendingLink } from '@/components/ui/pending-link'
 
 export const revalidate = 0 // always fetch fresh data for leaderboard
 
@@ -87,6 +88,14 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
     if (activeView !== 'tenant') return true
     return profile?.tenant_id === tenantContext.tenantId
   })
+  const sortedVisibleLeaderboard = sortCompetitionStandings(visibleLeaderboard as LeaderboardEntry[])
+  const currentUserRank = user ? getCompetitionRank(sortedVisibleLeaderboard, user.id) : null
+  const currentUserEntry = user
+    ? sortedVisibleLeaderboard.find((entry) => entry.user_id === user.id) || null
+    : null
+  const leaderPoints = sortedVisibleLeaderboard[0]?.total_points ?? 0
+  const pointsBehindLeader =
+    currentUserEntry && currentUserRank !== 1 ? leaderPoints - currentUserEntry.total_points : 0
 
   const leaderboardTitle = activeView === 'tenant' && tenantContext.tenantName
     ? `${tenantContext.tenantName.toUpperCase()} LEADERBOARD`
@@ -133,7 +142,7 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
 
         {canUseTenantView && (
           <div className="inline-flex rounded-2xl border border-white/10 bg-black/20 p-1">
-            <Link
+            <PendingLink
               href="/leaderboard?view=tenant"
               className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${
                 activeView === 'tenant'
@@ -142,8 +151,8 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
               }`}
             >
               My Tenant
-            </Link>
-            <Link
+            </PendingLink>
+            <PendingLink
               href="/leaderboard?view=global"
               className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${
                 activeView === 'global'
@@ -152,9 +161,47 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
               }`}
             >
               Global
-            </Link>
+            </PendingLink>
           </div>
         )}
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
+          <div className="text-sm font-bold uppercase tracking-wider text-slate-500">Your Position</div>
+          <div className="mt-3 text-4xl font-black italic text-white">
+            {currentUserRank ? `#${currentUserRank}` : 'N/A'}
+          </div>
+          <p className="mt-2 text-sm text-slate-400">
+            {user
+              ? activeView === 'tenant'
+                ? 'Your standing inside this tenant competition.'
+                : 'Your standing across every tenant in the app.'
+              : 'Sign in to see your place in the standings.'}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
+          <div className="text-sm font-bold uppercase tracking-wider text-slate-500">Predictors In View</div>
+          <div className="mt-3 text-4xl font-black italic text-white">{sortedVisibleLeaderboard.length}</div>
+          <p className="mt-2 text-sm text-slate-400">
+            {activeView === 'tenant'
+              ? 'Only members from your tenant are counted here.'
+              : 'Everyone with scored results across all tenants.'}
+          </p>
+        </div>
+        <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
+          <div className="text-sm font-bold uppercase tracking-wider text-slate-500">
+            {currentUserRank && currentUserRank !== 1 ? 'Gap To Lead' : 'Leader Points'}
+          </div>
+          <div className="mt-3 text-4xl font-black italic text-red-500">
+            {currentUserRank && currentUserRank !== 1 ? pointsBehindLeader : leaderPoints}
+          </div>
+          <p className="mt-2 text-sm text-slate-400">
+            {currentUserRank && currentUserRank !== 1
+              ? 'Points needed to catch the leader in this view.'
+              : 'Current pace at the top of this leaderboard.'}
+          </p>
+        </div>
       </div>
 
       <div className="bg-card border border-white/5 rounded-2xl overflow-hidden shadow-2xl">
@@ -170,14 +217,14 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
               </tr>
             </thead>
             <tbody className="divide-y divide-white/5">
-              {visibleLeaderboard.length === 0 ? (
+              {sortedVisibleLeaderboard.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="p-8 text-center text-slate-500 italic">
                     No predictions scored yet. The season is waiting!
                   </td>
                 </tr>
               ) : (
-                visibleLeaderboard.map((entry: LeaderboardEntry, index: number) => {
+                sortedVisibleLeaderboard.map((entry: LeaderboardEntry, index: number) => {
                   const profile = getLeaderboardProfile(entry)
 
                   return (

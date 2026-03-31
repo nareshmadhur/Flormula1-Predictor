@@ -5,6 +5,7 @@ import PredictionForm from './prediction-form'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { getUserTenantContext } from '@/utils/tenant'
 import { TenantAssignmentRequired } from '@/components/ui/tenant-assignment-required'
+import { getCompetitionRank, sortCompetitionStandings } from '@/utils/competition'
 
 type Driver = {
   id: string
@@ -23,6 +24,58 @@ type BonusQuestion = {
   question_text: string
   points: number
   bonus_options?: BonusOption[]
+}
+
+type LeaderboardStanding = {
+  user_id: string
+  total_points: number
+  exact_hits: number
+  races_scored: number
+  profiles?: {
+    tenant_id?: string | null
+  } | Array<{
+    tenant_id?: string | null
+  }> | null
+}
+
+type RaceScoreEntry = {
+  user_id: string
+  total_points: number
+  exact_hits: number
+}
+
+function getStandingProfile(entry: LeaderboardStanding) {
+  if (Array.isArray(entry.profiles)) {
+    return entry.profiles[0] || null
+  }
+
+  return entry.profiles || null
+}
+
+function getMovementLabel(currentRank: number | null, previousRank: number | null) {
+  if (!currentRank) {
+    return { title: 'Not ranked', detail: 'No leaderboard position yet.' }
+  }
+
+  if (!previousRank) {
+    return { title: `#${currentRank}`, detail: 'First scored result in this view.' }
+  }
+
+  if (currentRank < previousRank) {
+    return {
+      title: `Up ${previousRank - currentRank}`,
+      detail: `Moved from #${previousRank} to #${currentRank}.`,
+    }
+  }
+
+  if (currentRank > previousRank) {
+    return {
+      title: `Down ${currentRank - previousRank}`,
+      detail: `Dropped from #${previousRank} to #${currentRank}.`,
+    }
+  }
+
+  return { title: `#${currentRank}`, detail: 'Position unchanged after this race.' }
 }
 
 function getDriverLabel(drivers: Driver[], driverId?: string | null) {
@@ -148,6 +201,73 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
     { label: 'P2', value: getDriverLabel(drivers, raceResult.p2_driver_id) },
     { label: 'P3', value: getDriverLabel(drivers, raceResult.p3_driver_id) },
   ] : []
+  const actualPodiumIds = raceResult
+    ? [raceResult.p1_driver_id, raceResult.p2_driver_id, raceResult.p3_driver_id].filter(Boolean)
+    : []
+  const podiumHitCount = prediction
+    ? [prediction.p1_driver_id, prediction.p2_driver_id, prediction.p3_driver_id].filter((driverId) =>
+        actualPodiumIds.includes(driverId)
+      ).length
+    : 0
+  const exactPodiumHits = userScore?.exact_hits ?? 0
+  const shuffledPodiumHits = Math.max(podiumHitCount - exactPodiumHits, 0)
+  const missedPodiumSpots = Math.max(3 - podiumHitCount, 0)
+  const correctBonusCount = typedBonusQuestions.filter(
+    (question) =>
+      bonusAnswerMap.get(question.id) &&
+      bonusAnswerMap.get(question.id) === officialBonusAnswerMap.get(question.id)
+  ).length
+
+  let globalMovement = { title: 'Unavailable', detail: 'This race has not updated the global table yet.' }
+  let tenantMovement = { title: 'Unavailable', detail: 'This race has not updated the tenant table yet.' }
+
+  if (effectiveStatus === 'scored' && userScore) {
+    const { data: leaderboardRows } = await supabase
+      .from('leaderboard_cache')
+      .select('user_id, total_points, exact_hits, races_scored, profiles(tenant_id)')
+      .eq('season', race.season)
+
+    const { data: raceScoreRows } = await supabase
+      .from('user_race_scores')
+      .select('user_id, total_points, exact_hits')
+      .eq('race_id', id)
+
+    const raceScoreMap = new Map(
+      ((raceScoreRows || []) as RaceScoreEntry[]).map((entry) => [entry.user_id, entry])
+    )
+    const currentStandings = sortCompetitionStandings((leaderboardRows || []) as LeaderboardStanding[])
+    const previousStandings = sortCompetitionStandings(
+      currentStandings.flatMap((entry) => {
+        const raceScore = raceScoreMap.get(entry.user_id)
+        const previousEntry = {
+          ...entry,
+          total_points: entry.total_points - (raceScore?.total_points || 0),
+          exact_hits: entry.exact_hits - (raceScore?.exact_hits || 0),
+          races_scored: entry.races_scored - (raceScore ? 1 : 0),
+        }
+
+        return previousEntry.races_scored > 0 ? [previousEntry] : []
+      })
+    )
+
+    const currentGlobalRank = getCompetitionRank(currentStandings, user.id)
+    const previousGlobalRank = getCompetitionRank(previousStandings, user.id)
+    globalMovement = getMovementLabel(currentGlobalRank, previousGlobalRank)
+
+    const currentTenantStandings = sortCompetitionStandings(
+      currentStandings.filter(
+        (entry) => getStandingProfile(entry)?.tenant_id === tenantContext.tenantId
+      )
+    )
+    const previousTenantStandings = sortCompetitionStandings(
+      previousStandings.filter(
+        (entry) => getStandingProfile(entry)?.tenant_id === tenantContext.tenantId
+      )
+    )
+    const currentTenantRank = getCompetitionRank(currentTenantStandings, user.id)
+    const previousTenantRank = getCompetitionRank(previousTenantStandings, user.id)
+    tenantMovement = getMovementLabel(currentTenantRank, previousTenantRank)
+  }
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500 max-w-3xl mx-auto">
@@ -292,6 +412,50 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
                   <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Bonus</div>
                   <div className="mt-2 text-3xl font-black italic text-slate-100">{userScore.bonus_points}</div>
                 </div>
+              </div>
+
+              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <div className="rounded-2xl border border-white/5 bg-black/30 p-5">
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Podium Recap</div>
+                  <div className="mt-2 text-lg font-bold text-white">
+                    {exactPodiumHits} exact, {shuffledPodiumHits} shuffled
+                  </div>
+                  <p className="mt-2 text-sm text-slate-400">
+                    {missedPodiumSpots === 0
+                      ? 'You had a driver on every podium slot.'
+                      : `${missedPodiumSpots} podium slot${missedPodiumSpots === 1 ? '' : 's'} missed completely.`}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/5 bg-black/30 p-5">
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Bonus Recap</div>
+                  <div className="mt-2 text-lg font-bold text-white">
+                    {typedBonusQuestions.length > 0 ? `${correctBonusCount}/${typedBonusQuestions.length}` : 'No bonus'}
+                  </div>
+                  <p className="mt-2 text-sm text-slate-400">
+                    {typedBonusQuestions.length > 0
+                      ? `Bonus answers matched the official outcome on ${correctBonusCount} question${correctBonusCount === 1 ? '' : 's'}.`
+                      : 'This race did not include bonus questions.'}
+                  </p>
+                </div>
+                <div className="rounded-2xl border border-white/5 bg-black/30 p-5">
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Global Movement</div>
+                  <div className="mt-2 text-lg font-bold text-white">{globalMovement.title}</div>
+                  <p className="mt-2 text-sm text-slate-400">{globalMovement.detail}</p>
+                </div>
+                <div className="rounded-2xl border border-white/5 bg-black/30 p-5">
+                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Tenant Movement</div>
+                  <div className="mt-2 text-lg font-bold text-white">{tenantMovement.title}</div>
+                  <p className="mt-2 text-sm text-slate-400">{tenantMovement.detail}</p>
+                </div>
+              </div>
+            </section>
+          )}
+
+          {effectiveStatus === 'scored' && !prediction && (
+            <section className="bg-card border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl">
+              <h2 className="text-2xl font-black italic tracking-tighter mb-4">MISSED WEEKEND IMPACT</h2>
+              <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-5 text-red-200">
+                This race counted as a missed weekend for your season. You can still review the official result and use it as context for the next prediction window.
               </div>
             </section>
           )}

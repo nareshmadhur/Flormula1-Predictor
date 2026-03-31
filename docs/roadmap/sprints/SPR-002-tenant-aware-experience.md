@@ -8,11 +8,15 @@ Make the current dashboard, leaderboard, history, and admin flows tenant-aware w
 
 - Tenant setup screen added for admins.
 - Account access is now managed in-app with role, admin scope, and tenant controls in one place.
+- Tenant admins now have a scoped `/admin/tenant` workspace for roster health, standings, and race-entry coverage.
 - Tenant context now appears in the dashboard, leaderboard, history, and navbar.
 - Leaderboard now supports tenant and global views with smarter defaults for members, platform admins, and unassigned users.
+- Leaderboard now shows in-view standing context instead of only a raw table.
 - Unassigned users now get an explicit fallback banner instead of silently operating in ambiguous context.
 - Private competition pages now enforce tenant assignment before access.
 - Platform admin boundaries are now enforced for shared race control, scoring, tenant management, and reference-data routes.
+- Season history now includes missed weekends instead of only submitted predictions.
+- Scored race pages now explain podium/bonus recap plus tenant/global leaderboard movement.
 
 ## Increment Links
 

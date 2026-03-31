@@ -12,7 +12,7 @@ export default async function Navbar() {
 
   let profile = null
   let tenantName: string | null = null
-  let isPlatformAdmin = false
+  let isAdmin = false
   if (user) {
     const { data } = await supabase
       .from('profiles')
@@ -24,7 +24,7 @@ export default async function Navbar() {
     const tenantContext = await getUserTenantContext(supabase, user.id)
     tenantName = tenantContext.tenantName
     const adminAccess = await getAdminAccessContext(supabase)
-    isPlatformAdmin = adminAccess?.isPlatformAdmin ?? false
+    isAdmin = adminAccess?.isAdmin ?? false
   }
 
   const primaryLinks = [{ href: '/leaderboard', label: 'Leaderboard' }]
@@ -35,7 +35,7 @@ export default async function Navbar() {
       { href: '/me/history', label: 'History' }
     )
 
-    if (isPlatformAdmin) {
+    if (isAdmin) {
       primaryLinks.push({ href: '/admin', label: 'Admin' })
     }
   }

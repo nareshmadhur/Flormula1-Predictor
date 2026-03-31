@@ -1,30 +1,31 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { History, ChevronRight } from 'lucide-react'
-import Link from 'next/link'
-import { getEffectiveRaceStatus } from '@/utils/race-status'
+import { CalendarClock, History, Trophy } from 'lucide-react'
+import { getCurrentSeason } from '@/utils/season'
+import { getEffectiveRaceStatus, type RaceStatus } from '@/utils/race-status'
 import { getUserTenantContext } from '@/utils/tenant'
 import { TenantContextBanner } from '@/components/ui/tenant-context-banner'
 import { TenantAssignmentRequired } from '@/components/ui/tenant-assignment-required'
+import { PendingLink } from '@/components/ui/pending-link'
 
 export const revalidate = 0
 
-type HistoryPrediction = {
+type SeasonRace = {
   id: string
-  race_id: string
-  races?: {
-    id: string
-    round: number
-    race_name: string
-    status: 'upcoming' | 'locked' | 'completed' | 'scored' | 'cancelled'
-    race_start_at: string
-    prediction_lock_at: string
-    circuits?: {
-      emoji?: string | null
-      name?: string | null
-      country?: string | null
-    } | null
+  round: number
+  race_name: string
+  status: RaceStatus
+  race_start_at: string
+  prediction_lock_at: string
+  circuits?: {
+    emoji?: string | null
+    name?: string | null
+    country?: string | null
   } | null
+}
+
+type PredictionRow = {
+  race_id: string
 }
 
 type ScoreRow = {
@@ -32,112 +33,270 @@ type ScoreRow = {
   total_points: number
   podium_points: number
   bonus_points: number
+  exact_hits: number
+}
+
+type HistoryEntry = {
+  race: SeasonRace
+  status: RaceStatus
+  hasPredicted: boolean
+  score?: ScoreRow
+  category: 'awaiting' | 'scored' | 'missed' | 'upcoming'
+  summary: string
+}
+
+function getCategoryTitle(category: HistoryEntry['category']) {
+  if (category === 'awaiting') return 'Awaiting Results'
+  if (category === 'scored') return 'Scored Weekends'
+  if (category === 'missed') return 'Missed Weekends'
+  return 'Upcoming Weekends'
+}
+
+function getActionLabel(entry: HistoryEntry) {
+  if (entry.category === 'upcoming') {
+    return entry.hasPredicted ? 'Edit Prediction' : 'Predict Now'
+  }
+
+  return 'View Race'
+}
+
+function getCategoryOrder(category: HistoryEntry['category']) {
+  if (category === 'awaiting') return 0
+  if (category === 'scored') return 1
+  if (category === 'missed') return 2
+  return 3
+}
+
+function getEntrySummary(status: RaceStatus, hasPredicted: boolean, score?: ScoreRow) {
+  if (status === 'scored' && score) {
+    return `Finished with ${score.total_points} points: ${score.podium_points} from podium picks and ${score.bonus_points} from bonus answers.`
+  }
+
+  if (status === 'scored' && !hasPredicted) {
+    return 'No entry was submitted for this race, so it counted as 0 points in your season.'
+  }
+
+  if ((status === 'locked' || status === 'completed') && hasPredicted) {
+    return status === 'locked'
+      ? 'Your prediction is locked in. The race weekend is still playing out.'
+      : 'The race has finished and your score will appear once official scoring is published.'
+  }
+
+  if ((status === 'locked' || status === 'completed') && !hasPredicted) {
+    return status === 'locked'
+      ? 'The window closed without an entry, so this weekend is already a missed opportunity.'
+      : 'You missed this race and official scoring is still pending for everyone.'
+  }
+
+  if (hasPredicted) {
+    return 'Your prediction is entered and can still be edited before the lock deadline.'
+  }
+
+  return 'Prediction window is open and this weekend still needs your entry.'
 }
 
 export default async function UserHistoryPage() {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   if (!user) {
     redirect('/login')
   }
 
+  const currentSeason = await getCurrentSeason(supabase)
   const tenantContext = await getUserTenantContext(supabase, user.id)
 
   if (!tenantContext.tenantId) {
     return <TenantAssignmentRequired isAdmin={tenantContext.role === 'admin'} />
   }
 
-  // Fetch all user predictions with race details
-  const { data: predictions, error } = await supabase
-    .from('predictions')
-    .select(`
-      *,
-      races (
-        id, round, race_name, status,
-        circuits ( emoji, name, country )
-      )
-    `)
-    .eq('user_id', user.id)
-    .order('submitted_at', { ascending: false })
+  const { data: races, error: racesError } = await supabase
+    .from('races')
+    .select('id, round, race_name, status, race_start_at, prediction_lock_at, circuits(emoji, name, country)')
+    .eq('season', currentSeason)
+    .neq('status', 'cancelled')
+    .order('race_start_at', { ascending: false })
 
-  if (error) console.error('Predictions fetch error:', error)
+  if (racesError) {
+    console.error('Season races fetch error:', racesError)
+  }
+
+  const { data: predictions, error: predictionsError } = await supabase
+    .from('predictions')
+    .select('race_id')
+    .eq('user_id', user.id)
+
+  if (predictionsError) {
+    console.error('Predictions fetch error:', predictionsError)
+  }
 
   const { data: scores } = await supabase
     .from('user_race_scores')
-    .select('*')
+    .select('race_id, total_points, podium_points, bonus_points, exact_hits')
     .eq('user_id', user.id)
 
-  const typedPredictions = (predictions || []) as HistoryPrediction[]
-  const typedScores = (scores || []) as ScoreRow[]
+  const typedRaces = (races || []) as SeasonRace[]
+  const predictedRaceIds = new Set(((predictions || []) as PredictionRow[]).map((prediction) => prediction.race_id))
+  const scoreByRaceId = new Map(((scores || []) as ScoreRow[]).map((score) => [score.race_id, score]))
+
+  const entries = typedRaces.map((race) => {
+    const status = getEffectiveRaceStatus(race)
+    const hasPredicted = predictedRaceIds.has(race.id)
+    const score = scoreByRaceId.get(race.id)
+
+    let category: HistoryEntry['category'] = 'upcoming'
+    if (status === 'scored' && hasPredicted) category = 'scored'
+    else if ((status === 'locked' || status === 'completed') && hasPredicted) category = 'awaiting'
+    else if ((status === 'locked' || status === 'completed' || status === 'scored') && !hasPredicted) category = 'missed'
+
+    return {
+      race,
+      status,
+      hasPredicted,
+      score,
+      category,
+      summary: getEntrySummary(status, hasPredicted, score),
+    }
+  })
+
+  const groupedEntries = [...entries].sort((left, right) => {
+    const categoryOrder = getCategoryOrder(left.category) - getCategoryOrder(right.category)
+    if (categoryOrder !== 0) return categoryOrder
+
+    return new Date(right.race.race_start_at).getTime() - new Date(left.race.race_start_at).getTime()
+  })
+
+  const enteredCount = entries.filter((entry) => entry.hasPredicted).length
+  const missedCount = entries.filter((entry) => entry.category === 'missed').length
+  const totalPoints = Array.from(scoreByRaceId.values()).reduce((sum, score) => sum + score.total_points, 0)
+  const exactHits = Array.from(scoreByRaceId.values()).reduce((sum, score) => sum + score.exact_hits, 0)
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <div>
-        <h1 className="text-3xl font-black italic tracking-tighter flex items-center">
-          <History className="w-8 h-8 mr-3 text-red-500" /> MY HISTORY
-        </h1>
-        <p className="text-slate-400">Review your past predictions and scores.</p>
-        <div className="mt-3">
-          <TenantContextBanner tenantName={tenantContext.tenantName} />
+      <div className="space-y-3">
+        <div>
+          <h1 className="flex items-center text-3xl font-black italic tracking-tighter">
+            <History className="mr-3 h-8 w-8 text-red-500" /> MY SEASON
+          </h1>
+          <p className="text-slate-400">
+            See what you entered, what is still in flight, and which weekends slipped through.
+          </p>
+        </div>
+        <TenantContextBanner tenantName={tenantContext.tenantName} label="Competing in" />
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-4">
+        <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
+          <div className="text-sm font-bold uppercase tracking-wider text-slate-500">Entered Weekends</div>
+          <div className="mt-3 text-4xl font-black italic text-white">{enteredCount}</div>
+          <p className="mt-2 text-sm text-slate-400">Races where you submitted a podium prediction.</p>
+        </div>
+        <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
+          <div className="text-sm font-bold uppercase tracking-wider text-slate-500">Missed Weekends</div>
+          <div className="mt-3 text-4xl font-black italic text-white">{missedCount}</div>
+          <p className="mt-2 text-sm text-slate-400">Closed weekends that counted without your entry.</p>
+        </div>
+        <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
+          <div className="text-sm font-bold uppercase tracking-wider text-slate-500">Scored Points</div>
+          <div className="mt-3 text-4xl font-black italic text-red-500">{totalPoints}</div>
+          <p className="mt-2 text-sm text-slate-400">Your confirmed points total for Season {currentSeason}.</p>
+        </div>
+        <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
+          <div className="text-sm font-bold uppercase tracking-wider text-slate-500">Exact Hits</div>
+          <div className="mt-3 text-4xl font-black italic text-white">{exactHits}</div>
+          <p className="mt-2 text-sm text-slate-400">Podium slots you nailed perfectly so far.</p>
         </div>
       </div>
 
-      <div className="grid gap-6">
-        {typedPredictions.length === 0 ? (
-          <div className="bg-card border border-white/5 rounded-2xl p-12 text-center shadow-xl text-slate-400">
-            You haven&apos;t made any predictions yet. Check the Upcoming Races!
+      <div className="space-y-6">
+        {groupedEntries.length === 0 ? (
+          <div className="rounded-2xl border border-white/5 bg-card p-12 text-center text-slate-400 shadow-xl">
+            Your season history is still empty. The next race weekend will start the story.
           </div>
         ) : (
-           typedPredictions.map((p) => {
-             const score = typedScores.find((entry) => entry.race_id === p.race_id)
-             const isScored = p.races?.status === 'scored'
-             const raceStatus = p.races ? getEffectiveRaceStatus(p.races) : null
+          (['awaiting', 'scored', 'missed', 'upcoming'] as const).map((category) => {
+            const sectionEntries = groupedEntries.filter((entry) => entry.category === category)
+            if (sectionEntries.length === 0) return null
 
-             return (
-               <div key={p.id} className="bg-card border border-white/5 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row justify-between md:items-center gap-6 shadow-xl hover:bg-white/[0.02] transition-colors">
-                 
-                 <div className="flex-1 space-y-1">
-                   <div className="text-sm font-bold text-red-500 uppercase tracking-widest">
-                     Round {p.races?.round}
-                   </div>
-                   <h2 className="text-2xl font-bold mb-1">{p.races?.race_name}</h2>
-                   <div className="text-slate-400 text-sm">
-                     {p.races?.circuits?.emoji} {p.races?.circuits?.name}, {p.races?.circuits?.country}
-                   </div>
-                 </div>
+            return (
+              <section key={category} className="space-y-4">
+                <div className="flex items-center gap-3">
+                  {category === 'scored' ? (
+                    <Trophy className="h-6 w-6 text-red-500" />
+                  ) : (
+                    <CalendarClock className="h-6 w-6 text-red-500" />
+                  )}
+                  <h2 className="text-2xl font-black italic tracking-tighter">{getCategoryTitle(category)}</h2>
+                </div>
 
-                 {isScored && score ? (
-                   <div className="flex gap-4 items-center">
-                     <div className="bg-black/30 border border-white/5 p-4 rounded-xl text-center min-w-24">
-                       <div className="text-xs text-slate-500 font-bold uppercase mb-1">Total</div>
-                       <div className="text-3xl font-black italic text-red-500">{score.total_points}</div>
-                     </div>
-                     <div className="bg-black/30 border border-white/5 p-4 rounded-xl text-center min-w-24 hidden sm:block">
-                       <div className="text-xs text-slate-500 font-bold uppercase mb-1">Podium</div>
-                       <div className="text-xl font-bold">{score.podium_points}</div>
-                     </div>
-                     <div className="bg-black/30 border border-white/5 p-4 rounded-xl text-center min-w-24 hidden sm:block">
-                       <div className="text-xs text-slate-500 font-bold uppercase mb-1">Bonus</div>
-                       <div className="text-xl font-bold">{score.bonus_points}</div>
-                     </div>
-                   </div>
-                 ) : (
-                   <div className="flex gap-4 items-center">
-                     <div className="bg-black/30 border border-amber-500/20 text-amber-500 p-4 rounded-xl text-center font-bold text-sm h-full flex flex-col justify-center">
-                       {raceStatus === 'completed' ? 'Awaiting Score' : 'Upcoming Race'}
-                     </div>
-                   </div>
-                 )}
+                <div className="grid gap-4">
+                  {sectionEntries.map((entry) => (
+                    <div
+                      key={entry.race.id}
+                      className="flex flex-col gap-6 rounded-2xl border border-white/5 bg-card p-6 shadow-xl transition-colors hover:bg-white/[0.02] md:flex-row md:items-center md:justify-between md:p-8"
+                    >
+                      <div className="flex-1 space-y-2">
+                        <div className="text-sm font-bold uppercase tracking-widest text-red-500">
+                          Round {entry.race.round}
+                        </div>
+                        <h3 className="text-2xl font-bold">{entry.race.race_name}</h3>
+                        <div className="text-sm text-slate-400">
+                          {entry.race.circuits?.emoji} {entry.race.circuits?.name}, {entry.race.circuits?.country}
+                        </div>
+                        <p className="max-w-2xl text-sm text-slate-300">{entry.summary}</p>
+                      </div>
 
-                 <div className="shrink-0">
-                   <Link href={`/race/${p.race_id}/predict`} className="inline-flex items-center text-red-400 hover:text-red-300 font-bold transition-colors">
-                     View Details <ChevronRight className="w-5 h-5 ml-1" />
-                   </Link>
-                 </div>
-               </div>
-             )
-           })
+                      {entry.score ? (
+                        <div className="flex gap-4 items-center">
+                          <div className="min-w-24 rounded-xl border border-white/5 bg-black/30 p-4 text-center">
+                            <div className="mb-1 text-xs font-bold uppercase text-slate-500">Total</div>
+                            <div className="text-3xl font-black italic text-red-500">{entry.score.total_points}</div>
+                          </div>
+                          <div className="hidden min-w-24 rounded-xl border border-white/5 bg-black/30 p-4 text-center sm:block">
+                            <div className="mb-1 text-xs font-bold uppercase text-slate-500">Podium</div>
+                            <div className="text-xl font-bold text-white">{entry.score.podium_points}</div>
+                          </div>
+                          <div className="hidden min-w-24 rounded-xl border border-white/5 bg-black/30 p-4 text-center sm:block">
+                            <div className="mb-1 text-xs font-bold uppercase text-slate-500">Bonus</div>
+                            <div className="text-xl font-bold text-white">{entry.score.bonus_points}</div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div
+                          className={`rounded-xl border p-4 text-center text-sm font-bold ${
+                            entry.category === 'missed'
+                              ? 'border-red-500/20 bg-red-500/10 text-red-300'
+                              : entry.category === 'awaiting'
+                                ? 'border-amber-500/20 bg-amber-500/10 text-amber-300'
+                                : 'border-white/5 bg-black/30 text-slate-300'
+                          }`}
+                        >
+                          {entry.category === 'missed'
+                            ? 'No Entry'
+                            : entry.category === 'awaiting'
+                              ? 'Awaiting Score'
+                              : entry.hasPredicted
+                                ? 'Entered'
+                                : 'Open'}
+                        </div>
+                      )}
+
+                      <div className="shrink-0">
+                        <PendingLink
+                          href={`/race/${entry.race.id}/predict`}
+                          className="inline-flex items-center gap-1.5 font-bold text-red-400 transition-colors hover:text-red-300"
+                        >
+                          {getActionLabel(entry)}
+                        </PendingLink>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </section>
+            )
+          })
         )}
       </div>
     </div>
