@@ -12,20 +12,21 @@ type TenantContext = {
 type ProfileTenantRow = {
   tenant_id: string | null
   role?: 'user' | 'admin' | null
-  tenants?: Array<{
-    name?: string | null
-    slug?: string | null
-  }> | null
+}
+
+type TenantRow = {
+  name?: string | null
+  slug?: string | null
 }
 
 export async function getUserTenantContext(supabase: TenantClient, userId: string): Promise<TenantContext> {
   const { data: profile, error } = await supabase
     .from('profiles')
-    .select('tenant_id, role, tenants(name, slug)')
+    .select('tenant_id, role')
     .eq('id', userId)
-    .single()
+    .maybeSingle()
 
-  if (error) {
+  if (error || !profile) {
     return {
       tenantId: null,
       tenantName: null,
@@ -34,13 +35,23 @@ export async function getUserTenantContext(supabase: TenantClient, userId: strin
     }
   }
 
-  const typedProfile = profile as ProfileTenantRow | null
-  const tenant = typedProfile?.tenants?.[0]
+  const typedProfile = profile as ProfileTenantRow
+  let tenant: TenantRow | null = null
+
+  if (typedProfile.tenant_id) {
+    const { data: tenantRow } = await supabase
+      .from('tenants')
+      .select('name, slug')
+      .eq('id', typedProfile.tenant_id)
+      .maybeSingle()
+
+    tenant = (tenantRow as TenantRow | null) ?? null
+  }
 
   return {
-    tenantId: typedProfile?.tenant_id ?? null,
+    tenantId: typedProfile.tenant_id ?? null,
     tenantName: tenant?.name ?? null,
     tenantSlug: tenant?.slug ?? null,
-    role: typedProfile?.role ?? null,
+    role: typedProfile.role ?? null,
   }
 }

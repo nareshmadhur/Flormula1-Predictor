@@ -1,5 +1,4 @@
 import type { Metadata } from 'next'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { Calendar, ChevronRight, CircleHelp, Clock3, Flag, Trophy } from 'lucide-react'
 import { format } from 'date-fns'
@@ -10,6 +9,7 @@ import {
   getPublicRacePageData,
 } from '@/utils/race-page'
 import { getAbsoluteUrl } from '@/utils/site'
+import { PendingLink } from '@/components/ui/pending-link'
 
 export const revalidate = 0
 
@@ -157,7 +157,7 @@ export default async function PublicRacePage({ params }: PageProps) {
             </div>
             <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
               <div className="flex items-center text-xs font-bold uppercase tracking-wider text-slate-500">
-                <Clock3 className="mr-2 h-4 w-4 text-amber-400" /> Prediction Lock
+                <Clock3 className="mr-2 h-4 w-4 text-amber-400" /> Prediction Lock (FP1 - 5m)
               </div>
               <div className="mt-3 text-lg font-bold text-white">
                 {format(new Date(race.prediction_lock_at), 'PPP p')}
@@ -170,20 +170,20 @@ export default async function PublicRacePage({ params }: PageProps) {
           </div>
 
           <div className="flex flex-wrap gap-3">
-            <Link
+            <PendingLink
               href="/leaderboard"
-              className="inline-flex items-center rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
             >
               View Leaderboard
-            </Link>
+            </PendingLink>
             {effectiveStatus === 'upcoming' && (
-              <Link
+              <PendingLink
                 href={`/race/${race.id}/predict`}
-                className="inline-flex items-center rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-all hover:bg-red-500"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-all hover:bg-red-500"
               >
                 Predict This Race
                 <ChevronRight className="ml-1 h-5 w-5" />
-              </Link>
+              </PendingLink>
             )}
           </div>
         </div>
@@ -247,19 +247,19 @@ export default async function PublicRacePage({ params }: PageProps) {
           outcomes visible without forcing people into the prediction form before they understand what is happening.
         </p>
         <div className="mt-5 flex flex-wrap gap-3">
-          <Link
+          <PendingLink
             href="/"
-            className="inline-flex items-center rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
           >
             Back To Home
-          </Link>
-          <Link
+          </PendingLink>
+          <PendingLink
             href={`/race/${race.id}/predict`}
-            className="inline-flex items-center rounded-xl border border-red-500/30 bg-red-500/15 px-5 py-3 font-bold text-red-200 transition-all hover:bg-red-500/25"
+            className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/30 bg-red-500/15 px-5 py-3 font-bold text-red-200 transition-all hover:bg-red-500/25"
           >
             Open Personal Race Page
             <ChevronRight className="ml-1 h-5 w-5" />
-          </Link>
+          </PendingLink>
         </div>
       </section>
     </div>

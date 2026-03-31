@@ -4,8 +4,12 @@ import { createClient } from '@/utils/supabase/server'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
+import type { AuthActionState } from '@/app/auth/action-state'
 
-export async function login(formData: FormData) {
+export async function login(
+  _prevState: AuthActionState,
+  formData: FormData
+): Promise<AuthActionState> {
   const supabase = await createClient()
 
   const data = {
@@ -16,19 +20,22 @@ export async function login(formData: FormData) {
   const { error } = await supabase.auth.signInWithPassword(data)
 
   if (error) {
-    const errorMessage =
-      error.message.toLowerCase().includes('email not confirmed')
+    return {
+      error:
+        error.message.toLowerCase().includes('email not confirmed')
         ? 'Check your email and confirm your account before signing in.'
-        : error.message || 'Could not authenticate user.'
-
-    redirect(`/login?error=${encodeURIComponent(errorMessage)}`)
+        : error.message || 'Could not authenticate user.',
+    }
   }
 
   revalidatePath('/', 'layout')
   redirect('/predictions')
 }
 
-export async function signup(formData: FormData) {
+export async function signup(
+  _prevState: AuthActionState,
+  formData: FormData
+): Promise<AuthActionState> {
   const supabase = await createClient()
 
   const data = {
@@ -57,10 +64,10 @@ export async function signup(formData: FormData) {
 
   if (error) {
     console.error('Signup error:', error)
-    redirect(`/signup?error=${encodeURIComponent(error.message)}`)
+    return { error: error.message }
   }
 
-  redirect('/signup?message=Check email to continue')
+  return { message: 'Check your email to continue.' }
 }
 
 export async function signout() {

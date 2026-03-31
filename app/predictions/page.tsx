@@ -1,5 +1,4 @@
 import { createClient } from '@/utils/supabase/server'
-import Link from 'next/link'
 import { Calendar, ChevronRight, Clock3, MapPin, Trophy } from 'lucide-react'
 import { format } from 'date-fns'
 import { redirect } from 'next/navigation'
@@ -8,6 +7,7 @@ import { getCurrentSeason } from '@/utils/season'
 import { getUserTenantContext } from '@/utils/tenant'
 import { TenantContextBanner } from '@/components/ui/tenant-context-banner'
 import { TenantAssignmentRequired } from '@/components/ui/tenant-assignment-required'
+import { PendingLink } from '@/components/ui/pending-link'
 
 export const revalidate = 0
 
@@ -113,16 +113,16 @@ function RaceListCard({
               {format(new Date(race.race_start_at), 'MMM d, p')}
             </div>
             <div className="rounded-lg border border-white/5 bg-black/30 px-3 py-2 text-slate-300">
-              <span className="mr-2 text-slate-500">Lock:</span>
+              <span className="mr-2 text-slate-500">Lock (FP1 - 5m):</span>
               {format(new Date(race.prediction_lock_at), 'MMM d, p')}
             </div>
           </div>
         </div>
 
         <div className="w-full shrink-0 sm:w-auto">
-          <Link
+          <PendingLink
             href={`/race/${race.id}/predict`}
-            className={`inline-flex w-full items-center justify-center rounded-xl px-6 py-3 font-bold transition-all sm:w-auto ${
+            className={`inline-flex w-full items-center justify-center gap-1.5 rounded-xl px-6 py-3 font-bold transition-all sm:w-auto ${
               isActionable
                 ? 'bg-red-600 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)] hover:bg-red-500'
                 : 'border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
@@ -130,7 +130,7 @@ function RaceListCard({
           >
             {getRaceActionLabel(status, hasPredicted)}
             <ChevronRight className="ml-1 h-5 w-5" />
-          </Link>
+          </PendingLink>
         </div>
       </div>
     </div>
@@ -217,16 +217,16 @@ export default async function SeasonDashboardPage() {
                     Race: {format(new Date(nextRace.race_start_at), 'MMM d, p')}
                   </span>
                   <span className="rounded-lg border border-white/5 bg-black/30 px-3 py-2">
-                    Lock: {format(new Date(nextRace.prediction_lock_at), 'MMM d, p')}
+                    Lock (FP1 - 5m): {format(new Date(nextRace.prediction_lock_at), 'MMM d, p')}
                   </span>
                 </div>
-                <Link
+                <PendingLink
                   href={`/race/${nextRace.id}/predict`}
-                  className="mt-5 inline-flex items-center rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-all hover:bg-red-500"
+                  className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-all hover:bg-red-500"
                 >
                   Open Race
                   <ChevronRight className="ml-1 h-5 w-5" />
-                </Link>
+                </PendingLink>
               </div>
             ) : (
               <div className="rounded-2xl border border-white/10 bg-black/30 p-5 text-slate-400">

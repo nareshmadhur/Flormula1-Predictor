@@ -20,7 +20,6 @@ export function getEffectiveRaceStatus(race: Race): RaceStatus {
     return 'cancelled'
   }
 
-  const now = new Date()
   const raceStartTime = new Date(race.race_start_at)
   const lockTime = new Date(race.prediction_lock_at)
 
@@ -34,7 +33,7 @@ export function getEffectiveRaceStatus(race: Race): RaceStatus {
     return 'completed'
   }
 
-  // If predictions are locked (within 5 minutes of race start), mark as locked
+  // If predictions are locked (normally 5 minutes before FP1), mark as locked
   if (isPast(lockTime)) {
     return 'locked'
   }

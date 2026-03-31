@@ -1,45 +1,31 @@
 'use client'
 
 import { signup } from '@/app/auth/actions'
-import { useState, useEffect } from 'react'
+import { initialAuthActionState } from '@/app/auth/action-state'
+import { useActionState } from 'react'
+import { PendingLink } from '@/components/ui/pending-link'
 
-export default function SignupPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ error: string; message?: string }>
-}) {
-  return <SignupPageClient searchParams={searchParams} />
-}
+export default function SignupPage() {
+  const [state, formAction, pending] = useActionState(signup, initialAuthActionState)
 
-function SignupPageClient({
-  searchParams,
-}: {
-  searchParams: Promise<{ error: string; message?: string }>
-}) {
-  const [params, setParams] = useState<{ error?: string; message?: string } | null>(null)
-  
-  useEffect(() => {
-    searchParams.then(setParams)
-  }, [searchParams])
-
-  if (params?.message) {
+  if (state.message) {
     return (
       <div className="flex-1 flex flex-col w-full px-8 sm:max-w-md justify-center gap-2 mx-auto animate-in fade-in duration-500 mt-20">
         <div className="bg-card border border-white/10 p-8 rounded-3xl shadow-2xl text-center">
           <h1 className="text-3xl font-black italic tracking-tighter mb-4 text-green-500">CHECK YOUR EMAIL</h1>
           <p className="text-lg text-slate-300 mb-4">
-            We've sent a confirmation link to your inbox.
+            We&apos;ve sent a confirmation link to your inbox.
           </p>
           <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl text-blue-300 text-sm mb-6 text-left">
             <p className="font-bold mb-1 flex items-center">
               <span className="mr-2 text-xl">⚠️</span> Important:
             </p>
-            Please check your <strong>Spam</strong> or <strong>Junk</strong> folder if you don't see it. 
+            Please check your <strong>Spam</strong> or <strong>Junk</strong> folder if you don&apos;t see it. 
             <br/><br/>
             The email will be from <span className="font-bold text-white">Supabase</span>.
           </div>
           <p className="text-slate-400 text-sm">
-            Once confirmed, you can <a href="/login" className="text-red-500 hover:text-red-400 font-bold hover:underline transition-colors">sign in here</a>.
+            Once confirmed, you can <PendingLink href="/login" className="inline-flex items-center gap-1 text-red-500 hover:text-red-400 font-bold hover:underline transition-colors">sign in here</PendingLink>.
           </p>
         </div>
       </div>
@@ -51,32 +37,23 @@ function SignupPageClient({
       <div className="bg-card border border-white/10 p-8 rounded-3xl shadow-2xl">
         <h1 className="text-3xl font-black italic tracking-tighter mb-6 text-center">JOIN THE GRID</h1>
         
-        <SignupForm error={params?.error} />
+        <SignupForm formAction={formAction} pending={pending} error={state.error} />
       </div>
     </div>
   )
 }
 
-function SignupForm({ error }: { error?: string }) {
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState<string | null>(null)
-
-  const handleSubmit = async (formData: FormData) => {
-    if (isSubmitting) return
-    
-    setIsSubmitting(true)
-    setSubmitError(null)
-
-    try {
-      await signup(formData)
-    } catch (err) {
-      setSubmitError('An unexpected error occurred. Please try again.')
-      setIsSubmitting(false)
-    }
-  }
-
+function SignupForm({
+  error,
+  formAction,
+  pending,
+}: {
+  error?: string
+  formAction: (formData: FormData) => void
+  pending: boolean
+}) {
   return (
-    <form className="flex-1 flex flex-col w-full justify-center gap-4 text-foreground" action={handleSubmit}>
+    <form className="flex-1 flex flex-col w-full justify-center gap-4 text-foreground" action={formAction}>
       <div className="space-y-2">
         <label className="text-sm font-medium text-slate-300" htmlFor="display_name">
           Display Name
@@ -86,7 +63,6 @@ function SignupForm({ error }: { error?: string }) {
           name="display_name"
           placeholder="Your public predictor name"
           required
-          disabled={isSubmitting}
         />
       </div>
 
@@ -100,7 +76,6 @@ function SignupForm({ error }: { error?: string }) {
           type="email"
           placeholder="you@example.com"
           required
-          disabled={isSubmitting}
         />
       </div>
       
@@ -114,25 +89,24 @@ function SignupForm({ error }: { error?: string }) {
           name="password"
           placeholder="••••••••"
           required
-          disabled={isSubmitting}
         />
       </div>
 
-      <button 
-        type="submit" 
-        disabled={isSubmitting}
+      <button
+        type="submit"
+        disabled={pending}
         className={`font-bold rounded-xl px-4 py-4 mt-4 transition-all shadow-[0_0_15px_rgba(239,68,68,0.3)] touch-target ${
-          isSubmitting 
-            ? 'bg-slate-600 text-slate-400 cursor-not-allowed' 
+          pending
+            ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
             : 'bg-red-600 hover:bg-red-700 text-white'
         }`}
       >
-        {isSubmitting ? 'Signing Up...' : 'Sign Up'}
+        {pending ? 'Signing Up...' : 'Sign Up'}
       </button>
       
-      {(error || submitError) && (
+      {error && (
         <p className="mt-4 p-4 bg-red-500/10 text-red-400 text-center rounded-xl border border-red-500/20">
-          {error || submitError}
+          {error}
         </p>
       )}
     </form>

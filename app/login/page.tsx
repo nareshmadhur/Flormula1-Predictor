@@ -1,58 +1,33 @@
 'use client'
 
 import { login } from '@/app/auth/actions'
-import { useState, useEffect } from 'react'
+import { initialAuthActionState } from '@/app/auth/action-state'
+import { use, useActionState } from 'react'
 
 export default function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error: string }>
+  searchParams: Promise<{ error?: string }>
 }) {
-  return <LoginPageClient searchParams={searchParams} />
-}
-
-function LoginPageClient({
-  searchParams,
-}: {
-  searchParams: Promise<{ error: string }>
-}) {
-  const [params, setParams] = useState<{ error?: string } | null>(null)
-  
-  useEffect(() => {
-    searchParams.then(setParams)
-  }, [searchParams])
+  const params = use(searchParams)
 
   return (
     <div className="flex-1 flex flex-col w-full px-8 sm:max-w-md justify-center gap-2 mx-auto animate-in fade-in duration-500 mt-20">
       <div className="bg-card border border-white/10 p-8 rounded-3xl shadow-2xl">
         <h1 className="text-3xl font-black italic tracking-tighter mb-6 text-center">WELCOME BACK</h1>
         
-        <LoginForm error={params?.error} />
+        <LoginForm initialError={params.error} />
       </div>
     </div>
   )
 }
 
-function LoginForm({ error }: { error?: string }) {
-  const [isSubmitting, setIsSubmitting] = useState(false)
-  const [submitError, setSubmitError] = useState<string | null>(null)
-
-  const handleSubmit = async (formData: FormData) => {
-    if (isSubmitting) return
-    
-    setIsSubmitting(true)
-    setSubmitError(null)
-
-    try {
-      await login(formData)
-    } catch (err) {
-      setSubmitError('An unexpected error occurred. Please try again.')
-      setIsSubmitting(false)
-    }
-  }
+function LoginForm({ initialError }: { initialError?: string }) {
+  const [state, formAction, pending] = useActionState(login, initialAuthActionState)
+  const error = state.error || initialError
 
   return (
-    <form className="flex-1 flex flex-col w-full justify-center gap-4 text-foreground" action={handleSubmit}>
+    <form className="flex-1 flex flex-col w-full justify-center gap-4 text-foreground" action={formAction}>
       <div className="space-y-2">
         <label className="text-sm font-medium text-slate-300" htmlFor="email">
           Email
@@ -62,7 +37,6 @@ function LoginForm({ error }: { error?: string }) {
           name="email"
           placeholder="you@example.com"
           required
-          disabled={isSubmitting}
         />
       </div>
       
@@ -76,25 +50,24 @@ function LoginForm({ error }: { error?: string }) {
           name="password"
           placeholder="••••••••"
           required
-          disabled={isSubmitting}
         />
       </div>
 
-      <button 
-        type="submit" 
-        disabled={isSubmitting}
+      <button
+        type="submit"
+        disabled={pending}
         className={`font-bold rounded-xl px-4 py-4 mt-4 transition-all shadow-[0_0_15px_rgba(239,68,68,0.3)] touch-target ${
-          isSubmitting 
-            ? 'bg-slate-600 text-slate-400 cursor-not-allowed' 
+          pending
+            ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
             : 'bg-red-600 hover:bg-red-700 text-white'
         }`}
       >
-        {isSubmitting ? 'Signing In...' : 'Sign In'}
+        {pending ? 'Signing In...' : 'Sign In'}
       </button>
       
-      {(error || submitError) && (
+      {error && (
         <p className="mt-4 p-4 bg-red-500/10 text-red-400 text-center rounded-xl border border-red-500/20">
-          {error || submitError}
+          {error}
         </p>
       )}
     </form>

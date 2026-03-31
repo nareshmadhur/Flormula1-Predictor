@@ -185,6 +185,10 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-slate-300">
+          Prediction lock is set automatically to 5 minutes before FP1.
+        </div>
+
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-1">Race Name</label>

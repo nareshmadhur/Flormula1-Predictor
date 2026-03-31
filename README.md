@@ -123,7 +123,7 @@ Notes:
 - 3 points for an exact podium position
 - 1 point for the right driver in the wrong podium position
 - bonus points come from the question configuration
-- prediction lock defaults to 5 minutes before race start
+- prediction lock defaults to 5 minutes before FP1, with race start only used as a temporary fallback for legacy races missing FP1
 
 ## Setup
 

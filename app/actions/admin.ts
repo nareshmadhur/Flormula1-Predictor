@@ -22,6 +22,11 @@ type NewRacePayload = {
   sprint_quali_at?: string
 }
 
+function getPredictionLockAt(fp1At: string | null, raceStartAt: Date) {
+  const lockSource = fp1At ? new Date(fp1At) : raceStartAt
+  return new Date(lockSource.getTime() - 5 * 60000)
+}
+
 export async function createRace(formData: FormData) {
   const { supabase } = await assertPlatformAdmin()
 
@@ -37,8 +42,9 @@ export async function createRace(formData: FormData) {
   const sprintAt = formData.get('sprint_at') as string | null
   const sprintQualiAt = formData.get('sprint_quali_at') as string | null
 
-  // By default, lock predictions 5 minutes before the race starts
-  const lockAt = new Date(raceStartAt.getTime() - 5 * 60000)
+  // By default, lock predictions 5 minutes before FP1.
+  // Legacy races without FP1 fall back to race start until FP1 is supplied.
+  const lockAt = getPredictionLockAt(fp1At, raceStartAt)
 
   const newRace: NewRacePayload = {
     season,
@@ -119,13 +125,15 @@ export async function updateRace(formData: FormData) {
   const raceName = formData.get('race_name') as string
   const circuitId = formData.get('circuit_id') as string
   const raceStartAt = new Date(formData.get('race_start_at') as string)
-  
-  const lockAt = new Date(raceStartAt.getTime() - 5 * 60000)
+  const fp1At = formData.get('fp1_at') as string | null
+
+  const lockAt = getPredictionLockAt(fp1At, raceStartAt)
 
   const { error } = await supabase.from('races').update({
     race_name: raceName,
     circuit_id: circuitId,
     race_start_at: raceStartAt.toISOString(),
+    fp1_at: fp1At || null,
     prediction_lock_at: lockAt.toISOString(),
   }).eq('id', raceId)
 
@@ -135,6 +143,8 @@ export async function updateRace(formData: FormData) {
   revalidatePath(`/admin/races/${raceId}`)
   revalidatePath('/')
   revalidatePath('/predictions')
+  revalidatePath(`/race/${raceId}`)
+  revalidatePath(`/race/${raceId}/predict`)
 }
 
 export async function deleteBonusQuestion(formData: FormData) {

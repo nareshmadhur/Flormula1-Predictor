@@ -1,9 +1,9 @@
 import { createClient } from '@/utils/supabase/server'
-import Link from 'next/link'
 import { Flag, Timer, ChevronRight, Trophy } from 'lucide-react'
 import { format, isPast } from 'date-fns'
 import { getCurrentSeason } from '@/utils/season'
 import { getProfileDisplayName } from '@/utils/profile-name'
+import { PendingLink } from '@/components/ui/pending-link'
 
 export const revalidate = 0
 
@@ -94,7 +94,7 @@ export default async function HomePage() {
                   <div className="font-bold text-lg">{format(new Date(nextRace.race_start_at), 'PPP p')}</div>
                 </div>
                 <div className="bg-black/40 p-4 rounded-xl border border-white/5 backdrop-blur-sm">
-                  <div className="text-sm text-slate-400 mb-1">Predictions Lock</div>
+                  <div className="text-sm text-slate-400 mb-1">Predictions Lock (FP1 - 5m)</div>
                   <div className={"font-bold text-lg " + (isPast(new Date(nextRace.prediction_lock_at)) ? "text-red-500" : "text-amber-400")}>
                     {format(new Date(nextRace.prediction_lock_at), 'PPP p')}
                   </div>
@@ -103,12 +103,12 @@ export default async function HomePage() {
 
               <div>
                 <div className="flex flex-wrap gap-3">
-                  <Link href={`/race/${nextRace.id}`} className="inline-flex items-center justify-center bg-red-600 hover:bg-red-700 text-white font-bold text-lg px-8 py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(239,68,68,0.4)] hover:shadow-[0_0_30px_rgba(239,68,68,0.6)] hover:scale-105">
+                  <PendingLink href={`/race/${nextRace.id}`} className="inline-flex items-center justify-center gap-1.5 bg-red-600 hover:bg-red-700 text-white font-bold text-lg px-8 py-4 rounded-xl transition-all shadow-[0_0_20px_rgba(239,68,68,0.4)] hover:shadow-[0_0_30px_rgba(239,68,68,0.6)] hover:scale-105">
                     Open Race Hub <ChevronRight className="ml-2 w-6 h-6" />
-                  </Link>
-                  <Link href={`/race/${nextRace.id}/predict`} className="inline-flex items-center justify-center border border-white/10 bg-black/30 hover:bg-white/10 text-white font-bold text-lg px-8 py-4 rounded-xl transition-all">
+                  </PendingLink>
+                  <PendingLink href={`/race/${nextRace.id}/predict`} className="inline-flex items-center justify-center gap-1.5 border border-white/10 bg-black/30 hover:bg-white/10 text-white font-bold text-lg px-8 py-4 rounded-xl transition-all">
                     Go To Prediction Page
-                  </Link>
+                  </PendingLink>
                 </div>
               </div>
             </div>
@@ -129,9 +129,9 @@ export default async function HomePage() {
             <h2 className="text-2xl font-black italic tracking-tight flex items-center">
               <Trophy className="w-6 h-6 mr-2 text-yellow-500" /> TOP 5
             </h2>
-            <Link href="/leaderboard" className="text-sm text-red-400 hover:text-red-300 transition-colors">
+            <PendingLink href="/leaderboard" className="inline-flex items-center gap-1 text-sm text-red-400 hover:text-red-300 transition-colors">
               View full leaderboard &rarr;
-            </Link>
+            </PendingLink>
           </div>
           
           <div className="space-y-3">
@@ -171,9 +171,9 @@ export default async function HomePage() {
                 <div className="text-slate-400 text-sm">{latestScored.circuits?.name} {latestScored.circuits?.emoji}</div>
               </div>
               
-              <Link href={`/race/${latestScored.id}`} className="inline-block mt-4 text-slate-300 hover:text-white underline decoration-slate-600 underline-offset-4">
+              <PendingLink href={`/race/${latestScored.id}`} className="inline-flex items-center gap-1 mt-4 text-slate-300 hover:text-white underline decoration-slate-600 underline-offset-4">
                 View Race Details
-              </Link>
+              </PendingLink>
             </div>
           ) : (
             <div className="py-8 text-center text-slate-500 italic border border-dashed border-white/10 rounded-xl">

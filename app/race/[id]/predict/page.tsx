@@ -179,7 +179,7 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex items-start space-x-3 text-amber-500">
           <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
           <div className="text-sm font-medium">
-            Predictions close exactly 5 minutes before the formation lap starts. Ensure you lock in your choices!
+            Predictions close exactly 5 minutes before FP1 starts. Ensure you lock in your choices before the weekend begins.
           </div>
         </div>
       )}
