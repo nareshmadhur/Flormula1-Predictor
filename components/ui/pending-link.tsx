@@ -1,7 +1,6 @@
 'use client'
 
 import Link, { type LinkProps, useLinkStatus } from 'next/link'
-import { LoaderCircle } from 'lucide-react'
 import type { AnchorHTMLAttributes, PropsWithChildren } from 'react'
 
 type PendingLinkProps = PropsWithChildren<
@@ -15,11 +14,13 @@ function PendingIndicator() {
   return (
     <span
       aria-hidden="true"
-      className={`inline-flex h-4 w-4 items-center justify-center transition-opacity duration-150 ${
+      className={`pointer-events-none absolute inset-0 transition-opacity duration-150 ${
         pending ? 'opacity-100' : 'opacity-0'
       }`}
     >
-      <LoaderCircle className="h-3.5 w-3.5 animate-spin" />
+      <span className="race-link-track">
+        <span className="race-link-car" />
+      </span>
     </span>
   )
 }
@@ -30,9 +31,13 @@ export function PendingLink({
   ...props
 }: PendingLinkProps) {
   return (
-    <Link className={className} {...props}>
-      {children}
+    <Link
+      aria-busy={undefined}
+      className={`race-link-shell ${className || ''}`}
+      {...props}
+    >
       <PendingIndicator />
+      {children}
     </Link>
   )
 }

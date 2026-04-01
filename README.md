@@ -5,12 +5,16 @@ FLO-RMULA 1 is a Formula 1 prediction pool built with Next.js and Supabase. User
 ## Current Product
 
 ### User Experience
+- Leaderboard-first public homepage with standings as the main story
 - Season dashboard for the current season
 - Podium prediction flow for open races
 - Locked, completed, and scored race states with read-only summaries
 - Bonus question support per race
 - Personal season history with missed-weekend visibility
 - Tenant and global leaderboard views with smart defaults
+- Expandable leaderboard transparency with race-by-race podium audit on scored weekends
+- User-managed display name settings in `/me/profile`
+- Race-themed pending and loading states for navigation and auth flows
 - Email/password authentication with Supabase
 
 ### Admin Experience
@@ -53,6 +57,7 @@ In practical terms:
 - tenant membership only affects competition context and leaderboard slicing
 - missing public display names fall back to a sanitized email-derived predictor name instead of `Anonymous`
 - app-visible profiles are treated as confirmed users only; pending email confirmations should not appear in admin account lists
+- scored leaderboard transparency can be shown publicly because scored predictions and scored user race scores are readable after results are published
 
 Detailed execution tracking lives in [docs/roadmap/README.md](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/README.md>).
 
@@ -60,12 +65,13 @@ Detailed execution tracking lives in [docs/roadmap/README.md](</Users/nareshmadh
 
 ### User
 1. Sign up and confirm email.
-2. Get assigned to a tenant by a platform admin.
-3. Sign in and land on the season dashboard at `/predictions`.
-4. Open the next race and submit podium picks plus bonus answers.
-5. Revisit the same race after lock to see the submitted entry.
-6. Return after scoring to see official results and point breakdown.
-7. Use `/leaderboard` to switch between tenant and global standings when comparison matters.
+2. While waiting for tenant assignment, browse the public leaderboard and set a public display name in `/me/profile`.
+3. Get assigned to a tenant by a platform admin.
+4. Sign in and land on the season dashboard at `/predictions`.
+5. Open the next race and submit podium picks plus bonus answers.
+6. Revisit the same race after lock to see the submitted entry.
+7. Return after scoring to see official results, point breakdown, and rank movement.
+8. Use `/leaderboard` to switch between tenant and global standings, then open any predictor row to inspect scored race detail.
 
 ### Platform Admin
 1. Sign in as a platform admin.
@@ -96,6 +102,7 @@ Important app areas:
 - `app/predictions/page.tsx`: authenticated season dashboard
 - `app/race/[id]/predict/page.tsx`: race lifecycle view
 - `app/leaderboard/page.tsx`: current-season leaderboard
+- `app/me/profile/page.tsx`: member profile and display-name settings
 - `app/admin/*`: admin workflows
 - `app/actions/*`: server actions
 - `supabase/migrations/*`: schema and data model
@@ -189,7 +196,7 @@ npm run lint
 - completed foundation and safety work for tenants, private competition guards, and platform-admin boundaries
 
 ### Step 2
-- completed tenant product experience work, including tenant ops, clearer tenant/global context, missed-weekend visibility, and richer scored-race recap
+- completed tenant product experience work, including tenant ops, clearer tenant/global context, missed-weekend visibility, richer scored-race recap, explainable leaderboard detail, and self-managed profile naming
 
 ### Step 3
 - public result pages and visibility mechanics

@@ -56,16 +56,23 @@ function LoginForm({ initialError }: { initialError?: string }) {
       <button
         type="submit"
         disabled={pending}
-        className={`font-bold rounded-xl px-4 py-4 mt-4 transition-all shadow-[0_0_15px_rgba(239,68,68,0.3)] touch-target ${
+        className={`race-link-shell font-bold rounded-xl px-4 py-4 mt-4 transition-all shadow-[0_0_15px_rgba(239,68,68,0.3)] touch-target ${
           pending
             ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
             : 'bg-red-600 hover:bg-red-700 text-white'
         }`}
       >
+        {pending && (
+          <span aria-hidden="true" className="pointer-events-none absolute inset-0">
+            <span className="race-link-track">
+              <span className="race-link-car" />
+            </span>
+          </span>
+        )}
         {pending ? 'Signing In...' : 'Sign In'}
       </button>
       
-      {error && (
+      {!pending && error && (
         <p className="mt-4 p-4 bg-red-500/10 text-red-400 text-center rounded-xl border border-red-500/20">
           {error}
         </p>

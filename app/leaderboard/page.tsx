@@ -1,14 +1,20 @@
 import { createClient } from '@/utils/supabase/server'
-import { Trophy, Medal } from 'lucide-react'
+import { ChevronDown, Medal, Trophy } from 'lucide-react'
+import { format } from 'date-fns'
+import { Fragment } from 'react'
 import { getCurrentSeason } from '@/utils/season'
 import { getUserTenantContext } from '@/utils/tenant'
 import { getAdminAccessContext } from '@/utils/admin-access'
-import { TenantContextBanner } from '@/components/ui/tenant-context-banner'
 import { getProfileDisplayName } from '@/utils/profile-name'
-import { sortCompetitionStandings, getCompetitionRank } from '@/utils/competition'
+import { getCompetitionRank, sortCompetitionStandings } from '@/utils/competition'
 import { PendingLink } from '@/components/ui/pending-link'
+import {
+  buildUserLeaderboardBreakdowns,
+  type PodiumSlotBreakdown,
+  type PodiumSlotOutcome,
+} from '@/utils/leaderboard-breakdown'
 
-export const revalidate = 0 // always fetch fresh data for leaderboard
+export const revalidate = 0
 
 type LeaderboardPageProps = {
   searchParams: Promise<{
@@ -21,15 +27,79 @@ type LeaderboardEntry = {
   total_points: number
   exact_hits: number
   races_scored: number
-  profiles?: {
-    display_name?: string | null
-    email?: string | null
-    tenant_id?: string | null
-  } | Array<{
-    display_name?: string | null
-    email?: string | null
-    tenant_id?: string | null
+  profiles?:
+    | {
+        display_name?: string | null
+        email?: string | null
+        tenant_id?: string | null
+      }
+    | Array<{
+        display_name?: string | null
+        email?: string | null
+        tenant_id?: string | null
+      }>
+    | null
+}
+
+type ScoredRace = {
+  id: string
+  round: number
+  race_name: string
+  race_start_at: string
+}
+
+type PredictionBreakdownRow = {
+  id: string
+  user_id: string
+  race_id: string
+  p1_driver_id: string
+  p2_driver_id: string
+  p3_driver_id: string
+}
+
+type RaceResultRow = {
+  race_id: string
+  p1_driver_id: string
+  p2_driver_id: string
+  p3_driver_id: string
+}
+
+type RaceScoreRow = {
+  user_id: string
+  race_id: string
+  total_points: number
+  podium_points: number
+  bonus_points: number
+  exact_hits: number
+}
+
+type DriverRow = {
+  id: string
+  code?: string | null
+  emoji?: string | null
+}
+
+type BonusQuestionRow = {
+  id: string
+  race_id: string
+  question_text: string
+  display_order?: number | null
+  bonus_options?: Array<{
+    id: string
+    label?: string | null
   }> | null
+}
+
+type PredictionBonusAnswerRow = {
+  prediction_id: string
+  bonus_question_id: string
+  bonus_option_id: string
+}
+
+type RaceBonusAnswerRow = {
+  race_id: string
+  bonus_question_id: string
+  correct_bonus_option_id: string
 }
 
 function getLeaderboardProfile(entry: LeaderboardEntry) {
@@ -40,55 +110,79 @@ function getLeaderboardProfile(entry: LeaderboardEntry) {
   return entry.profiles || null
 }
 
+function getRankDisplay(index: number) {
+  if (index === 0) return <Medal className="h-5 w-5 text-yellow-500" />
+  if (index === 1) return <Medal className="h-5 w-5 text-slate-300" />
+  if (index === 2) return <Medal className="h-5 w-5 text-amber-600" />
+  return <span>{index + 1}</span>
+}
+
+function getOutcomeClasses(outcome: PodiumSlotOutcome) {
+  if (outcome === 'exact') {
+    return 'border-green-500/25 bg-green-500/10 text-green-100'
+  }
+
+  if (outcome === 'podium') {
+    return 'border-amber-500/25 bg-amber-500/10 text-amber-100'
+  }
+
+  return 'border-red-500/20 bg-red-500/10 text-red-100'
+}
+
+function getSlotStatusText(slot: PodiumSlotBreakdown) {
+  if (slot.outcome === 'exact') return '✓'
+  if (slot.outcome === 'podium') return slot.actualPositionLabel ? slot.actualPositionLabel : 'podium'
+  return '✕'
+}
+
+const summaryGridTemplate = '4rem minmax(0,1fr) 5.5rem 5.5rem 5.5rem 1.5rem'
+
 export default async function LeaderboardPage({ searchParams }: LeaderboardPageProps) {
   const supabase = await createClient()
   const currentSeason = await getCurrentSeason(supabase)
   const query = await searchParams
   const requestedView = Array.isArray(query.view) ? query.view[0] : query.view
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
+
   const access = user ? await getAdminAccessContext(supabase) : null
-  const tenantContext = user ? await getUserTenantContext(supabase, user.id) : {
-    tenantId: null,
-    tenantName: null,
-    tenantSlug: null,
-    role: null,
-  }
-  const canUseTenantView = Boolean(tenantContext.tenantId)
-  const defaultView = canUseTenantView && !access?.isPlatformAdmin ? 'tenant' : 'global'
+  const groupContext = user
+    ? await getUserTenantContext(supabase, user.id)
+    : {
+        tenantId: null,
+        tenantName: null,
+        tenantSlug: null,
+        role: null,
+      }
+
+  const hasGroup = Boolean(groupContext.tenantId)
+  const defaultView = hasGroup && !access?.isPlatformAdmin ? 'tenant' : 'global'
   const activeView =
     requestedView === 'global'
       ? 'global'
-      : requestedView === 'tenant' && canUseTenantView
+      : requestedView === 'tenant' && hasGroup
         ? 'tenant'
         : defaultView
 
-  // Fetch from the leaderboard cache or calculate. For v1, let's fetch from the cache.
-  // Wait, we need to join with profiles to get display_name.
-  
   const { data: leaderboard, error } = await supabase
     .from('leaderboard_cache')
-    .select(`
-      user_id,
-      total_points,
-      exact_hits,
-      races_scored,
-      profiles ( display_name, email, tenant_id )
-    `)
+    .select('user_id, total_points, exact_hits, races_scored, profiles(display_name, email, tenant_id)')
     .eq('season', currentSeason)
-    .order('total_points', { ascending: false })
-    .order('exact_hits', { ascending: false })
 
   if (error) {
     console.error('Error fetching leaderboard:', error)
   }
 
-  const visibleLeaderboard = (leaderboard || []).filter((entry: LeaderboardEntry) => {
+  const visibleLeaderboard = ((leaderboard || []) as LeaderboardEntry[]).filter((entry) => {
     const profile = getLeaderboardProfile(entry)
 
     if (activeView !== 'tenant') return true
-    return profile?.tenant_id === tenantContext.tenantId
+    return profile?.tenant_id === groupContext.tenantId
   })
-  const sortedVisibleLeaderboard = sortCompetitionStandings(visibleLeaderboard as LeaderboardEntry[])
+
+  const sortedVisibleLeaderboard = sortCompetitionStandings(visibleLeaderboard)
+  const visibleUserIds = sortedVisibleLeaderboard.map((entry) => entry.user_id)
   const currentUserRank = user ? getCompetitionRank(sortedVisibleLeaderboard, user.id) : null
   const currentUserEntry = user
     ? sortedVisibleLeaderboard.find((entry) => entry.user_id === user.id) || null
@@ -97,165 +191,424 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
   const pointsBehindLeader =
     currentUserEntry && currentUserRank !== 1 ? leaderPoints - currentUserEntry.total_points : 0
 
-  const leaderboardTitle = activeView === 'tenant' && tenantContext.tenantName
-    ? `${tenantContext.tenantName.toUpperCase()} LEADERBOARD`
-    : 'GLOBAL LEADERBOARD'
-  const leaderboardSubtitle = activeView === 'tenant'
-    ? 'See who is leading inside your tenant competition.'
-    : canUseTenantView
-      ? 'Compare your tenant results against the full cross-tenant field.'
-      : 'See who is predicting the podium best across every tenant.'
+  const leaderboardTitle =
+    activeView === 'tenant' && groupContext.tenantName
+      ? `${groupContext.tenantName.toUpperCase()} STANDINGS`
+      : 'SEASON STANDINGS'
+
+  const { data: scoredRaces } =
+    visibleUserIds.length > 0
+      ? await supabase
+          .from('races')
+          .select('id, round, race_name, race_start_at')
+          .eq('season', currentSeason)
+          .eq('status', 'scored')
+          .order('race_start_at', { ascending: false })
+      : { data: [] as ScoredRace[] }
+
+  const scoredRaceIds = ((scoredRaces || []) as ScoredRace[]).map((race) => race.id)
+
+  let predictionBreakdownRows: PredictionBreakdownRow[] = []
+  let raceResultRows: RaceResultRow[] = []
+  let raceScoreRows: RaceScoreRow[] = []
+  let bonusQuestionRows: BonusQuestionRow[] = []
+  let predictionBonusAnswerRows: PredictionBonusAnswerRow[] = []
+  let raceBonusAnswerRows: RaceBonusAnswerRow[] = []
+
+  if (visibleUserIds.length > 0 && scoredRaceIds.length > 0) {
+    const [predictionsResult, raceResultsResult, scoresResult, questionsResult, correctBonusResult] = await Promise.all([
+      supabase
+        .from('predictions')
+        .select('id, user_id, race_id, p1_driver_id, p2_driver_id, p3_driver_id')
+        .in('user_id', visibleUserIds)
+        .in('race_id', scoredRaceIds),
+      supabase
+        .from('race_results')
+        .select('race_id, p1_driver_id, p2_driver_id, p3_driver_id')
+        .in('race_id', scoredRaceIds),
+      supabase
+        .from('user_race_scores')
+        .select('user_id, race_id, total_points, podium_points, bonus_points, exact_hits')
+        .in('user_id', visibleUserIds)
+        .in('race_id', scoredRaceIds),
+      supabase
+        .from('bonus_questions')
+        .select('id, race_id, question_text, display_order, bonus_options(id, label)')
+        .in('race_id', scoredRaceIds)
+        .order('display_order', { ascending: true }),
+      supabase
+        .from('race_bonus_answers')
+        .select('race_id, bonus_question_id, correct_bonus_option_id')
+        .in('race_id', scoredRaceIds),
+    ])
+
+    if (predictionsResult.error) {
+      console.error('Leaderboard breakdown predictions fetch error:', predictionsResult.error)
+    } else {
+      predictionBreakdownRows = (predictionsResult.data || []) as PredictionBreakdownRow[]
+    }
+
+    if (raceResultsResult.error) {
+      console.error('Leaderboard breakdown results fetch error:', raceResultsResult.error)
+    } else {
+      raceResultRows = (raceResultsResult.data || []) as RaceResultRow[]
+    }
+
+    if (scoresResult.error) {
+      console.error('Leaderboard breakdown scores fetch error:', scoresResult.error)
+    } else {
+      raceScoreRows = (scoresResult.data || []) as RaceScoreRow[]
+    }
+
+    if (questionsResult.error) {
+      console.error('Leaderboard breakdown questions fetch error:', questionsResult.error)
+    } else {
+      bonusQuestionRows = (questionsResult.data || []) as BonusQuestionRow[]
+    }
+
+    if (correctBonusResult.error) {
+      console.error('Leaderboard breakdown race bonus fetch error:', correctBonusResult.error)
+    } else {
+      raceBonusAnswerRows = (correctBonusResult.data || []) as RaceBonusAnswerRow[]
+    }
+
+    const predictionIds = predictionBreakdownRows.map((prediction) => prediction.id)
+
+    if (predictionIds.length > 0) {
+      const predictionBonusResult = await supabase
+        .from('prediction_bonus_answers')
+        .select('prediction_id, bonus_question_id, bonus_option_id')
+        .in('prediction_id', predictionIds)
+
+      if (predictionBonusResult.error) {
+        console.error('Leaderboard breakdown prediction bonus fetch error:', predictionBonusResult.error)
+      } else {
+        predictionBonusAnswerRows = (predictionBonusResult.data || []) as PredictionBonusAnswerRow[]
+      }
+    }
+  }
+
+  const { data: drivers } = await supabase.from('drivers').select('id, code, emoji')
+  const driversById = new Map(
+    ((drivers || []) as DriverRow[]).map((driver) => [driver.id, { code: driver.code, emoji: driver.emoji }])
+  )
+
+  const breakdownByUserId = buildUserLeaderboardBreakdowns({
+    races: (scoredRaces || []) as ScoredRace[],
+    predictions: predictionBreakdownRows,
+    raceResults: raceResultRows,
+    raceScores: raceScoreRows,
+    bonusQuestions: bonusQuestionRows,
+    predictionBonusAnswers: predictionBonusAnswerRows,
+    raceBonusAnswers: raceBonusAnswerRows,
+    driversById,
+  })
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex items-center space-x-4">
-        <Trophy className="w-10 h-10 text-yellow-500" />
-        <div>
-          <h1 className="text-3xl font-black italic tracking-tighter">{leaderboardTitle}</h1>
-          <p className="text-slate-400">{leaderboardSubtitle}</p>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-        <div className="flex flex-wrap items-center gap-3">
-          {canUseTenantView && (
-            <TenantContextBanner
-              tenantName={tenantContext.tenantName}
-              label={activeView === 'tenant' ? 'Viewing' : 'Your tenant'}
-            />
-          )}
-
-          {user && !canUseTenantView && !access?.isPlatformAdmin && (
-            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-300">
-              You can browse the global leaderboard while waiting for tenant assignment.
-            </div>
-          )}
-
-          {access?.isPlatformAdmin && (
-            <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200">
-              {canUseTenantView
-                ? 'Platform admins default to the global leaderboard, but can still switch into their tenant competition.'
-                : 'Platform admins default to the global leaderboard so race control stays cross-tenant.'}
-            </div>
-          )}
+    <div className="space-y-5 animate-in fade-in duration-500">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="flex items-center gap-4">
+          <Trophy className="h-10 w-10 text-yellow-500" />
+          <div>
+            <h1 className="text-3xl font-black italic tracking-tighter">{leaderboardTitle}</h1>
+          </div>
         </div>
 
-        {canUseTenantView && (
+        {hasGroup && (
           <div className="inline-flex rounded-2xl border border-white/10 bg-black/20 p-1">
             <PendingLink
               href="/leaderboard?view=tenant"
               className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${
-                activeView === 'tenant'
-                  ? 'bg-red-600 text-white'
-                  : 'text-slate-300 hover:bg-white/5'
+                activeView === 'tenant' ? 'bg-red-600 text-white' : 'text-slate-300 hover:bg-white/5'
               }`}
             >
-              My Tenant
+              My Group
             </PendingLink>
             <PendingLink
               href="/leaderboard?view=global"
               className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${
-                activeView === 'global'
-                  ? 'bg-red-600 text-white'
-                  : 'text-slate-300 hover:bg-white/5'
+                activeView === 'global' ? 'bg-red-600 text-white' : 'text-slate-300 hover:bg-white/5'
               }`}
             >
-              Global
+              Everyone
             </PendingLink>
           </div>
         )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
-          <div className="text-sm font-bold uppercase tracking-wider text-slate-500">Your Position</div>
-          <div className="mt-3 text-4xl font-black italic text-white">
-            {currentUserRank ? `#${currentUserRank}` : 'N/A'}
+      <div className="flex flex-wrap items-center gap-2">
+        {user && currentUserRank && currentUserEntry && (
+          <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-sm font-bold text-slate-200">
+            #{currentUserRank} · {currentUserEntry.total_points} pts ·{' '}
+            {currentUserRank === 1 ? 'Leading' : `${pointsBehindLeader} behind`}
+          </span>
+        )}
+
+        {sortedVisibleLeaderboard.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span
+              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${getOutcomeClasses('exact')}`}
+            >
+              <span className="h-2 w-2 rounded-full bg-current opacity-80" />
+              Exact
+            </span>
+            <span
+              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${getOutcomeClasses('podium')}`}
+            >
+              <span className="h-2 w-2 rounded-full bg-current opacity-80" />
+              Right driver
+            </span>
+            <span
+              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${getOutcomeClasses('miss')}`}
+            >
+              <span className="h-2 w-2 rounded-full bg-current opacity-80" />
+              Miss
+            </span>
           </div>
-          <p className="mt-2 text-sm text-slate-400">
-            {user
-              ? activeView === 'tenant'
-                ? 'Your standing inside this tenant competition.'
-                : 'Your standing across every tenant in the app.'
-              : 'Sign in to see your place in the standings.'}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
-          <div className="text-sm font-bold uppercase tracking-wider text-slate-500">Predictors In View</div>
-          <div className="mt-3 text-4xl font-black italic text-white">{sortedVisibleLeaderboard.length}</div>
-          <p className="mt-2 text-sm text-slate-400">
-            {activeView === 'tenant'
-              ? 'Only members from your tenant are counted here.'
-              : 'Everyone with scored results across all tenants.'}
-          </p>
-        </div>
-        <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
-          <div className="text-sm font-bold uppercase tracking-wider text-slate-500">
-            {currentUserRank && currentUserRank !== 1 ? 'Gap To Lead' : 'Leader Points'}
-          </div>
-          <div className="mt-3 text-4xl font-black italic text-red-500">
-            {currentUserRank && currentUserRank !== 1 ? pointsBehindLeader : leaderPoints}
-          </div>
-          <p className="mt-2 text-sm text-slate-400">
-            {currentUserRank && currentUserRank !== 1
-              ? 'Points needed to catch the leader in this view.'
-              : 'Current pace at the top of this leaderboard.'}
-          </p>
-        </div>
+        )}
+
+        {!user && sortedVisibleLeaderboard.length > 0 && (
+          <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-sm font-bold text-slate-300">
+            {sortedVisibleLeaderboard.length} players
+          </span>
+        )}
       </div>
 
-      <div className="bg-card border border-white/5 rounded-2xl overflow-hidden shadow-2xl">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-black/20 border-b border-white/5">
-                <th className="p-4 font-semibold text-slate-300 w-16 text-center">Rank</th>
-                <th className="p-4 font-semibold text-slate-300">Predictor</th>
-                <th className="p-4 font-semibold text-slate-300 text-right">Points</th>
-                <th className="p-4 font-semibold text-slate-300 text-right hidden sm:table-cell">Exact Hits</th>
-                <th className="p-4 font-semibold text-slate-300 text-right hidden sm:table-cell">Races</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/5">
-              {sortedVisibleLeaderboard.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="p-8 text-center text-slate-500 italic">
-                    No predictions scored yet. The season is waiting!
-                  </td>
-                </tr>
-              ) : (
-                sortedVisibleLeaderboard.map((entry: LeaderboardEntry, index: number) => {
-                  const profile = getLeaderboardProfile(entry)
+      {sortedVisibleLeaderboard.length > 0 && (
+        <div className="text-xs text-slate-500">Click a player to inspect scored weekends.</div>
+      )}
 
-                  return (
-                    <tr key={entry.user_id} className="hover:bg-white/5 transition-colors">
-                    <td className="p-4 text-center font-bold text-lg">
-                      {index === 0 ? <Medal className="w-6 h-6 text-yellow-500 mx-auto" /> :
-                       index === 1 ? <Medal className="w-6 h-6 text-slate-300 mx-auto" /> :
-                       index === 2 ? <Medal className="w-6 h-6 text-amber-600 mx-auto" /> :
-                       <span className="text-slate-500">{index + 1}</span>}
-                    </td>
-                    <td className="p-4">
-                      <div className="font-semibold">
-                        {getProfileDisplayName(profile?.display_name, profile?.email)}
-                      </div>
-                    </td>
-                    <td className="p-4 text-right font-black text-xl text-red-500">
-                      {entry.total_points}
-                    </td>
-                    <td className="p-4 text-right font-medium text-slate-400 hidden sm:table-cell">
-                      {entry.exact_hits}
-                    </td>
-                    <td className="p-4 text-right text-slate-400 hidden sm:table-cell">
-                      {entry.races_scored}
-                    </td>
-                  </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
+      {sortedVisibleLeaderboard.length > 0 && (
+        <div
+          className="hidden w-full items-center gap-4 rounded-2xl border border-white/10 bg-black/20 px-5 py-3 text-xs font-bold uppercase tracking-widest text-slate-500 lg:grid"
+          style={{ gridTemplateColumns: summaryGridTemplate }}
+        >
+          <div>Rank</div>
+          <div className="min-w-0">Predictor</div>
+          <div className="text-right">Points</div>
+          <div className="text-right">Exact</div>
+          <div className="text-right">Races</div>
+          <div />
         </div>
+      )}
+
+      <div className="space-y-3">
+        {sortedVisibleLeaderboard.length === 0 ? (
+          <div className="rounded-2xl border border-white/5 bg-card p-8 text-center text-slate-500 italic shadow-xl">
+            No predictions scored yet.
+          </div>
+        ) : (
+          sortedVisibleLeaderboard.map((entry, index) => {
+            const profile = getLeaderboardProfile(entry)
+            const userBreakdown = breakdownByUserId.get(entry.user_id) || []
+            const isCurrentUser = entry.user_id === user?.id
+
+            return (
+              <details
+                key={entry.user_id}
+                open={isCurrentUser}
+                className={`rounded-2xl border bg-card shadow-xl ${isCurrentUser ? 'border-red-500/25' : 'border-white/5'}`}
+              >
+                <summary className="list-none cursor-pointer px-5 py-3.5 md:px-6">
+                  <div className="lg:hidden">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-black/30 text-base font-black italic text-white">
+                            {getRankDisplay(index)}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <div className="truncate text-lg font-semibold text-white">
+                                {getProfileDisplayName(profile?.display_name, profile?.email)}
+                              </div>
+                              {isCurrentUser && (
+                                <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-widest text-red-300">
+                                  You
+                                </span>
+                              )}
+                            </div>
+                            <div className="mt-1 text-sm text-slate-400">
+                              {entry.total_points} pts · {entry.exact_hits} exact · {entry.races_scored} races
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronDown className="mt-3 h-4 w-4 shrink-0 text-slate-500" />
+                    </div>
+                  </div>
+
+                  <div
+                    className="hidden w-full items-center gap-4 lg:grid"
+                    style={{ gridTemplateColumns: summaryGridTemplate }}
+                  >
+                    <div>
+                      <div className="flex h-11 w-11 items-center justify-center rounded-full border border-white/10 bg-black/30 text-base font-black italic text-white">
+                        {getRankDisplay(index)}
+                      </div>
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <div className="truncate text-lg font-semibold text-white">
+                          {getProfileDisplayName(profile?.display_name, profile?.email)}
+                        </div>
+                        {isCurrentUser && (
+                          <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-widest text-red-300">
+                            You
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="text-right text-xl font-black italic text-red-500">
+                      {entry.total_points}
+                    </div>
+                    <div className="text-right text-lg font-bold text-white">
+                      {entry.exact_hits}
+                    </div>
+                    <div className="text-right text-lg font-bold text-white">
+                      {entry.races_scored}
+                    </div>
+                    <div className="flex justify-end">
+                      <ChevronDown className="h-4 w-4 text-slate-500" />
+                    </div>
+                  </div>
+                </summary>
+
+                <div className="border-t border-white/5 px-5 pb-5 pt-4 md:px-6 md:pb-6">
+                  {userBreakdown.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-white/10 px-4 py-6 text-sm text-slate-500">
+                      Scored race detail is not available here yet.
+                    </div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-[920px] w-full table-fixed border-separate border-spacing-y-1.5 text-sm">
+                        <colgroup>
+                          <col className="w-[30%]" />
+                          <col className="w-[14%]" />
+                          <col className="w-[14%]" />
+                          <col className="w-[14%]" />
+                          <col className="w-[18%]" />
+                          <col className="w-[10%]" />
+                        </colgroup>
+                        <thead>
+                          <tr className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
+                            <th className="rounded-l-xl border border-white/10 bg-black/20 px-4 py-2.5 text-left">Race</th>
+                            <th className="border-y border-white/10 bg-black/20 px-3 py-2.5 text-center">P1</th>
+                            <th className="border-y border-white/10 bg-black/20 px-3 py-2.5 text-center">P2</th>
+                            <th className="border-y border-white/10 bg-black/20 px-3 py-2.5 text-center">P3</th>
+                            <th className="border-y border-white/10 bg-black/20 px-3 py-2.5 text-center">Bonus</th>
+                            <th className="rounded-r-xl border border-white/10 bg-black/20 px-3 py-2.5 text-right">Pts</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {userBreakdown.map((race) => {
+                            const showActualPodium = race.slots.some((slot) => slot.outcome !== 'exact')
+                            const showBonusDetail = race.bonusItems.length > 0
+                            const showDetailRow = showActualPodium || showBonusDetail
+
+                            return (
+                            <Fragment key={race.raceId}>
+                              <tr className="align-top">
+                                <td className="rounded-l-xl border border-white/5 bg-black/25 px-4 py-3">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-xs font-bold uppercase tracking-widest text-red-500">
+                                      R{String(race.round).padStart(2, '0')}
+                                    </span>
+                                    <span className="truncate font-bold text-white">{race.raceName}</span>
+                                  </div>
+                                  <div className="mt-1 text-xs text-slate-500">{format(new Date(race.raceStartAt), 'PPP')}</div>
+                                </td>
+
+                                {race.slots.map((slot) => (
+                                  <td
+                                    key={`${race.raceId}-${slot.slot}`}
+                                    className="border-y border-white/5 bg-black/25 px-3 py-2.5 text-center"
+                                  >
+                                    <div
+                                      className={`inline-flex min-w-[88px] items-center justify-center rounded-full border px-3 py-1.5 text-sm font-bold ${getOutcomeClasses(slot.outcome)}`}
+                                    >
+                                      <span className="truncate font-black italic leading-none">{slot.predictedLabel}</span>
+                                      <span className="ml-2 text-[11px] font-bold uppercase tracking-widest opacity-85">
+                                        {getSlotStatusText(slot)}
+                                      </span>
+                                    </div>
+                                  </td>
+                                ))}
+
+                                <td className="border-y border-white/5 bg-black/25 px-3 py-2.5 text-center">
+                                  <div className="inline-flex min-w-[56px] items-center justify-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-bold text-white">
+                                    {race.bonusTotalCount > 0 ? `${race.bonusCorrectCount}/${race.bonusTotalCount}` : '-'}
+                                  </div>
+                                </td>
+
+                                <td className="rounded-r-xl border border-white/5 bg-black/25 px-3 py-2.5 text-right">
+                                  <div className="text-lg font-black italic text-red-400">{race.totalPoints}</div>
+                                </td>
+                              </tr>
+
+                              {showDetailRow && (
+                                <tr className="text-xs text-slate-300">
+                                  <td className="rounded-l-xl border border-white/5 bg-black/20 px-4 py-2.5 font-bold uppercase tracking-widest text-slate-500">
+                                    {showActualPodium ? 'Actual' : 'Bonus'}
+                                  </td>
+                                  {showActualPodium ? (
+                                    <>
+                                      <td className="border-y border-white/5 bg-black/20 px-3 py-2.5 text-center">
+                                        {race.actualPodiumLabels[0]?.replace(/^P1\s/, '')}
+                                      </td>
+                                      <td className="border-y border-white/5 bg-black/20 px-3 py-2.5 text-center">
+                                        {race.actualPodiumLabels[1]?.replace(/^P2\s/, '')}
+                                      </td>
+                                      <td className="border-y border-white/5 bg-black/20 px-3 py-2.5 text-center">
+                                        {race.actualPodiumLabels[2]?.replace(/^P3\s/, '')}
+                                      </td>
+                                    </>
+                                  ) : (
+                                    <td
+                                      colSpan={3}
+                                      className="border-y border-white/5 bg-black/20 px-3 py-2.5 text-center text-slate-500"
+                                    >
+                                      Podium matched
+                                    </td>
+                                  )}
+                                  <td className="border-y border-white/5 bg-black/20 px-3 py-2.5">
+                                    {showBonusDetail ? (
+                                      <div className="flex flex-wrap items-center justify-center gap-1">
+                                        {race.bonusItems.map((item) => (
+                                          <span
+                                            key={`${race.raceId}-${item.label}`}
+                                            className={`rounded-full border px-2 py-0.5 text-[10px] font-bold leading-none ${
+                                              item.isCorrect
+                                                ? 'border-green-500/20 bg-green-500/10 text-green-200'
+                                                : 'border-red-500/20 bg-red-500/10 text-red-200'
+                                            }`}
+                                            title={`${item.label}: picked ${item.selectedLabel}, correct ${item.correctLabel}`}
+                                          >
+                                            {item.label} {item.isCorrect ? '✓' : '✕'}
+                                          </span>
+                                        ))}
+                                      </div>
+                                    ) : (
+                                      <div className="text-center text-slate-500">-</div>
+                                    )}
+                                  </td>
+                                  <td className="rounded-r-xl border border-white/5 bg-black/20 px-3 py-2.5" />
+                                </tr>
+                              )}
+                            </Fragment>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              </details>
+            )
+          })
+        )}
       </div>
     </div>
   )

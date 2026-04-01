@@ -6,7 +6,7 @@ type TenantContextBannerProps = {
 
 export function TenantContextBanner({
   tenantName,
-  label = 'Tenant',
+  label = 'Group',
   className = '',
 }: TenantContextBannerProps) {
   if (tenantName) {
@@ -19,7 +19,7 @@ export function TenantContextBanner({
 
   return (
     <div className={`rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm font-medium text-amber-300 ${className}`.trim()}>
-      Your account is not assigned to a tenant yet. Ask an admin to complete tenant setup before using private competition pages.
+      You&apos;re not in a group yet. Ask an admin to add you before using predictions, history, and group standings.
     </div>
   )
 }

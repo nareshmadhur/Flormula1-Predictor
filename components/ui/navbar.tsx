@@ -5,6 +5,7 @@ import { getAdminAccessContext } from '@/utils/admin-access'
 import { getProfileDisplayName } from '@/utils/profile-name'
 import { PendingLink } from '@/components/ui/pending-link'
 import { SignOutButton } from '@/components/ui/signout-button'
+import { ChevronDown } from 'lucide-react'
 
 export default async function Navbar() {
   const supabase = await createClient()
@@ -52,19 +53,39 @@ export default async function Navbar() {
           <div className="flex items-center space-x-2 sm:space-x-4">
             {user ? (
               <>
-                <div className="flex items-center space-x-2 sm:space-x-3">
-                  {tenantName && (
-                    <span className="hidden rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-slate-200 sm:inline-flex">
-                      {tenantName}
+                <details className="relative">
+                  <summary className="flex cursor-pointer list-none items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-slate-200 transition-colors hover:bg-white/10 sm:text-sm [&::-webkit-details-marker]:hidden">
+                    <span className="truncate max-w-28 sm:max-w-44">
+                      {getProfileDisplayName(profile?.display_name, user.email, 'Profile')}
                     </span>
-                  )}
-                  <span className="text-xs sm:text-sm text-slate-400 font-bold truncate max-w-24 sm:max-w-48">
-                    {getProfileDisplayName(profile?.display_name, user.email, 'Profile')}
-                  </span>
-                  <form action={signout}>
-                    <SignOutButton />
-                  </form>
-                </div>
+                    <ChevronDown className="h-4 w-4 text-slate-400" />
+                  </summary>
+
+                  <div className="absolute right-0 top-full z-50 mt-2 w-64 rounded-2xl border border-white/10 bg-slate-900/95 p-3 shadow-2xl backdrop-blur-md">
+                    <div className="border-b border-white/10 px-3 pb-3">
+                      <div className="truncate text-sm font-bold text-white">
+                        {getProfileDisplayName(profile?.display_name, user.email, 'Profile')}
+                      </div>
+                      {tenantName && (
+                        <div className="mt-1 text-xs font-medium uppercase tracking-widest text-slate-400">
+                          Group: {tenantName}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="mt-3 space-y-2">
+                      <PendingLink
+                        href="/me/profile"
+                        className="flex items-center rounded-xl px-3 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10"
+                      >
+                        Profile
+                      </PendingLink>
+                      <form action={signout} className="rounded-xl px-3 py-2 hover:bg-white/10">
+                        <SignOutButton />
+                      </form>
+                    </div>
+                  </div>
+                </details>
               </>
             ) : (
               <div className="flex items-center space-x-2 sm:space-x-4">
