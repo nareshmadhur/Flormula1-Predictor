@@ -3,6 +3,7 @@
 import { login } from '@/app/auth/actions'
 import { initialAuthActionState } from '@/app/auth/action-state'
 import { use, useActionState } from 'react'
+import { RaceStartLights } from '@/components/ui/race-start-lights'
 
 export default function LoginPage({
   searchParams,
@@ -14,7 +15,8 @@ export default function LoginPage({
   return (
     <div className="flex-1 flex flex-col w-full px-8 sm:max-w-md justify-center gap-2 mx-auto animate-in fade-in duration-500 mt-20">
       <div className="bg-card border border-white/10 p-8 rounded-3xl shadow-2xl">
-        <h1 className="text-3xl font-black italic tracking-tighter mb-6 text-center">WELCOME BACK</h1>
+        <h1 className="text-3xl font-black italic tracking-tighter mb-2 text-center">Welcome back</h1>
+        <p className="mb-6 text-center text-sm text-slate-400">Jump back into your standings and next race picks.</p>
         
         <LoginForm initialError={params.error} />
       </div>
@@ -56,19 +58,13 @@ function LoginForm({ initialError }: { initialError?: string }) {
       <button
         type="submit"
         disabled={pending}
-        className={`race-link-shell font-bold rounded-xl px-4 py-4 mt-4 transition-all shadow-[0_0_15px_rgba(239,68,68,0.3)] touch-target ${
+        className={`race-submit-shell font-bold rounded-xl px-4 py-4 mt-4 transition-all shadow-[0_0_15px_rgba(239,68,68,0.3)] touch-target ${
           pending
             ? 'bg-slate-600 text-slate-400 cursor-not-allowed'
             : 'bg-red-600 hover:bg-red-700 text-white'
         }`}
       >
-        {pending && (
-          <span aria-hidden="true" className="pointer-events-none absolute inset-0">
-            <span className="race-link-track">
-              <span className="race-link-car" />
-            </span>
-          </span>
-        )}
+        {pending && <RaceStartLights />}
         {pending ? 'Signing In...' : 'Sign In'}
       </button>
       

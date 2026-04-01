@@ -32,7 +32,7 @@ export default async function Navbar() {
 
   if (user) {
     primaryLinks.push(
-      { href: '/predictions', label: 'Upcoming' },
+      { href: '/predictions', label: 'My Season' },
       { href: '/me/history', label: 'History' }
     )
 
@@ -45,9 +45,11 @@ export default async function Navbar() {
     <nav className="border-b border-white/10 bg-slate-900/50 backdrop-blur-md sticky top-0 z-50">
       <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex min-h-16 flex-wrap items-center justify-between gap-3 py-3">
-          <PendingLink href="/" className="flex items-center space-x-1 flex-shrink-0">
-            <span className="text-xl sm:text-2xl font-black italic tracking-tighter text-red-500">FLO-</span>
-            <span className="text-xl sm:text-2xl font-black italic tracking-tighter text-slate-100">RMULA 1</span>
+          <PendingLink href="/" className="race-link-subtle inline-flex shrink-0 items-baseline overflow-visible whitespace-nowrap pr-1">
+            <span className="text-[1.35rem] font-black italic tracking-[-0.09em] sm:text-[1.6rem]">
+              <span className="text-red-500">FLO</span>
+              <span className="text-slate-100">RMULA1</span>
+            </span>
           </PendingLink>
           
           <div className="flex items-center space-x-2 sm:space-x-4">
@@ -68,7 +70,7 @@ export default async function Navbar() {
                       </div>
                       {tenantName && (
                         <div className="mt-1 text-xs font-medium uppercase tracking-widest text-slate-400">
-                          Group: {tenantName}
+                          Playing in {tenantName}
                         </div>
                       )}
                     </div>

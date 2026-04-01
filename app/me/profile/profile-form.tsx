@@ -4,6 +4,7 @@ import { useActionState, useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateOwnProfile } from '@/app/actions/profile'
 import { initialProfileActionState } from './action-state'
+import { RaceStartLights } from '@/components/ui/race-start-lights'
 
 type ProfileFormProps = {
   defaultDisplayName: string
@@ -66,19 +67,13 @@ export function ProfileForm({ defaultDisplayName, email }: ProfileFormProps) {
       <button
         type="submit"
         disabled={pending}
-        className={`race-link-shell inline-flex items-center rounded-xl px-5 py-3 font-bold transition-colors ${
+        className={`race-submit-shell inline-flex items-center rounded-xl px-5 py-3 font-bold transition-colors ${
           pending
             ? 'cursor-not-allowed bg-slate-700 text-slate-300'
             : 'bg-red-600 text-white hover:bg-red-500'
         }`}
       >
-        {pending && (
-          <span aria-hidden="true" className="pointer-events-none absolute inset-0">
-            <span className="race-link-track">
-              <span className="race-link-car" />
-            </span>
-          </span>
-        )}
+        {pending && <RaceStartLights />}
         {pending ? 'Saving Name...' : 'Save Display Name'}
       </button>
 

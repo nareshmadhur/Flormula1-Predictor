@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { AlertCircle, CircleHelp, ClipboardList, Flag, Lock, Trophy } from 'lucide-react'
+import { AlertCircle, ClipboardList, Lock, TimerReset, Trophy } from 'lucide-react'
+import { format, formatDistanceToNowStrict } from 'date-fns'
 import PredictionForm from './prediction-form'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { getUserTenantContext } from '@/utils/tenant'
@@ -31,11 +32,14 @@ type LeaderboardStanding = {
   total_points: number
   exact_hits: number
   races_scored: number
-  profiles?: {
-    tenant_id?: string | null
-  } | Array<{
-    tenant_id?: string | null
-  }> | null
+  profiles?:
+    | {
+        tenant_id?: string | null
+      }
+    | Array<{
+        tenant_id?: string | null
+      }>
+    | null
 }
 
 type RaceScoreEntry = {
@@ -43,6 +47,8 @@ type RaceScoreEntry = {
   total_points: number
   exact_hits: number
 }
+
+type ComparisonTone = 'exact' | 'podium' | 'miss'
 
 function getStandingProfile(entry: LeaderboardStanding) {
   if (Array.isArray(entry.profiles)) {
@@ -94,12 +100,27 @@ function getBonusAnswerLabel(question: BonusQuestion, optionId?: string | null) 
   return option?.label || 'Unknown option'
 }
 
+function getComparisonTone(predictedDriverId?: string | null, officialDriverId?: string | null, officialPodiumIds: string[] = []) {
+  if (!predictedDriverId || !officialDriverId) return 'miss' as ComparisonTone
+  if (predictedDriverId === officialDriverId) return 'exact' as ComparisonTone
+  if (officialPodiumIds.includes(predictedDriverId)) return 'podium' as ComparisonTone
+  return 'miss' as ComparisonTone
+}
+
+function getComparisonToneClasses(tone: ComparisonTone) {
+  if (tone === 'exact') return 'border-green-500/20 bg-green-500/10 text-green-200'
+  if (tone === 'podium') return 'border-amber-500/20 bg-amber-500/10 text-amber-100'
+  return 'border-red-500/20 bg-red-500/10 text-red-200'
+}
+
 export default async function PredictPage(props: { params: Promise<{ id: string }> }) {
   const params = await props.params
   const { id } = params
 
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const {
+    data: { user },
+  } = await supabase.auth.getUser()
 
   if (!user) {
     redirect('/login')
@@ -118,7 +139,7 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
     .single()
 
   if (raceError || !race) {
-    return <div className="text-center p-12 text-slate-400">Race not found.</div>
+    return <div className="p-12 text-center text-slate-400">Race not found.</div>
   }
 
   const effectiveStatus = getEffectiveRaceStatus(race)
@@ -190,17 +211,22 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
     officialBonusAnswerMap.set(answer.bonus_question_id, answer.correct_bonus_option_id)
   })
 
-  const predictionPodium = prediction ? [
-    { label: 'P1', value: getDriverLabel(drivers, prediction.p1_driver_id) },
-    { label: 'P2', value: getDriverLabel(drivers, prediction.p2_driver_id) },
-    { label: 'P3', value: getDriverLabel(drivers, prediction.p3_driver_id) },
-  ] : []
+  const predictionPodium = prediction
+    ? [
+        { label: 'P1', driverId: prediction.p1_driver_id, value: getDriverLabel(drivers, prediction.p1_driver_id) },
+        { label: 'P2', driverId: prediction.p2_driver_id, value: getDriverLabel(drivers, prediction.p2_driver_id) },
+        { label: 'P3', driverId: prediction.p3_driver_id, value: getDriverLabel(drivers, prediction.p3_driver_id) },
+      ]
+    : []
 
-  const officialPodium = raceResult ? [
-    { label: 'P1', value: getDriverLabel(drivers, raceResult.p1_driver_id) },
-    { label: 'P2', value: getDriverLabel(drivers, raceResult.p2_driver_id) },
-    { label: 'P3', value: getDriverLabel(drivers, raceResult.p3_driver_id) },
-  ] : []
+  const officialPodium = raceResult
+    ? [
+        { label: 'P1', driverId: raceResult.p1_driver_id, value: getDriverLabel(drivers, raceResult.p1_driver_id) },
+        { label: 'P2', driverId: raceResult.p2_driver_id, value: getDriverLabel(drivers, raceResult.p2_driver_id) },
+        { label: 'P3', driverId: raceResult.p3_driver_id, value: getDriverLabel(drivers, raceResult.p3_driver_id) },
+      ]
+    : []
+
   const actualPodiumIds = raceResult
     ? [raceResult.p1_driver_id, raceResult.p2_driver_id, raceResult.p3_driver_id].filter(Boolean)
     : []
@@ -218,8 +244,13 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
       bonusAnswerMap.get(question.id) === officialBonusAnswerMap.get(question.id)
   ).length
 
-  let globalMovement = { title: 'Unavailable', detail: 'This race has not updated the global table yet.' }
-  let tenantMovement = { title: 'Unavailable', detail: 'This race has not updated the tenant table yet.' }
+  const lockCountdown =
+    effectiveStatus === 'upcoming'
+      ? formatDistanceToNowStrict(new Date(race.prediction_lock_at), { addSuffix: true })
+      : null
+
+  let globalMovement = { title: 'Unavailable', detail: 'This race has not updated the overall table yet.' }
+  let groupMovement = { title: 'Unavailable', detail: 'This race has not updated your group table yet.' }
 
   if (effectiveStatus === 'scored' && userScore) {
     const { data: leaderboardRows } = await supabase
@@ -235,6 +266,7 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
     const raceScoreMap = new Map(
       ((raceScoreRows || []) as RaceScoreEntry[]).map((entry) => [entry.user_id, entry])
     )
+
     const currentStandings = sortCompetitionStandings((leaderboardRows || []) as LeaderboardStanding[])
     const previousStandings = sortCompetitionStandings(
       currentStandings.flatMap((entry) => {
@@ -254,213 +286,89 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
     const previousGlobalRank = getCompetitionRank(previousStandings, user.id)
     globalMovement = getMovementLabel(currentGlobalRank, previousGlobalRank)
 
-    const currentTenantStandings = sortCompetitionStandings(
-      currentStandings.filter(
-        (entry) => getStandingProfile(entry)?.tenant_id === tenantContext.tenantId
-      )
+    const currentGroupStandings = sortCompetitionStandings(
+      currentStandings.filter((entry) => getStandingProfile(entry)?.tenant_id === tenantContext.tenantId)
     )
-    const previousTenantStandings = sortCompetitionStandings(
-      previousStandings.filter(
-        (entry) => getStandingProfile(entry)?.tenant_id === tenantContext.tenantId
-      )
+    const previousGroupStandings = sortCompetitionStandings(
+      previousStandings.filter((entry) => getStandingProfile(entry)?.tenant_id === tenantContext.tenantId)
     )
-    const currentTenantRank = getCompetitionRank(currentTenantStandings, user.id)
-    const previousTenantRank = getCompetitionRank(previousTenantStandings, user.id)
-    tenantMovement = getMovementLabel(currentTenantRank, previousTenantRank)
+    const currentGroupRank = getCompetitionRank(currentGroupStandings, user.id)
+    const previousGroupRank = getCompetitionRank(previousGroupStandings, user.id)
+    groupMovement = getMovementLabel(currentGroupRank, previousGroupRank)
   }
 
+  const stateLabel =
+    effectiveStatus === 'upcoming'
+      ? 'Predictions open'
+      : effectiveStatus === 'locked'
+        ? 'Weekend live'
+        : effectiveStatus === 'completed'
+          ? 'Scoring pending'
+          : effectiveStatus === 'scored'
+            ? 'Final result'
+            : 'Closed'
+
+  const compactNote =
+    effectiveStatus === 'upcoming'
+      ? prediction
+        ? 'Entry locked in for now. You can still edit before FP1 minus five minutes.'
+        : 'Pick your podium before FP1 minus five minutes.'
+      : effectiveStatus === 'locked'
+        ? prediction
+          ? 'Your entry is locked while the weekend plays out.'
+          : 'The window is closed for this round.'
+        : effectiveStatus === 'completed'
+          ? 'The race is finished. Final scoring is still on the way.'
+          : effectiveStatus === 'scored'
+            ? prediction
+              ? 'Final result is in. Compare your call below.'
+              : 'No entry this round. Official result below.'
+            : 'This round is closed.'
+
   return (
-    <div className="space-y-8 animate-in fade-in duration-500 max-w-3xl mx-auto">
-      <div className="bg-card border border-white/10 rounded-3xl p-8 relative overflow-hidden shadow-2xl">
-        <div className="absolute top-0 right-0 p-8 opacity-5 pointer-events-none">
-          <Flag className="w-48 h-48" />
+    <div className="mx-auto max-w-5xl space-y-5 animate-in fade-in duration-500">
+      <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-2xl md:p-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-bold uppercase tracking-[0.25em] text-red-500">{stateLabel}</span>
+          <span className="rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-xs font-medium text-slate-300">
+            R{race.round}
+          </span>
+          {effectiveStatus === 'upcoming' && lockCountdown && (
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-xs font-medium text-slate-300">
+              <TimerReset className="h-3.5 w-3.5 text-red-400" />
+              Locks {lockCountdown}
+            </span>
+          )}
+          <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-xs font-medium text-slate-300">
+            {prediction ? <ClipboardList className="h-3.5 w-3.5 text-green-400" /> : <AlertCircle className="h-3.5 w-3.5 text-amber-400" />}
+            {prediction ? 'Entry locked in' : 'No entry yet'}
+          </span>
         </div>
 
-        <div className="relative z-10 space-y-2">
-          <div className="text-sm font-bold text-red-500 uppercase tracking-widest flex items-center space-x-2">
-            <span>Round {race.round}</span>
-            {shouldShowReadOnlyState && (
-              <span className="bg-red-500/20 text-red-400 px-2 py-0.5 rounded-full flex items-center">
-                <Lock className="w-3 h-3 mr-1" /> Locked
+        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+          <div className="min-w-0">
+            <h1 className="text-3xl font-black italic tracking-tighter text-white md:text-4xl">{race.race_name}</h1>
+            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-400 md:text-base">
+              <span className="text-lg">{race.circuits?.emoji}</span>
+              <span>
+                {race.circuits?.name}, {race.circuits?.country}
               </span>
-            )}
+            </p>
+            <p className="mt-3 text-sm text-slate-300">{compactNote}</p>
           </div>
-          <h1 className="text-3xl md:text-5xl font-black italic tracking-tighter">
-            {race.race_name}
-          </h1>
-          <p className="text-xl text-slate-300 flex items-center space-x-2 pb-4">
-            <span className="text-2xl">{race.circuits?.emoji}</span>
-            <span>{race.circuits?.name}, {race.circuits?.country}</span>
-          </p>
+
+          <div className="flex flex-wrap gap-2 lg:justify-end">
+            <span className="rounded-full border border-white/10 bg-black/25 px-3 py-2 text-sm font-medium text-slate-300">
+              Lock {format(new Date(race.prediction_lock_at), 'MMM d, p')}
+            </span>
+            <span className="rounded-full border border-white/10 bg-black/25 px-3 py-2 text-sm font-medium text-slate-300">
+              Race {format(new Date(race.race_start_at), 'MMM d, p')}
+            </span>
+          </div>
         </div>
-      </div>
+      </section>
 
       {!shouldShowReadOnlyState && (
-        <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 flex items-start space-x-3 text-amber-500">
-          <AlertCircle className="w-5 h-5 mt-0.5 shrink-0" />
-          <div className="text-sm font-medium">
-            Predictions close exactly 5 minutes before FP1 starts. Ensure you lock in your choices before the weekend begins.
-          </div>
-        </div>
-      )}
-
-      {shouldShowReadOnlyState ? (
-        <div className="space-y-6 pb-12">
-          <div className="grid gap-6 md:grid-cols-2">
-            <section className="bg-card border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl">
-              <h2 className="text-2xl font-black italic tracking-tighter mb-6 flex items-center border-b border-white/5 pb-4">
-                <ClipboardList className="w-6 h-6 mr-2 text-red-500" /> YOUR ENTRY
-              </h2>
-
-              {prediction ? (
-                <div className="space-y-6">
-                  <div className="space-y-3">
-                    {predictionPodium.map((entry) => (
-                      <div key={entry.label} className="rounded-xl border border-white/5 bg-black/30 px-4 py-3">
-                        <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{entry.label}</div>
-                        <div className="mt-1 font-semibold text-slate-100">{entry.value}</div>
-                      </div>
-                    ))}
-                  </div>
-
-                  {typedBonusQuestions.length > 0 && (
-                    <div className="space-y-3">
-                      <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Bonus Answers</div>
-                      {typedBonusQuestions.map((question) => (
-                        <div key={question.id} className="rounded-xl border border-white/5 bg-black/30 px-4 py-3">
-                          <div className="font-semibold text-slate-200">{question.question_text}</div>
-                          <div className="mt-1 text-sm text-slate-400">
-                            {getBonusAnswerLabel(question, bonusAnswerMap.get(question.id))}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5 text-amber-300">
-                  Prediction window is closed and you did not submit an entry for this race.
-                </div>
-              )}
-            </section>
-
-            <section className="bg-card border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl">
-              <h2 className="text-2xl font-black italic tracking-tighter mb-6 flex items-center border-b border-white/5 pb-4">
-                <Trophy className="w-6 h-6 mr-2 text-red-500" /> RACE STATUS
-              </h2>
-
-              <div className="space-y-4">
-                <div className="rounded-xl border border-white/5 bg-black/30 px-4 py-3">
-                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Current State</div>
-                  <div className="mt-1 font-semibold text-slate-100">
-                    {effectiveStatus === 'locked' && 'Predictions locked. Waiting for the race to finish.'}
-                    {effectiveStatus === 'completed' && 'Race finished. Official scoring is still pending.'}
-                    {effectiveStatus === 'scored' && 'Race scored. Your points are final for this event.'}
-                    {effectiveStatus === 'cancelled' && 'This race was cancelled.'}
-                  </div>
-                </div>
-
-                {raceResult ? (
-                  <div className="space-y-3">
-                    <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Official Podium</div>
-                    {officialPodium.map((entry) => (
-                      <div key={entry.label} className="rounded-xl border border-white/5 bg-black/30 px-4 py-3">
-                        <div className="text-xs font-bold uppercase tracking-wider text-slate-500">{entry.label}</div>
-                        <div className="mt-1 font-semibold text-slate-100">{entry.value}</div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-xl border border-white/5 bg-black/30 px-4 py-3 text-slate-400">
-                    Official podium has not been entered yet.
-                  </div>
-                )}
-
-                {typedBonusQuestions.length > 0 && raceBonusAnswers && raceBonusAnswers.length > 0 && (
-                  <div className="space-y-3">
-                    <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Official Bonus Answers</div>
-                    {typedBonusQuestions.map((question) => (
-                      <div key={question.id} className="rounded-xl border border-white/5 bg-black/30 px-4 py-3">
-                        <div className="font-semibold text-slate-200">{question.question_text}</div>
-                        <div className="mt-1 text-sm text-slate-400">
-                          {getBonusAnswerLabel(question, officialBonusAnswerMap.get(question.id))}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </section>
-          </div>
-
-          {effectiveStatus === 'scored' && userScore && (
-            <section className="bg-card border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl">
-              <h2 className="text-2xl font-black italic tracking-tighter mb-6 flex items-center border-b border-white/5 pb-4">
-                <CircleHelp className="w-6 h-6 mr-2 text-red-500" /> SCORE BREAKDOWN
-              </h2>
-
-              <div className="grid gap-4 sm:grid-cols-3">
-                <div className="rounded-2xl border border-white/5 bg-black/30 p-5 text-center">
-                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Total</div>
-                  <div className="mt-2 text-4xl font-black italic text-red-500">{userScore.total_points}</div>
-                </div>
-                <div className="rounded-2xl border border-white/5 bg-black/30 p-5 text-center">
-                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Podium</div>
-                  <div className="mt-2 text-3xl font-black italic text-slate-100">{userScore.podium_points}</div>
-                </div>
-                <div className="rounded-2xl border border-white/5 bg-black/30 p-5 text-center">
-                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Bonus</div>
-                  <div className="mt-2 text-3xl font-black italic text-slate-100">{userScore.bonus_points}</div>
-                </div>
-              </div>
-
-              <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-                <div className="rounded-2xl border border-white/5 bg-black/30 p-5">
-                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Podium Recap</div>
-                  <div className="mt-2 text-lg font-bold text-white">
-                    {exactPodiumHits} exact, {shuffledPodiumHits} shuffled
-                  </div>
-                  <p className="mt-2 text-sm text-slate-400">
-                    {missedPodiumSpots === 0
-                      ? 'You had a driver on every podium slot.'
-                      : `${missedPodiumSpots} podium slot${missedPodiumSpots === 1 ? '' : 's'} missed completely.`}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-white/5 bg-black/30 p-5">
-                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Bonus Recap</div>
-                  <div className="mt-2 text-lg font-bold text-white">
-                    {typedBonusQuestions.length > 0 ? `${correctBonusCount}/${typedBonusQuestions.length}` : 'No bonus'}
-                  </div>
-                  <p className="mt-2 text-sm text-slate-400">
-                    {typedBonusQuestions.length > 0
-                      ? `Bonus answers matched the official outcome on ${correctBonusCount} question${correctBonusCount === 1 ? '' : 's'}.`
-                      : 'This race did not include bonus questions.'}
-                  </p>
-                </div>
-                <div className="rounded-2xl border border-white/5 bg-black/30 p-5">
-                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Global Movement</div>
-                  <div className="mt-2 text-lg font-bold text-white">{globalMovement.title}</div>
-                  <p className="mt-2 text-sm text-slate-400">{globalMovement.detail}</p>
-                </div>
-                <div className="rounded-2xl border border-white/5 bg-black/30 p-5">
-                  <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Tenant Movement</div>
-                  <div className="mt-2 text-lg font-bold text-white">{tenantMovement.title}</div>
-                  <p className="mt-2 text-sm text-slate-400">{tenantMovement.detail}</p>
-                </div>
-              </div>
-            </section>
-          )}
-
-          {effectiveStatus === 'scored' && !prediction && (
-            <section className="bg-card border border-white/10 rounded-3xl p-6 md:p-8 shadow-2xl">
-              <h2 className="text-2xl font-black italic tracking-tighter mb-4">MISSED WEEKEND IMPACT</h2>
-              <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-5 text-red-200">
-                This race counted as a missed weekend for your season. You can still review the official result and use it as context for the next prediction window.
-              </div>
-            </section>
-          )}
-        </div>
-      ) : (
         <PredictionForm
           race={race}
           drivers={activeDrivers}
@@ -469,6 +377,194 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
           existingBonusAnswers={predictionBonusAnswers}
           isLocked={isLocked}
         />
+      )}
+
+      {shouldShowReadOnlyState && (
+        <div className="grid gap-5 pb-12 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+          <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-2xl md:p-6">
+            <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Race Audit</div>
+                <h2 className="mt-1 text-xl font-black italic tracking-tight text-white md:text-2xl">
+                  {prediction ? 'Your Call vs Official' : 'Official Result'}
+                </h2>
+              </div>
+
+              {!prediction && (
+                <div className="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-xs font-medium uppercase tracking-[0.2em] text-amber-300">
+                  <Lock className="mr-2 h-4 w-4" />
+                  No entry submitted
+                </div>
+              )}
+            </div>
+
+            <div className="mt-4 hidden grid-cols-[4rem,minmax(0,1fr),minmax(0,1fr),auto] gap-3 px-3 text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500 md:grid">
+              <span>Slot</span>
+              <span>Your pick</span>
+              <span>Official</span>
+              <span>Result</span>
+            </div>
+
+            <div className="mt-3 space-y-2">
+              {(prediction ? predictionPodium : officialPodium).map((entry, index) => {
+                const officialEntry = officialPodium[index]
+                const tone = prediction
+                  ? getComparisonTone(entry.driverId, officialEntry?.driverId, actualPodiumIds)
+                  : 'miss'
+
+                return (
+                  <div
+                    key={entry.label}
+                    className={`grid gap-2 rounded-2xl border p-3 md:grid-cols-[4rem,minmax(0,1fr),minmax(0,1fr),auto] md:items-center ${
+                      prediction ? getComparisonToneClasses(tone) : 'border-white/10 bg-black/25 text-slate-100'
+                    }`}
+                  >
+                    <div className="text-sm font-black uppercase tracking-widest">{entry.label}</div>
+                    <div>
+                      <div className="text-[11px] font-bold uppercase tracking-[0.2em] opacity-70 md:hidden">Your pick</div>
+                      <div className="mt-1 text-sm font-semibold md:mt-0">{prediction ? entry.value : 'No entry'}</div>
+                    </div>
+                    <div>
+                      <div className="text-[11px] font-bold uppercase tracking-[0.2em] opacity-70 md:hidden">Official</div>
+                      <div className="mt-1 text-sm font-semibold md:mt-0">{officialEntry?.value || 'Awaiting official result'}</div>
+                    </div>
+                    {prediction && officialEntry && (
+                      <div className="justify-self-start rounded-full border border-current/20 bg-black/15 px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] md:justify-self-end">
+                        {tone === 'exact' ? 'Exact' : tone === 'podium' ? 'On podium' : 'Miss'}
+                      </div>
+                    )}
+                  </div>
+                )
+              })}
+            </div>
+
+            {typedBonusQuestions.length > 0 && (
+              <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-4">
+                <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Bonus Calls</div>
+                <div className="mt-3 space-y-2">
+                  {typedBonusQuestions.map((question) => {
+                    const predictedAnswer = bonusAnswerMap.get(question.id)
+                    const officialAnswer = officialBonusAnswerMap.get(question.id)
+                    const isCorrect = Boolean(predictedAnswer && officialAnswer && predictedAnswer === officialAnswer)
+
+                    return (
+                      <div key={question.id} className="rounded-2xl border border-white/8 bg-black/20 p-3">
+                        <div className="font-semibold text-slate-100">{question.question_text}</div>
+                        <div className="mt-2 grid gap-2 md:grid-cols-[minmax(0,1fr),minmax(0,1fr),auto] md:items-center">
+                          <div>
+                            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Your call</div>
+                            <div className="mt-1 text-sm text-slate-200">
+                              {prediction ? getBonusAnswerLabel(question, predictedAnswer) : 'No answer submitted'}
+                            </div>
+                          </div>
+                          <div>
+                            <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Official</div>
+                            <div className="mt-1 text-sm text-slate-200">
+                              {officialAnswer ? getBonusAnswerLabel(question, officialAnswer) : 'Awaiting official answer'}
+                            </div>
+                          </div>
+                          {prediction && officialAnswer && (
+                            <div
+                              className={`rounded-full border px-3 py-1 text-[11px] font-bold uppercase tracking-[0.2em] ${
+                                isCorrect
+                                  ? 'border-green-500/20 bg-green-500/10 text-green-300'
+                                  : 'border-red-500/20 bg-red-500/10 text-red-300'
+                              }`}
+                            >
+                              {isCorrect ? 'Correct' : 'Miss'}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </section>
+
+          <div className="space-y-4">
+            {effectiveStatus === 'scored' && userScore ? (
+              <>
+                <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-2xl md:p-6">
+                  <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Weekend</div>
+                  <div className="mt-4 grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-white/5 bg-black/30 p-4 text-center">
+                      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Total</div>
+                      <div className="mt-2 text-3xl font-black italic text-red-500">{userScore.total_points}</div>
+                    </div>
+                    <div className="rounded-2xl border border-white/5 bg-black/30 p-4 text-center">
+                      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Podium</div>
+                      <div className="mt-2 text-2xl font-black italic text-slate-100">{userScore.podium_points}</div>
+                    </div>
+                    <div className="rounded-2xl border border-white/5 bg-black/30 p-4 text-center">
+                      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Bonus</div>
+                      <div className="mt-2 text-2xl font-black italic text-slate-100">{userScore.bonus_points}</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-2xl border border-white/5 bg-black/30 p-4">
+                      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Podium read</div>
+                      <div className="mt-2 text-base font-bold text-white">
+                        {exactPodiumHits} exact · {shuffledPodiumHits} on podium
+                      </div>
+                      <div className="mt-1 text-sm text-slate-400">
+                        {missedPodiumSpots === 0
+                          ? 'Every slot landed on the podium.'
+                          : `${missedPodiumSpots} slot${missedPodiumSpots === 1 ? '' : 's'} missed completely.`}
+                      </div>
+                    </div>
+                    <div className="rounded-2xl border border-white/5 bg-black/30 p-4">
+                      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Bonus read</div>
+                      <div className="mt-2 text-base font-bold text-white">
+                        {typedBonusQuestions.length > 0 ? `${correctBonusCount}/${typedBonusQuestions.length} correct` : 'No bonus'}
+                      </div>
+                      <div className="mt-1 text-sm text-slate-400">
+                        {typedBonusQuestions.length > 0 ? 'Bonus points are included above.' : 'This round had no bonus questions.'}
+                      </div>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-2xl md:p-6">
+                  <div className="flex items-center text-xs font-bold uppercase tracking-[0.25em] text-slate-500">
+                    <Trophy className="mr-2 h-4 w-4 text-red-500" /> Table impact
+                  </div>
+
+                  <div className="mt-4 space-y-3">
+                    <div className="rounded-2xl border border-white/5 bg-black/30 p-4">
+                      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Everyone</div>
+                      <div className="mt-2 text-base font-bold text-white">{globalMovement.title}</div>
+                      <p className="mt-1 text-sm text-slate-400">{globalMovement.detail}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/5 bg-black/30 p-4">
+                      <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">My group</div>
+                      <div className="mt-2 text-base font-bold text-white">{groupMovement.title}</div>
+                      <p className="mt-1 text-sm text-slate-400">{groupMovement.detail}</p>
+                    </div>
+                    {!prediction && (
+                      <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm text-red-200">
+                        This round counts as a missed weekend in your season.
+                      </div>
+                    )}
+                  </div>
+                </section>
+              </>
+            ) : (
+              <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-2xl md:p-6">
+                <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Race status</div>
+                <div className="mt-3 rounded-2xl border border-white/5 bg-black/30 p-4 text-sm text-slate-300">
+                  {effectiveStatus === 'locked'
+                    ? 'The window is closed. Official results are not published yet.'
+                    : effectiveStatus === 'completed'
+                      ? 'The race is complete, but final scoring is still pending.'
+                      : 'This race is no longer open for prediction.'}
+                </div>
+              </section>
+            )}
+          </div>
+        </div>
       )}
     </div>
   )

@@ -10,20 +10,20 @@ const inter = Inter({ subsets: ['latin'] })
 export const metadata: Metadata = {
   metadataBase: new URL(getSiteUrl()),
   title: {
-    default: 'FLO-RMULA 1 Predictor',
-    template: '%s | FLO-RMULA 1 Predictor',
+    default: 'FLORMULA1 Predictor',
+    template: '%s | FLORMULA1 Predictor',
   },
   description: 'Predict F1 podiums, follow official race results, and climb your season leaderboard.',
   openGraph: {
-    title: 'FLO-RMULA 1 Predictor',
+    title: 'FLORMULA1 Predictor',
     description: 'Predict F1 podiums, follow official race results, and climb your season leaderboard.',
-    siteName: 'FLO-RMULA 1 Predictor',
+    siteName: 'FLORMULA1 Predictor',
     type: 'website',
     url: '/',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'FLO-RMULA 1 Predictor',
+    title: 'FLORMULA1 Predictor',
     description: 'Predict F1 podiums, follow official race results, and climb your season leaderboard.',
   },
 }
@@ -59,9 +59,11 @@ function NavbarFallback() {
     <nav className="sticky top-0 z-50 border-b border-white/10 bg-slate-900/50 backdrop-blur-md">
       <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8">
         <div className="flex min-h-16 items-center justify-between gap-3 py-3">
-          <div className="flex items-center space-x-1">
-            <span className="text-xl font-black italic tracking-tighter text-red-500 sm:text-2xl">FLO-</span>
-            <span className="text-xl font-black italic tracking-tighter text-slate-100 sm:text-2xl">RMULA 1</span>
+          <div className="inline-flex items-baseline whitespace-nowrap pr-1">
+            <span className="text-[1.35rem] font-black italic tracking-[-0.09em] sm:text-[1.6rem]">
+              <span className="text-red-500">FLO</span>
+              <span className="text-slate-100">RMULA1</span>
+            </span>
           </div>
           <div className="h-8 w-40 animate-pulse rounded-full bg-white/10" />
         </div>

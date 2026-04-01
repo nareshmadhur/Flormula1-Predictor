@@ -54,10 +54,10 @@ function getCategoryTitle(category: HistoryEntry['category']) {
 
 function getActionLabel(entry: HistoryEntry) {
   if (entry.category === 'upcoming') {
-    return entry.hasPredicted ? 'Edit Prediction' : 'Predict Now'
+    return entry.hasPredicted ? 'Edit pick' : 'Predict now'
   }
 
-  return 'View Race'
+  return 'Race recap'
 }
 
 function getCategoryOrder(category: HistoryEntry['category']) {
@@ -69,30 +69,30 @@ function getCategoryOrder(category: HistoryEntry['category']) {
 
 function getEntrySummary(status: RaceStatus, hasPredicted: boolean, score?: ScoreRow) {
   if (status === 'scored' && score) {
-    return `Finished with ${score.total_points} points: ${score.podium_points} from podium picks and ${score.bonus_points} from bonus answers.`
+    return `${score.total_points} pts total · ${score.podium_points} podium · ${score.bonus_points} bonus`
   }
 
   if (status === 'scored' && !hasPredicted) {
-    return 'No entry was submitted for this race, so it counted as 0 points in your season.'
+    return 'No entry submitted. This round counted as 0.'
   }
 
   if ((status === 'locked' || status === 'completed') && hasPredicted) {
     return status === 'locked'
-      ? 'Your prediction is locked in. The race weekend is still playing out.'
-      : 'The race has finished and your score will appear once official scoring is published.'
+      ? 'Entry locked in. Weekend is live.'
+      : 'Race finished. Final scoring is still pending.'
   }
 
   if ((status === 'locked' || status === 'completed') && !hasPredicted) {
     return status === 'locked'
-      ? 'The window closed without an entry, so this weekend is already a missed opportunity.'
-      : 'You missed this race and official scoring is still pending for everyone.'
+      ? 'The window closed without an entry.'
+      : 'Missed this race. Final scoring is still pending.'
   }
 
   if (hasPredicted) {
-    return 'Your prediction is entered and can still be edited before the lock deadline.'
+    return 'Entry saved. You can still edit before lock.'
   }
 
-  return 'Prediction window is open and this weekend still needs your entry.'
+  return 'Prediction window is open.'
 }
 
 export default async function UserHistoryPage() {
@@ -174,46 +174,40 @@ export default async function UserHistoryPage() {
   const exactHits = Array.from(scoreByRaceId.values()).reduce((sum, score) => sum + score.exact_hits, 0)
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="space-y-3">
-        <div>
+    <div className="space-y-6 animate-in fade-in duration-500">
+      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+        <div className="space-y-2">
           <h1 className="flex items-center text-3xl font-black italic tracking-tighter">
             <History className="mr-3 h-8 w-8 text-red-500" /> MY SEASON
           </h1>
-          <p className="text-slate-400">
-            See what you entered, what is still in flight, and which weekends slipped through.
-          </p>
+          <p className="text-sm text-slate-400">See what is entered, still live, scored, or missed.</p>
         </div>
-        <TenantContextBanner tenantName={tenantContext.tenantName} label="Competing in" />
+        <TenantContextBanner tenantName={tenantContext.tenantName} label="Playing in" />
       </div>
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
-          <div className="text-sm font-bold uppercase tracking-wider text-slate-500">Entered Weekends</div>
-          <div className="mt-3 text-4xl font-black italic text-white">{enteredCount}</div>
-          <p className="mt-2 text-sm text-slate-400">Races where you submitted a podium prediction.</p>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+        <div className="rounded-2xl border border-white/5 bg-card p-4 shadow-xl">
+          <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Entered</div>
+          <div className="mt-2 text-3xl font-black italic text-white">{enteredCount}</div>
         </div>
-        <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
-          <div className="text-sm font-bold uppercase tracking-wider text-slate-500">Missed Weekends</div>
-          <div className="mt-3 text-4xl font-black italic text-white">{missedCount}</div>
-          <p className="mt-2 text-sm text-slate-400">Closed weekends that counted without your entry.</p>
+        <div className="rounded-2xl border border-white/5 bg-card p-4 shadow-xl">
+          <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Missed</div>
+          <div className="mt-2 text-3xl font-black italic text-white">{missedCount}</div>
         </div>
-        <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
-          <div className="text-sm font-bold uppercase tracking-wider text-slate-500">Scored Points</div>
-          <div className="mt-3 text-4xl font-black italic text-red-500">{totalPoints}</div>
-          <p className="mt-2 text-sm text-slate-400">Your confirmed points total for Season {currentSeason}.</p>
+        <div className="rounded-2xl border border-white/5 bg-card p-4 shadow-xl">
+          <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Points</div>
+          <div className="mt-2 text-3xl font-black italic text-red-500">{totalPoints}</div>
         </div>
-        <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
-          <div className="text-sm font-bold uppercase tracking-wider text-slate-500">Exact Hits</div>
-          <div className="mt-3 text-4xl font-black italic text-white">{exactHits}</div>
-          <p className="mt-2 text-sm text-slate-400">Podium slots you nailed perfectly so far.</p>
+        <div className="rounded-2xl border border-white/5 bg-card p-4 shadow-xl">
+          <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Exact</div>
+          <div className="mt-2 text-3xl font-black italic text-white">{exactHits}</div>
         </div>
       </div>
 
       <div className="space-y-6">
         {groupedEntries.length === 0 ? (
           <div className="rounded-2xl border border-white/5 bg-card p-12 text-center text-slate-400 shadow-xl">
-            Your season history is still empty. The next race weekend will start the story.
+            Your season story starts with the next race weekend.
           </div>
         ) : (
           (['awaiting', 'scored', 'missed', 'upcoming'] as const).map((category) => {
@@ -235,13 +229,13 @@ export default async function UserHistoryPage() {
                   {sectionEntries.map((entry) => (
                     <div
                       key={entry.race.id}
-                      className="flex flex-col gap-6 rounded-2xl border border-white/5 bg-card p-6 shadow-xl transition-colors hover:bg-white/[0.02] md:flex-row md:items-center md:justify-between md:p-8"
+                    className="flex flex-col gap-4 rounded-2xl border border-white/5 bg-card p-5 shadow-xl transition-colors hover:bg-white/[0.02] md:flex-row md:items-center md:justify-between"
                     >
                       <div className="flex-1 space-y-2">
                         <div className="text-sm font-bold uppercase tracking-widest text-red-500">
                           Round {entry.race.round}
                         </div>
-                        <h3 className="text-2xl font-bold">{entry.race.race_name}</h3>
+                        <h3 className="text-xl font-bold">{entry.race.race_name}</h3>
                         <div className="text-sm text-slate-400">
                           {entry.race.circuits?.emoji} {entry.race.circuits?.name}, {entry.race.circuits?.country}
                         </div>

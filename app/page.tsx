@@ -103,8 +103,8 @@ export default async function HomePage() {
 
   const standingsTitle =
     activeView === 'group' && groupContext.tenantName
-      ? `${groupContext.tenantName.toUpperCase()} STANDINGS`
-      : 'SEASON STANDINGS'
+      ? `${groupContext.tenantName} standings`
+      : 'Season standings'
 
   return (
     <div className="space-y-6 animate-in fade-in duration-700">
@@ -113,29 +113,25 @@ export default async function HomePage() {
           <Trophy className="h-52 w-52 text-red-500" />
         </div>
 
-        <div className="relative space-y-6 p-8 lg:p-10">
+        <div className="relative space-y-5 p-6 md:p-8 lg:p-9">
           <div className="flex flex-wrap items-center gap-3">
             <span className="inline-flex items-center rounded-full border border-red-500/30 bg-red-500/15 px-3 py-1 text-sm font-bold uppercase tracking-wider text-red-300">
               Season {currentSeason}
             </span>
             {activeView === 'group' && groupContext.tenantName && (
               <span className="rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm font-medium text-slate-200">
-                Group: {groupContext.tenantName}
+                Playing in {groupContext.tenantName}
               </span>
             )}
           </div>
 
-          <div className="space-y-4">
+          <div className="space-y-3">
             <h1 className="text-4xl font-black italic tracking-tighter md:text-5xl">{standingsTitle}</h1>
 
             {user && currentUserRank && currentUserEntry ? (
               <div className="flex flex-wrap gap-3 text-sm font-bold uppercase tracking-widest text-slate-200">
-                <span className="rounded-full border border-white/10 bg-black/30 px-4 py-2">#{currentUserRank}</span>
                 <span className="rounded-full border border-white/10 bg-black/30 px-4 py-2">
-                  {currentUserEntry.total_points} pts
-                </span>
-                <span className="rounded-full border border-white/10 bg-black/30 px-4 py-2">
-                  {currentUserEntry.exact_hits} exact
+                  #{currentUserRank} · {currentUserEntry.total_points} pts · {currentUserEntry.exact_hits} exact
                 </span>
               </div>
             ) : (
@@ -150,7 +146,7 @@ export default async function HomePage() {
                 href={activeView === 'group' ? '/leaderboard?view=tenant' : '/leaderboard?view=global'}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-white/10"
               >
-                Open full leaderboard
+                Full leaderboard
                 <ArrowRight className="h-4 w-4" />
               </PendingLink>
             </div>
@@ -210,14 +206,14 @@ export default async function HomePage() {
                   href={activeView === 'group' ? '/leaderboard?view=tenant' : '/leaderboard?view=global'}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-all hover:bg-red-500"
                 >
-                  Go To Standings
+                  Standings
                   <ChevronRight className="h-5 w-5" />
                 </PendingLink>
                 <PendingLink
                   href="/predictions"
                   className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-white transition-colors hover:bg-white/10"
                 >
-                  Open Season Dashboard
+                  My season
                 </PendingLink>
               </>
             ) : (
@@ -226,7 +222,7 @@ export default async function HomePage() {
                   href="/signup"
                   className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-all hover:bg-red-500"
                 >
-                  Join The Grid
+                  Join now
                   <ChevronRight className="h-5 w-5" />
                 </PendingLink>
                 <PendingLink
@@ -281,7 +277,7 @@ export default async function HomePage() {
                 href={user ? `/race/${nextRace.id}/predict` : `/race/${nextRace.id}`}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
               >
-                {user ? 'Go To Prediction Page' : 'Open Race Hub'}
+                {user ? 'Predict this race' : 'Race hub'}
                 <ChevronRight className="h-5 w-5" />
               </PendingLink>
             </div>
@@ -315,7 +311,7 @@ export default async function HomePage() {
                 href={`/race/${latestScored.id}`}
                 className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-bold text-white transition-colors hover:bg-white/10"
               >
-                View Race Details
+                Race recap
                 <ArrowRight className="h-4 w-4" />
               </PendingLink>
             </div>
