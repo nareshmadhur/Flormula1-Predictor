@@ -21,7 +21,9 @@ Extend the product beyond the authenticated core through discoverability, canoni
 - sitemap, robots, and root metadata cleanup are already in place
 - P1 is complete enough to resume P2 execution
 - public `/season` hub now connects home, race hubs, and the leaderboard into a complete logged-out season journey
-- next execution slice is canonical schedule and timing ingestion before reminder loops
+- OpenF1-backed schedule import review is now in `/admin/schedule`, with full-session sync into the shared race calendar
+- `/about` now documents the maintainer and user-facing external dependencies, including OpenF1
+- next execution slice is reminder and follow-up loops
 
 ## Scope
 

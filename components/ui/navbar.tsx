@@ -28,7 +28,11 @@ export default async function Navbar() {
     isAdmin = adminAccess?.isAdmin ?? false
   }
 
-  const primaryLinks = [{ href: '/leaderboard', label: 'Leaderboard' }]
+  const primaryLinks = [
+    { href: '/leaderboard', label: 'Leaderboard' },
+    { href: '/season', label: 'Season' },
+    { href: '/about', label: 'About' },
+  ]
 
   if (user) {
     primaryLinks.push(

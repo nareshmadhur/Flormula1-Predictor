@@ -115,6 +115,14 @@ export default async function AdminDashboardPage() {
              <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-red-500 transition-colors" />
           </Link>
 
+          <Link href="/admin/schedule" className="bg-card border border-white/5 p-6 rounded-2xl shadow-xl hover:bg-white/[0.02] transition-colors flex items-center justify-between group block">
+             <div>
+               <h2 className="text-xl font-bold mb-1">Schedule Sync</h2>
+               <p className="text-sm text-slate-400">Review OpenF1 timings before updating the season calendar</p>
+             </div>
+             <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-red-500 transition-colors" />
+          </Link>
+
           <Link href="/admin/tenants" className="bg-card border border-white/5 p-6 rounded-2xl shadow-xl hover:bg-white/[0.02] transition-colors flex items-center justify-between group block">
              <div>
                <h2 className="text-xl font-bold mb-1">Tenants & Access</h2>

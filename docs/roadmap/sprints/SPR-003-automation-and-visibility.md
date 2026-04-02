@@ -9,7 +9,8 @@ Add canonical race-data ingestion and outward-facing growth surfaces after the t
 - `P2` is now active.
 - Public `/race/[id]` pages, sitemap coverage, and root metadata cleanup are already in place.
 - Public `/season` is now shipped and connects home, race hubs, and the leaderboard into one logged-out season journey.
-- Automatic schedule ingestion is now the next slice in line.
+- OpenF1-backed schedule review and apply is now shipped in `/admin/schedule`.
+- The next slice in line is reminder and follow-up loops.
 
 ## Planned Increment Links
 

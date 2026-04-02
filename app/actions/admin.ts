@@ -21,6 +21,14 @@ type NewRacePayload = {
   sprint_quali_at?: string
 }
 
+function stripSourceMetadata<T extends Record<string, unknown>>(payload: T) {
+  const clone = { ...payload }
+  delete clone.schedule_source
+  delete clone.schedule_source_url
+  delete clone.schedule_synced_at
+  return clone
+}
+
 function getPredictionLockAt(fp1At: string | null, raceStartAt: Date) {
   const lockSource = fp1At ? new Date(fp1At) : raceStartAt
   return new Date(lockSource.getTime() - 5 * 60000)
@@ -125,22 +133,43 @@ export async function updateRace(formData: FormData) {
   const circuitId = formData.get('circuit_id') as string
   const raceStartAt = new Date(formData.get('race_start_at') as string)
   const fp1At = formData.get('fp1_at') as string | null
+  const fp2At = formData.get('fp2_at') as string | null
+  const fp3At = formData.get('fp3_at') as string | null
+  const qualiAt = formData.get('quali_at') as string | null
+  const sprintAt = formData.get('sprint_at') as string | null
+  const sprintQualiAt = formData.get('sprint_quali_at') as string | null
 
   const lockAt = getPredictionLockAt(fp1At, raceStartAt)
 
-  const { error } = await supabase.from('races').update({
+  const payload = {
     race_name: raceName,
     circuit_id: circuitId,
     race_start_at: raceStartAt.toISOString(),
     fp1_at: fp1At || null,
+    fp2_at: fp2At || null,
+    fp3_at: fp3At || null,
+    quali_at: qualiAt || null,
+    sprint_at: sprintAt || null,
+    sprint_quali_at: sprintQualiAt || null,
     prediction_lock_at: lockAt.toISOString(),
-  }).eq('id', raceId)
+    schedule_source: 'manual',
+    schedule_source_url: null,
+    schedule_synced_at: null,
+  }
+
+  let { error } = await supabase.from('races').update(payload).eq('id', raceId)
+
+  if (error && error.code === 'PGRST204' && error.message?.includes('schedule_source')) {
+    const retry = await supabase.from('races').update(stripSourceMetadata(payload)).eq('id', raceId)
+    error = retry.error
+  }
 
   if (error) throw new Error('Failed to update race')
 
   revalidatePath('/admin')
   revalidatePath(`/admin/races/${raceId}`)
   revalidatePath('/')
+  revalidatePath('/season')
   revalidatePath('/predictions')
   revalidatePath(`/race/${raceId}`)
   revalidatePath(`/race/${raceId}/predict`)

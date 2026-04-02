@@ -20,6 +20,11 @@ type RaceRecord = {
   circuit_id: string
   race_start_at: string
   fp1_at?: string | null
+  fp2_at?: string | null
+  fp3_at?: string | null
+  quali_at?: string | null
+  sprint_at?: string | null
+  sprint_quali_at?: string | null
 }
 
 type DriverRecord = {
@@ -251,11 +256,33 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
                   <label className="block text-sm font-medium text-slate-400 mb-1">Race Start (UTC)</label>
                   <input name="race_start_at" type="datetime-local" defaultValue={new Date(typedRace.race_start_at).toISOString().slice(0, 16)} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
                </div>
-               <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">FP1 Start (UTC)</label>
-                  <input name="fp1_at" type="datetime-local" defaultValue={typedRace.fp1_at ? new Date(typedRace.fp1_at).toISOString().slice(0, 16) : ''} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
-                  <p className="mt-2 text-xs text-slate-500">Predictions now lock automatically 5 minutes before FP1. If FP1 is blank, the app temporarily falls back to race start.</p>
+               <div className="grid gap-4 md:grid-cols-2">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">FP1 Start (UTC)</label>
+                    <input name="fp1_at" type="datetime-local" defaultValue={typedRace.fp1_at ? new Date(typedRace.fp1_at).toISOString().slice(0, 16) : ''} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">FP2 Start (UTC)</label>
+                    <input name="fp2_at" type="datetime-local" defaultValue={typedRace.fp2_at ? new Date(typedRace.fp2_at).toISOString().slice(0, 16) : ''} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">FP3 Start (UTC)</label>
+                    <input name="fp3_at" type="datetime-local" defaultValue={typedRace.fp3_at ? new Date(typedRace.fp3_at).toISOString().slice(0, 16) : ''} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Qualifying (UTC)</label>
+                    <input name="quali_at" type="datetime-local" defaultValue={typedRace.quali_at ? new Date(typedRace.quali_at).toISOString().slice(0, 16) : ''} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Sprint Qualifying (UTC)</label>
+                    <input name="sprint_quali_at" type="datetime-local" defaultValue={typedRace.sprint_quali_at ? new Date(typedRace.sprint_quali_at).toISOString().slice(0, 16) : ''} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Sprint (UTC)</label>
+                    <input name="sprint_at" type="datetime-local" defaultValue={typedRace.sprint_at ? new Date(typedRace.sprint_at).toISOString().slice(0, 16) : ''} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
+                  </div>
                </div>
+               <p className="mt-2 text-xs text-slate-500">Predictions lock automatically at FP1 - 5m. Manual edits here override imported schedule data.</p>
                <button className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl px-4 py-3 mt-4 transition-colors">
                  Update Details
                </button>

@@ -7,6 +7,7 @@ FLO-RMULA 1 is a Formula 1 prediction pool built with Next.js and Supabase. User
 ### User Experience
 - Leaderboard-first public homepage with standings as the main story
 - Public season hub in `/season` for upcoming weekends, recent results, and season standings
+- About page in `/about` for maintainer references and product dependencies
 - Season dashboard for the current season
 - Podium prediction flow for open races
 - Locked, completed, and scored race states with read-only summaries
@@ -23,6 +24,7 @@ FLO-RMULA 1 is a Formula 1 prediction pool built with Next.js and Supabase. User
 - Tenant and account access management in `/admin/tenants`
 - Tenant operations workspace in `/admin/tenant`
 - Race calendar management
+- OpenF1-backed schedule sync review in `/admin/schedule`
 - Bonus question management per race
 - Official result entry
 - Score calculation and leaderboard cache rebuild
@@ -105,7 +107,9 @@ Important app areas:
 - `app/leaderboard/page.tsx`: current-season leaderboard
 - `app/me/profile/page.tsx`: member profile and display-name settings
 - `app/admin/*`: admin workflows
+- `app/about/page.tsx`: credits and dependency references
 - `app/actions/*`: server actions
+- `utils/openf1.ts`: OpenF1 schedule ingestion and review mapping
 - `supabase/migrations/*`: schema and data model
 
 ## Data Model
@@ -189,6 +193,7 @@ npm run lint
 - No automated test suite is currently included.
 - Some repo-wide lint issues still exist outside the most recently updated files.
 - Race schedule and results are still managed manually.
+- Schedule and timing import now supports OpenF1 review/apply, but official results remain manual.
 - Tenant admins currently have a read-focused operations workspace; invitation and self-serve member management are still future work.
 
 ## Roadmap
@@ -201,5 +206,5 @@ npm run lint
 
 ### Step 3
 - public season and race result surfaces
-- automated schedule and timing ingestion
+- automated schedule and timing ingestion with OpenF1 review/apply
 - reminder and retention loops
