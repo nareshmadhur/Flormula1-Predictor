@@ -4,7 +4,6 @@ import { revalidatePath } from 'next/cache'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { rebuildLeaderboardForSeason } from '@/utils/leaderboard'
 import { assertPlatformAdmin } from '@/utils/admin-access'
-import { createClient } from '@/utils/supabase/server'
 
 type NewRacePayload = {
   season: number
@@ -203,7 +202,7 @@ export async function updateBonusQuestion(formData: FormData) {
  * This should be called periodically to ensure race statuses are accurate
  */
 export async function updateRaceStatuses() {
-  const supabase = await createClient()
+  const { supabase } = await assertPlatformAdmin()
 
   // Get all races
   const { data: races, error } = await supabase
@@ -238,15 +237,22 @@ export async function updateRaceStatuses() {
     return { success: true, message: 'All race statuses are up to date' }
   }
 
-  // Update races in batches
-  const { error: updateError } = await supabase
-    .from('races')
-    .upsert(updates, { onConflict: 'id' })
+  for (const update of updates) {
+    const { error: updateError } = await supabase
+      .from('races')
+      .update({ status: update.status })
+      .eq('id', update.id)
 
-  if (updateError) {
-    console.error('Error updating race statuses:', updateError)
-    return { error: 'Failed to update race statuses' }
+    if (updateError) {
+      console.error('Error updating race status:', update, updateError)
+      return { error: 'Failed to update race statuses' }
+    }
   }
+
+  revalidatePath('/admin')
+  revalidatePath('/')
+  revalidatePath('/predictions')
+  revalidatePath('/leaderboard')
 
   return {
     success: true,
