@@ -6,6 +6,7 @@ FLO-RMULA 1 is a Formula 1 prediction pool built with Next.js and Supabase. User
 
 ### User Experience
 - Leaderboard-first public homepage with standings as the main story
+- Public season hub in `/season` for upcoming weekends, recent results, and season standings
 - Season dashboard for the current season
 - Podium prediction flow for open races
 - Locked, completed, and scored race states with read-only summaries
@@ -199,6 +200,6 @@ npm run lint
 - completed tenant product experience work, including tenant ops, clearer tenant/global context, missed-weekend visibility, richer scored-race recap, explainable leaderboard detail, and self-managed profile naming
 
 ### Step 3
-- public result pages and visibility mechanics
+- public season and race result surfaces
 - automated schedule and timing ingestion
 - reminder and retention loops

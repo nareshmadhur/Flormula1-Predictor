@@ -47,6 +47,12 @@ type PublicRaceBonusAnswer = {
   correct_bonus_option_id: string
 }
 
+type PublicRaceNeighbor = {
+  id: string
+  round: number
+  race_name: string
+}
+
 export const getPublicRacePageData = cache(async (raceId: string) => {
   const supabase = createPublicClient()
 
@@ -82,12 +88,28 @@ export const getPublicRacePageData = cache(async (raceId: string) => {
     return null
   }
 
+  const { data: seasonRaces } = await supabase
+    .from('races')
+    .select('id, round, race_name')
+    .eq('season', raceResponse.data.season)
+    .order('round', { ascending: true })
+
+  const orderedSeasonRaces = (seasonRaces || []) as PublicRaceNeighbor[]
+  const currentIndex = orderedSeasonRaces.findIndex((race) => race.id === raceId)
+  const previousRace = currentIndex > 0 ? orderedSeasonRaces[currentIndex - 1] : null
+  const nextRace =
+    currentIndex >= 0 && currentIndex < orderedSeasonRaces.length - 1
+      ? orderedSeasonRaces[currentIndex + 1]
+      : null
+
   return {
     race: raceResponse.data as PublicRaceRecord,
     drivers: (driversResponse.data || []) as PublicRaceDriver[],
     bonusQuestions: (bonusQuestionsResponse.data || []) as PublicRaceBonusQuestion[],
     raceResult: (raceResultResponse.data || null) as PublicRaceResult | null,
     raceBonusAnswers: (raceBonusAnswersResponse.data || []) as PublicRaceBonusAnswer[],
+    previousRace,
+    nextRace,
   }
 })
 

@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { AlertCircle, ClipboardList, Lock, TimerReset, Trophy } from 'lucide-react'
 import { format, formatDistanceToNowStrict } from 'date-fns'
 import PredictionForm from './prediction-form'
+import { getRoundLabel } from '@/utils/race-copy'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { getUserTenantContext } from '@/utils/tenant'
 import { TenantAssignmentRequired } from '@/components/ui/tenant-assignment-required'
@@ -331,7 +332,7 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-bold uppercase tracking-[0.25em] text-red-500">{stateLabel}</span>
           <span className="rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-xs font-medium text-slate-300">
-            R{race.round}
+            {getRoundLabel(race.round)}
           </span>
           {effectiveStatus === 'upcoming' && lockCountdown && (
             <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-xs font-medium text-slate-300">

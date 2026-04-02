@@ -12,7 +12,7 @@ This folder is the working execution board for product and engineering increment
 ## Quick Links
 
 ### Current Sprint
-- [SPR-002 Tenant-Aware Experience](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/sprints/SPR-002-tenant-aware-experience.md>)
+- [SPR-003 Automation And Visibility](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/sprints/SPR-003-automation-and-visibility.md>)
 
 ### Planned Sprints
 - [SPR-001 Tenant Foundation](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/sprints/SPR-001-tenant-foundation.md>)
@@ -24,7 +24,7 @@ This folder is the working execution board for product and engineering increment
 | --- | --- | --- | --- | --- |
 | [P0-001](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/increments/P0-001-tenant-foundation-and-safety.md>) | P0 | Tenant foundation and safety | SPR-001, SPR-002 | Completed |
 | [P1-001](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/increments/P1-001-tenant-product-experience.md>) | P1 | Tenant product experience | SPR-002 | Completed |
-| [P2-001](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/increments/P2-001-visibility-and-automation.md>) | P2 | Visibility and automation | SPR-003 | Parked after first slice |
+| [P2-001](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/increments/P2-001-visibility-and-automation.md>) | P2 | Visibility and automation | SPR-003 | In progress |
 
 ## Recommended Increment Template
 

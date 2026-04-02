@@ -7,6 +7,7 @@ import { PendingLink } from '@/components/ui/pending-link'
 import { getUserTenantContext } from '@/utils/tenant'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { getCompetitionRank, sortCompetitionStandings } from '@/utils/competition'
+import { getRoundLabel } from '@/utils/race-copy'
 
 export const revalidate = 0
 
@@ -135,7 +136,7 @@ export default async function HomePage() {
                 </span>
               </div>
             ) : (
-              <div className="text-sm font-medium text-slate-400">Predictions lock 5 minutes before FP1.</div>
+              <div className="text-sm font-medium text-slate-400">Lock: FP1 - 5m</div>
             )}
           </div>
 
@@ -154,7 +155,7 @@ export default async function HomePage() {
             <div className="space-y-3">
               {featuredLeaderboard.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-white/10 px-5 py-8 text-center text-sm italic text-slate-500">
-                  No scored races yet.
+                  No standings yet.
                 </div>
               ) : (
                 featuredLeaderboard.map((entry, index) => {
@@ -226,10 +227,10 @@ export default async function HomePage() {
                   <ChevronRight className="h-5 w-5" />
                 </PendingLink>
                 <PendingLink
-                  href="/leaderboard"
+                  href="/season"
                   className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-white transition-colors hover:bg-white/10"
                 >
-                  Browse Standings
+                  Season
                 </PendingLink>
               </>
             )}
@@ -246,6 +247,9 @@ export default async function HomePage() {
           {nextRace ? (
             <div className="mt-4 space-y-4">
               <div>
+                <div className="text-xs font-bold uppercase tracking-widest text-red-500">
+                  {getRoundLabel(nextRace.round)}
+                </div>
                 <h2 className="text-3xl font-black italic tracking-tight text-white">{nextRace.race_name}</h2>
                 <p className="mt-1 text-slate-400">
                   {nextRace.circuits?.emoji} {nextRace.circuits?.name}, {nextRace.circuits?.country}
@@ -273,17 +277,26 @@ export default async function HomePage() {
                 </div>
               </div>
 
-              <PendingLink
-                href={user ? `/race/${nextRace.id}/predict` : `/race/${nextRace.id}`}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
-              >
-                {user ? 'Predict this race' : 'Race hub'}
-                <ChevronRight className="h-5 w-5" />
-              </PendingLink>
+              <div className="flex flex-wrap gap-4 pt-1">
+                <PendingLink
+                  href={user ? `/race/${nextRace.id}/predict` : `/race/${nextRace.id}`}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
+                >
+                  {user ? 'Predict' : 'Race'}
+                  <ChevronRight className="h-5 w-5" />
+                </PendingLink>
+                <PendingLink
+                  href="/season"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-bold text-white transition-colors hover:bg-white/10"
+                >
+                  Season
+                  <ArrowRight className="h-4 w-4" />
+                </PendingLink>
+              </div>
             </div>
           ) : (
             <div className="mt-4 rounded-2xl border border-dashed border-white/10 px-4 py-8 text-center text-slate-500">
-              The season calendar is quiet right now.
+              No upcoming race.
             </div>
           )}
         </section>
@@ -297,7 +310,7 @@ export default async function HomePage() {
             <div className="mt-4 space-y-4">
               <div>
                 <div className="text-xs font-bold uppercase tracking-widest text-red-500">
-                  Round {latestScored.round}
+                  {getRoundLabel(latestScored.round)}
                 </div>
                 <h2 className="mt-2 text-3xl font-black italic tracking-tight text-white">
                   {latestScored.race_name}
@@ -307,17 +320,25 @@ export default async function HomePage() {
                 </p>
               </div>
 
-              <PendingLink
-                href={`/race/${latestScored.id}`}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-bold text-white transition-colors hover:bg-white/10"
-              >
-                Race recap
-                <ArrowRight className="h-4 w-4" />
-              </PendingLink>
+              <div className="flex flex-wrap gap-4 pt-1">
+                <PendingLink
+                  href={`/race/${latestScored.id}`}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-bold text-white transition-colors hover:bg-white/10"
+                >
+                  Recap
+                  <ArrowRight className="h-4 w-4" />
+                </PendingLink>
+                <PendingLink
+                  href="/season"
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-4 py-3 font-bold text-white transition-colors hover:bg-white/10"
+                >
+                  Season
+                </PendingLink>
+              </div>
             </div>
           ) : (
             <div className="mt-4 rounded-2xl border border-dashed border-white/10 px-4 py-8 text-center text-slate-500">
-              Results will appear here once the first race is scored.
+              No results yet.
             </div>
           )}
         </section>

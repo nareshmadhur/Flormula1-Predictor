@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { AlertCircle, Calendar, ChevronRight, Clock3, MapPin, Trophy } from 'lucide-react'
 import { format, formatDistanceToNowStrict } from 'date-fns'
 import { redirect } from 'next/navigation'
+import { getRoundLabel } from '@/utils/race-copy'
 import { getEffectiveRaceStatus, RaceStatus } from '@/utils/race-status'
 import { getCurrentSeason } from '@/utils/season'
 import { getUserTenantContext } from '@/utils/tenant'
@@ -290,7 +291,7 @@ function RaceListCard({
       <div className="flex flex-col gap-4 xl:grid xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_auto] xl:items-center">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <span className="text-xs font-bold uppercase tracking-widest text-red-500">Round {race.round}</span>
+            <span className="text-xs font-bold uppercase tracking-widest text-red-500">{getRoundLabel(race.round)}</span>
             <span className="rounded-full border border-white/10 bg-black/30 px-2.5 py-1 text-xs font-medium text-slate-300">
               {getRaceStatusLabel(status)}
             </span>
@@ -513,6 +514,9 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-bold uppercase tracking-widest text-red-500">
                     {heroContent.eyebrow}
+                  </span>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-slate-300">
+                    {getRoundLabel(hero.race.round)}
                   </span>
                   <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-slate-300">
                     {getRaceStatusLabel(getEffectiveRaceStatus(hero.race))}

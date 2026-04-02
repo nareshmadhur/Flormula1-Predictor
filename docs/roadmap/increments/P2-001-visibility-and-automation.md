@@ -19,7 +19,9 @@ Extend the product beyond the authenticated core through discoverability, canoni
 
 - public `/race/[id]` hub is already shipped as the first outward-facing slice
 - sitemap, robots, and root metadata cleanup are already in place
-- the broader P2 work is intentionally paused until P1 is complete
+- P1 is complete enough to resume P2 execution
+- public `/season` hub now connects home, race hubs, and the leaderboard into a complete logged-out season journey
+- next execution slice is canonical schedule and timing ingestion before reminder loops
 
 ## Scope
 
@@ -59,4 +61,4 @@ Extend the product beyond the authenticated core through discoverability, canoni
 
 ## Status
 
-Parked after first slice
+In progress

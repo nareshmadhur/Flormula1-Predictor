@@ -8,6 +8,7 @@ import {
   getDriverLabel,
   getPublicRacePageData,
 } from '@/utils/race-page'
+import { getRoundLabel } from '@/utils/race-copy'
 import { getAbsoluteUrl } from '@/utils/site'
 import { PendingLink } from '@/components/ui/pending-link'
 
@@ -27,22 +28,22 @@ function getStatusLabel(status: RaceStatus) {
 
 function getStatusDescription(status: RaceStatus) {
   if (status === 'upcoming') {
-    return 'Check the schedule, review bonus questions, and head into the prediction flow before lock.'
+    return 'Open until FP1 minus five minutes.'
   }
 
   if (status === 'locked') {
-    return 'Predictions are closed. Official results will appear here once race control finishes the pipeline.'
+    return 'Predictions are closed.'
   }
 
   if (status === 'completed') {
-    return 'The race is finished. Official podium and scoring are still waiting to be published.'
+    return 'Results pending.'
   }
 
   if (status === 'scored') {
-    return 'Official results are published. Share this page or jump into your personal recap.'
+    return 'Results are live.'
   }
 
-  return 'This race is no longer active.'
+  return 'This race was cancelled.'
 }
 
 function getMetadataDescription(raceName: string, status: RaceStatus) {
@@ -100,7 +101,7 @@ export default async function PublicRacePage({ params }: PageProps) {
     notFound()
   }
 
-  const { race, drivers, bonusQuestions, raceResult, raceBonusAnswers } = raceData
+  const { race, drivers, bonusQuestions, raceResult, raceBonusAnswers, previousRace, nextRace } = raceData
   const effectiveStatus = getEffectiveRaceStatus(race)
   const officialBonusAnswerMap = new Map(
     raceBonusAnswers.map((answer) => [answer.bonus_question_id, answer.correct_bonus_option_id])
@@ -127,7 +128,7 @@ export default async function PublicRacePage({ params }: PageProps) {
               Season {race.season}
             </span>
             <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-sm font-medium text-slate-200">
-              Round {race.round}
+              {getRoundLabel(race.round)}
             </span>
             <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-sm font-medium text-slate-200">
               {getStatusLabel(effectiveStatus)}
@@ -165,23 +166,29 @@ export default async function PublicRacePage({ params }: PageProps) {
             </div>
             <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
               <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Public page</div>
-              <div className="mt-2 text-sm font-medium text-slate-300">Schedule, status, and published results live here.</div>
+              <div className="mt-2 text-sm font-medium text-slate-300">Schedule and results.</div>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-4">
+            <PendingLink
+              href="/season"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
+            >
+              Season
+            </PendingLink>
             <PendingLink
               href="/leaderboard"
               className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
             >
-              Leaderboard
+              Standings
             </PendingLink>
             {effectiveStatus === 'upcoming' && (
               <PendingLink
                 href={`/race/${race.id}/predict`}
                 className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-all hover:bg-red-500"
               >
-                Predict This Race
+                Predict
                 <ChevronRight className="ml-1 h-5 w-5" />
               </PendingLink>
             )}
@@ -206,7 +213,7 @@ export default async function PublicRacePage({ params }: PageProps) {
             </div>
           ) : (
             <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5 text-amber-200">
-              Official podium has not been published yet. This page will update once results are entered.
+              Official podium pending.
             </div>
           )}
         </section>
@@ -218,7 +225,7 @@ export default async function PublicRacePage({ params }: PageProps) {
 
           {bonusQuestions.length === 0 ? (
             <div className="rounded-2xl border border-white/5 bg-black/30 p-5 text-slate-400">
-              No bonus questions were configured for this race.
+              No bonus questions.
             </div>
           ) : (
             <div className="space-y-3">
@@ -240,18 +247,34 @@ export default async function PublicRacePage({ params }: PageProps) {
         </section>
       </div>
 
-      <section className="flex flex-wrap gap-3">
+      <section className="flex flex-wrap gap-4">
+        {previousRace && (
+          <PendingLink
+            href={`/race/${previousRace.id}`}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
+          >
+            {getRoundLabel(previousRace.round)}
+          </PendingLink>
+        )}
+        {nextRace && (
+          <PendingLink
+            href={`/race/${nextRace.id}`}
+            className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
+          >
+            {getRoundLabel(nextRace.round)}
+          </PendingLink>
+        )}
         <PendingLink
-          href="/"
+          href="/season"
           className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
         >
-          Back home
+          Season
         </PendingLink>
         <PendingLink
           href={`/race/${race.id}/predict`}
           className="inline-flex items-center gap-1.5 rounded-xl border border-red-500/30 bg-red-500/15 px-5 py-3 font-bold text-red-200 transition-all hover:bg-red-500/25"
         >
-          My race page
+          My picks
           <ChevronRight className="ml-1 h-5 w-5" />
         </PendingLink>
       </section>

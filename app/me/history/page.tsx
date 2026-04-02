@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { CalendarClock, History, Trophy } from 'lucide-react'
 import { getCurrentSeason } from '@/utils/season'
+import { getRoundLabel } from '@/utils/race-copy'
 import { getEffectiveRaceStatus, type RaceStatus } from '@/utils/race-status'
 import { getUserTenantContext } from '@/utils/tenant'
 import { TenantContextBanner } from '@/components/ui/tenant-context-banner'
@@ -233,7 +234,7 @@ export default async function UserHistoryPage() {
                     >
                       <div className="flex-1 space-y-2">
                         <div className="text-sm font-bold uppercase tracking-widest text-red-500">
-                          Round {entry.race.round}
+                          {getRoundLabel(entry.race.round)}
                         </div>
                         <h3 className="text-xl font-bold">{entry.race.race_name}</h3>
                         <div className="text-sm text-slate-400">

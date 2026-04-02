@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { ChevronDown, Medal, Trophy } from 'lucide-react'
 import { format } from 'date-fns'
 import { Fragment } from 'react'
+import { getRoundLabel } from '@/utils/race-copy'
 import { getCurrentSeason } from '@/utils/season'
 import { getUserTenantContext } from '@/utils/tenant'
 import { getAdminAccessContext } from '@/utils/admin-access'
@@ -514,7 +515,7 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
                                 <td className="rounded-l-xl border border-white/5 bg-black/25 px-4 py-3">
                                   <div className="flex items-center gap-2">
                                     <span className="text-xs font-bold uppercase tracking-widest text-red-500">
-                                      R{String(race.round).padStart(2, '0')}
+                                      {getRoundLabel(race.round)}
                                     </span>
                                     <span className="truncate font-bold text-white">{race.raceName}</span>
                                   </div>

@@ -6,9 +6,10 @@ Add canonical race-data ingestion and outward-facing growth surfaces after the t
 
 ## Status
 
-- Public race hub work is parked after the first slice inside `P2`.
-- The first slice already added public `/race/[id]` pages, sitemap coverage, and root metadata cleanup.
-- Automatic schedule ingestion remains queued behind the public surface so imported data has a meaningful destination.
+- `P2` is now active.
+- Public `/race/[id]` pages, sitemap coverage, and root metadata cleanup are already in place.
+- Public `/season` is now shipped and connects home, race hubs, and the leaderboard into one logged-out season journey.
+- Automatic schedule ingestion is now the next slice in line.
 
 ## Planned Increment Links
 
