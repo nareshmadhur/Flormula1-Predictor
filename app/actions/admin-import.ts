@@ -8,7 +8,12 @@ import {
   type ExistingRaceForImport,
   type OpenF1CircuitLookup,
 } from '@/utils/openf1'
+import { getCountryEmoji } from '@/utils/country-emoji'
 import type { ScheduleImportActionState } from '@/app/admin/schedule/action-state'
+
+function normalizeCircuitField(value: string | null | undefined) {
+  return (value || '').trim().toLowerCase()
+}
 
 function stripSourceMetadata<T extends Record<string, unknown>>(payload: T) {
   const clone = { ...payload }
@@ -173,6 +178,171 @@ export async function applyOpenF1ScheduleImport(
     return {
       status: 'error',
       message: error instanceof Error ? error.message : 'Schedule import failed.',
+    }
+  }
+}
+
+export async function createCircuitFromOpenF1Import(
+  _previousState: ScheduleImportActionState,
+  formData: FormData
+): Promise<ScheduleImportActionState> {
+  try {
+    const { supabase } = await assertPlatformAdmin()
+    const name = (formData.get('name') as string | null)?.trim()
+    const city = (formData.get('city') as string | null)?.trim() || null
+    const country = (formData.get('country') as string | null)?.trim() || null
+    const emoji = (formData.get('emoji') as string | null)?.trim() || getCountryEmoji(country)
+
+    if (!name) {
+      return {
+        status: 'error',
+        message: 'Circuit name is required before creating a match.',
+      }
+    }
+
+    const { data: circuits } = await supabase
+      .from('circuits')
+      .select('id, name, city, country')
+      .order('name')
+
+    const existingCircuit = (circuits || []).find((circuit) => {
+      return (
+        normalizeCircuitField(circuit.name) === normalizeCircuitField(name) &&
+        normalizeCircuitField(circuit.city) === normalizeCircuitField(city) &&
+        normalizeCircuitField(circuit.country) === normalizeCircuitField(country)
+      )
+    })
+
+    if (existingCircuit) {
+      revalidatePath('/admin/schedule')
+      return {
+        status: 'success',
+        message: 'Circuit already exists. Refresh the preview to pick it up.',
+      }
+    }
+
+    const { error } = await supabase.from('circuits').insert({
+      name,
+      city,
+      country,
+      emoji,
+    })
+
+    if (error) {
+      return {
+        status: 'error',
+        message: `Could not create circuit: ${error.message}`,
+      }
+    }
+
+    revalidatePath('/admin')
+    revalidatePath('/admin/data')
+    revalidatePath('/admin/schedule')
+
+    return {
+      status: 'success',
+      message: 'Circuit created. Refresh the preview to add this weekend.',
+    }
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Could not create the circuit.',
+    }
+  }
+}
+
+export async function createAllMissingCircuitsFromOpenF1Import(
+  _previousState: ScheduleImportActionState,
+  formData: FormData
+): Promise<ScheduleImportActionState> {
+  const season = Number(formData.get('season'))
+
+  if (!Number.isFinite(season) || season < 2020) {
+    return {
+      status: 'error',
+      message: 'Choose a valid season before creating circuits.',
+    }
+  }
+
+  try {
+    const { supabase } = await assertPlatformAdmin()
+    const [{ data: existingRaces }, { data: circuits }] = await Promise.all([
+      supabase
+        .from('races')
+        .select(
+          'id, season, round, race_name, circuit_id, status, race_start_at, prediction_lock_at, fp1_at, fp2_at, fp3_at, quali_at, sprint_at, sprint_quali_at, external_race_key'
+        )
+        .eq('season', season)
+        .order('round', { ascending: true }),
+      supabase.from('circuits').select('id, name, city, country, emoji').order('name'),
+    ])
+
+    const importedRaces = await fetchOpenF1SeasonSchedule(season)
+    const reviewRows = buildOpenF1ScheduleReview(
+      importedRaces,
+      (existingRaces || []) as ExistingRaceForImport[],
+      (circuits || []) as OpenF1CircuitLookup[]
+    )
+
+    const knownCircuitKeys = new Set(
+      ((circuits || []) as OpenF1CircuitLookup[]).map((circuit) =>
+        `${normalizeCircuitField(circuit.name)}::${normalizeCircuitField(circuit.city)}::${normalizeCircuitField(circuit.country)}`
+      )
+    )
+
+    let createdCount = 0
+    let skippedCount = 0
+
+    for (const row of reviewRows) {
+      if (row.action !== 'skip' || row.existingRace || row.circuitMatch) {
+        continue
+      }
+
+      const name = row.imported.circuitShortName || row.imported.location
+      const city = row.imported.location || null
+      const country = row.imported.countryName || null
+      const circuitKey = `${normalizeCircuitField(name)}::${normalizeCircuitField(city)}::${normalizeCircuitField(country)}`
+
+      if (knownCircuitKeys.has(circuitKey)) {
+        skippedCount += 1
+        continue
+      }
+
+      const { error } = await supabase.from('circuits').insert({
+        name,
+        city,
+        country,
+        emoji: getCountryEmoji(country),
+      })
+
+      if (error) {
+        return {
+          status: 'error',
+          message: `Could not create ${name}: ${error.message}`,
+        }
+      }
+
+      knownCircuitKeys.add(circuitKey)
+      createdCount += 1
+    }
+
+    revalidatePath('/admin')
+    revalidatePath('/admin/data')
+    revalidatePath('/admin/schedule')
+
+    return {
+      status: 'success',
+      message:
+        createdCount > 0
+          ? `Created ${createdCount} circuit${createdCount === 1 ? '' : 's'}. Refresh preview or apply review next.`
+          : skippedCount > 0
+            ? 'All missing circuits were already created. Refresh preview.'
+            : 'No missing circuits were found for this season.',
+    }
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Could not create missing circuits.',
     }
   }
 }

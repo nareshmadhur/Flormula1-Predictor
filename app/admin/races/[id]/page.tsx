@@ -5,10 +5,17 @@ import { revalidatePath } from 'next/cache'
 import DeleteRaceButton from './delete-button'
 import CancelRaceButton from './cancel-button'
 import BonusQuestionCard from './bonus-question-card'
+import { OfficialResultsForm } from './official-results-form'
 import { updateRace } from '@/app/actions/admin'
 import { calculateRaceScoresAction } from '@/app/actions/scoring'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { getProfileDisplayName } from '@/utils/profile-name'
+import { getEffectiveRaceStatus } from '@/utils/race-status'
+import { getAdminRaceStatusBadgeClasses, getAdminRaceStatusLabel } from '@/utils/admin-race-status'
+import { fetchOpenF1PodiumSuggestion } from '@/utils/openf1'
+import { ADMIN_TIME_LABEL, formatAmsterdamInputValue } from '@/utils/amsterdam-time'
+import { FormActionButton } from '@/components/ui/form-action-button'
+import { PageBackLink } from '@/components/ui/page-back-link'
 
 export const revalidate = 0
 
@@ -19,12 +26,14 @@ type RaceRecord = {
   status: 'upcoming' | 'locked' | 'completed' | 'scored' | 'cancelled'
   circuit_id: string
   race_start_at: string
+  prediction_lock_at: string
   fp1_at?: string | null
   fp2_at?: string | null
   fp3_at?: string | null
   quali_at?: string | null
   sprint_at?: string | null
   sprint_quali_at?: string | null
+  external_race_key?: string | null
 }
 
 type DriverRecord = {
@@ -198,6 +207,16 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
   const typedExistingResult = (existingResult || null) as RaceResultRecord | null
   const typedExistingBonusAnswers = (existingBonusAnswers || []) as RaceBonusAnswerRecord[]
   const typedProfiles = (profiles || []) as ProfileRecord[]
+  const effectiveStatus = getEffectiveRaceStatus(typedRace)
+  let suggestedPodium = null
+
+  if (typedRace.external_race_key) {
+    try {
+      suggestedPodium = await fetchOpenF1PodiumSuggestion(typedRace.external_race_key, typedDrivers)
+    } catch (error) {
+      console.error('Failed to load OpenF1 podium suggestion', error)
+    }
+  }
 
   const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true })
   const { count: predictionsCount } = await supabase.from('predictions').select('*', { count: 'exact', head: true }).eq('race_id', id)
@@ -206,18 +225,14 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
     <div className="space-y-8 animate-in fade-in duration-500">
       
       <div>
+        <PageBackLink href="/admin" label="Back to race control" />
         <div className="flex justify-between items-start">
           <div>
             <div className="text-red-500 font-bold tracking-widest uppercase mb-1">Round {typedRace.round}</div>
             <h1 className="text-3xl font-black italic tracking-tighter">Manage {typedRace.race_name}</h1>
             <div className="flex items-center space-x-4 mt-2">
-              <span className={`px-3 py-1 rounded-lg text-sm font-bold border ${
-                 typedRace.status === 'scored' ? 'bg-green-500/20 text-green-500 border-green-500/30' :
-                 typedRace.status === 'completed' ? 'bg-blue-500/20 text-blue-500 border-blue-500/30' :
-                 typedRace.status === 'cancelled' ? 'bg-red-400/20 text-red-400 border-red-400/30' :
-                 'bg-slate-800 text-slate-300'
-              }`}>
-                Status: {typedRace.status.toUpperCase()}
+              <span className={`px-3 py-1 rounded-lg text-sm font-bold border ${getAdminRaceStatusBadgeClasses(effectiveStatus)}`}>
+                Status: {getAdminRaceStatusLabel(effectiveStatus)}
               </span>
               <span className="flex items-center text-sm font-bold text-slate-300 bg-slate-800 px-3 py-1 rounded-lg border border-white/5">
                 <Users className="w-4 h-4 mr-2 text-slate-400" />
@@ -253,39 +268,37 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
                   </select>
                </div>
                <div>
-                  <label className="block text-sm font-medium text-slate-400 mb-1">Race Start (UTC)</label>
-                  <input name="race_start_at" type="datetime-local" defaultValue={new Date(typedRace.race_start_at).toISOString().slice(0, 16)} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
+                  <label className="block text-sm font-medium text-slate-400 mb-1">Race Start ({ADMIN_TIME_LABEL})</label>
+                  <input name="race_start_at" type="datetime-local" defaultValue={formatAmsterdamInputValue(typedRace.race_start_at)} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
                </div>
                <div className="grid gap-4 md:grid-cols-2">
                   <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-1">FP1 Start (UTC)</label>
-                    <input name="fp1_at" type="datetime-local" defaultValue={typedRace.fp1_at ? new Date(typedRace.fp1_at).toISOString().slice(0, 16) : ''} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
+                    <label className="block text-sm font-medium text-slate-400 mb-1">FP1 Start ({ADMIN_TIME_LABEL})</label>
+                    <input name="fp1_at" type="datetime-local" defaultValue={formatAmsterdamInputValue(typedRace.fp1_at)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-1">FP2 Start (UTC)</label>
-                    <input name="fp2_at" type="datetime-local" defaultValue={typedRace.fp2_at ? new Date(typedRace.fp2_at).toISOString().slice(0, 16) : ''} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
+                    <label className="block text-sm font-medium text-slate-400 mb-1">FP2 Start ({ADMIN_TIME_LABEL})</label>
+                    <input name="fp2_at" type="datetime-local" defaultValue={formatAmsterdamInputValue(typedRace.fp2_at)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-1">FP3 Start (UTC)</label>
-                    <input name="fp3_at" type="datetime-local" defaultValue={typedRace.fp3_at ? new Date(typedRace.fp3_at).toISOString().slice(0, 16) : ''} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
+                    <label className="block text-sm font-medium text-slate-400 mb-1">FP3 Start ({ADMIN_TIME_LABEL})</label>
+                    <input name="fp3_at" type="datetime-local" defaultValue={formatAmsterdamInputValue(typedRace.fp3_at)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-1">Qualifying (UTC)</label>
-                    <input name="quali_at" type="datetime-local" defaultValue={typedRace.quali_at ? new Date(typedRace.quali_at).toISOString().slice(0, 16) : ''} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Qualifying ({ADMIN_TIME_LABEL})</label>
+                    <input name="quali_at" type="datetime-local" defaultValue={formatAmsterdamInputValue(typedRace.quali_at)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-1">Sprint Qualifying (UTC)</label>
-                    <input name="sprint_quali_at" type="datetime-local" defaultValue={typedRace.sprint_quali_at ? new Date(typedRace.sprint_quali_at).toISOString().slice(0, 16) : ''} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Sprint Qualifying ({ADMIN_TIME_LABEL})</label>
+                    <input name="sprint_quali_at" type="datetime-local" defaultValue={formatAmsterdamInputValue(typedRace.sprint_quali_at)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-slate-400 mb-1">Sprint (UTC)</label>
-                    <input name="sprint_at" type="datetime-local" defaultValue={typedRace.sprint_at ? new Date(typedRace.sprint_at).toISOString().slice(0, 16) : ''} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
+                    <label className="block text-sm font-medium text-slate-400 mb-1">Sprint ({ADMIN_TIME_LABEL})</label>
+                    <input name="sprint_at" type="datetime-local" defaultValue={formatAmsterdamInputValue(typedRace.sprint_at)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
                   </div>
                </div>
                <p className="mt-2 text-xs text-slate-500">Predictions lock automatically at FP1 - 5m. Manual edits here override imported schedule data.</p>
-               <button className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl px-4 py-3 mt-4 transition-colors">
-                 Update Details
-               </button>
+               <FormActionButton idleLabel="Update details" pendingLabel="Saving details..." tone="primary" className="mt-4" />
              </form>
           </div>
 
@@ -315,9 +328,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
                   <input name="options" placeholder="Option C (Optional)" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm" />
                   <input name="options" placeholder="Option D (Optional)" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm" />
                 </div>
-                <button className="w-full bg-amber-600 hover:bg-amber-500 text-white font-black italic tracking-wider text-lg rounded-xl px-4 py-4 mt-4 transition-all shadow-lg hover:shadow-amber-500/30">
-                  SAVE QUESTION
-                </button>
+                <FormActionButton idleLabel="Save question" pendingLabel="Saving question..." tone="amber" className="mt-4 text-lg italic tracking-wider" />
              </form>
           </div>
         </div>
@@ -368,70 +379,39 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
                      </div>
                  </div>
 
-                 <button type="submit" className="w-full bg-slate-800 hover:bg-slate-700 text-white font-bold rounded-xl px-4 py-3 mt-2 transition-colors">
-                   Submit Prediction for User
-                 </button>
+                 <FormActionButton idleLabel="Submit prediction for user" pendingLabel="Saving prediction..." tone="secondary" className="mt-2" />
              </form>
           </div>
 
           <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl">
              <h2 className="text-xl font-bold mb-4 flex items-center"><CheckCircle className="w-5 h-5 mr-2 text-red-500" /> Official Results</h2>
              
-             <form action={saveResults} className="space-y-6">
-               <input type="hidden" name="race_id" value={typedRace.id} />
-               
-               <div className="space-y-4 bg-black/30 p-4 rounded-xl border border-white/5">
-                 <h3 className="font-bold text-sm text-slate-300 uppercase">Podium</h3>
-                 {[1, 2, 3].map(pos => (
-                    <div key={pos}>
-                      <label className="block text-xs font-bold text-slate-500 mb-1">P{pos}</label>
-                      <select name={`p${pos}_driver_id`} defaultValue={typedExistingResult?.[`p${pos}_driver_id` as keyof RaceResultRecord] || ''} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2">
-                        <option value="" disabled className="bg-slate-900 text-white">Select Driver</option>
-                        {typedDrivers.map((d) => (
-                          <option key={d.id} value={d.id} className="bg-slate-900 text-white">{d.code} - {d.full_name}</option>
-                        ))}
-                      </select>
-                    </div>
-                 ))}
-               </div>
-
-               {typedBonusQuestions.length > 0 && (
-                 <div className="space-y-4 bg-black/30 p-4 rounded-xl border border-white/5">
-                   <h3 className="font-bold text-sm text-slate-300 uppercase">Bonus Answers</h3>
-                   {typedBonusQuestions.map((q) => {
-                     const existingAns = typedExistingBonusAnswers.find((a) => a.bonus_question_id === q.id)
-                     return (
-                       <div key={q.id}>
-                         <label className="block text-xs font-bold text-slate-500 mb-1">{q.question_text}</label>
-                         <select name={`bonus_${q.id}`} defaultValue={existingAns?.correct_bonus_option_id || ''} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2">
-                           <option value="" disabled className="bg-slate-900 text-white">Select Correct Option</option>
-                           {q.bonus_options?.map((o) => (
-                             <option key={o.id} value={o.id} className="bg-slate-900 text-white">{o.label}</option>
-                           ))}
-                         </select>
-                       </div>
-                     )
-                   })}
-                 </div>
-               )}
-
-               <button className="w-full bg-red-600 hover:bg-red-500 text-white font-bold rounded-xl px-4 py-3 shadow-[0_0_15px_rgba(239,68,68,0.3)] transition-all">
-                 Save Official Results
-               </button>
-             </form>
+             <OfficialResultsForm
+               raceId={typedRace.id}
+               action={saveResults}
+               drivers={typedDrivers}
+               bonusQuestions={typedBonusQuestions}
+               existingResult={typedExistingResult}
+               existingBonusAnswers={typedExistingBonusAnswers}
+               suggestedPodium={suggestedPodium}
+             />
           </div>
 
           <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl">
              <h2 className="text-xl font-bold mb-4 flex items-center"><Calculator className="w-5 h-5 mr-2 text-red-500" /> Scoring</h2>
              <p className="text-sm text-slate-400 mb-4">
-               Once official results are saved, run the scoring calculation to update user points and the global leaderboard.
+               Keep scoring manual for now, but safe to rerun. This recalculates from the current predictions, official results, and bonus answers.
              </p>
 
              <form action={calculateRaceScoresAction}>
                 <input type="hidden" name="race_id" value={typedRace.id} />
-                <button disabled={!typedExistingResult} className="w-full bg-slate-100 hover:bg-white text-black font-black italic tracking-widest text-lg rounded-xl px-4 py-3 transition-transform hover:scale-[1.02] disabled:opacity-50 disabled:cursor-not-allowed">
-                  CALCULATE SCORES
-                </button>
+                <FormActionButton
+                  idleLabel={typedExistingResult ? 'Recalculate scores' : 'Save results first'}
+                  pendingLabel="Recalculating scores..."
+                  tone="light"
+                  disabled={!typedExistingResult}
+                  className="text-lg italic tracking-widest disabled:opacity-50"
+                />
              </form>
           </div>
         </div>

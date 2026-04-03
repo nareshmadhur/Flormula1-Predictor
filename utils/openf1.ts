@@ -14,9 +14,21 @@ type OpenF1Meeting = {
 }
 
 type OpenF1Session = {
+  session_key: number
   meeting_key: number
   session_name: string
   date_start: string
+}
+
+type OpenF1Driver = {
+  driver_number: number
+  name_acronym: string
+  full_name: string
+}
+
+type OpenF1SessionResult = {
+  position: number
+  driver_number: number
 }
 
 export type OpenF1ImportedRace = {
@@ -82,6 +94,25 @@ export type OpenF1ScheduleReviewRow = {
   fieldChanges: OpenF1FieldChange[]
 }
 
+export type OpenF1SuggestedPodium = {
+  source: string
+  p1: {
+    code: string
+    fullName: string
+    localDriverId: string | null
+  } | null
+  p2: {
+    code: string
+    fullName: string
+    localDriverId: string | null
+  } | null
+  p3: {
+    code: string
+    fullName: string
+    localDriverId: string | null
+  } | null
+}
+
 function normalizeText(value: string | null | undefined) {
   return (value || '')
     .normalize('NFD')
@@ -95,6 +126,12 @@ function normalizeText(value: string | null | undefined) {
     .replace(/racing/g, '')
     .replace(/ring/g, '')
     .replace(/[^a-z0-9]+/g, ' ')
+    .trim()
+}
+
+function normalizeDriverName(value: string | null | undefined) {
+  return normalizeText(value)
+    .replace(/\b[a-z]{1,3}\b/g, '')
     .trim()
 }
 
@@ -334,4 +371,73 @@ export function buildOpenF1ScheduleReview(
       fieldChanges: [],
     } satisfies OpenF1ScheduleReviewRow
   })
+}
+
+function findLocalDriverMatch(
+  openF1Driver: OpenF1Driver | undefined,
+  localDrivers: { id: string; code: string; full_name: string }[]
+) {
+  if (!openF1Driver) return null
+
+  const byCode = localDrivers.find(
+    (driver) => driver.code.toUpperCase() === openF1Driver.name_acronym.toUpperCase()
+  )
+
+  if (byCode) return byCode
+
+  const normalizedOpenF1Name = normalizeDriverName(openF1Driver.full_name)
+  return (
+    localDrivers.find(
+      (driver) => normalizeDriverName(driver.full_name) === normalizedOpenF1Name
+    ) || null
+  )
+}
+
+export async function fetchOpenF1PodiumSuggestion(
+  meetingKey: string | number | null | undefined,
+  localDrivers: { id: string; code: string; full_name: string }[]
+): Promise<OpenF1SuggestedPodium | null> {
+  if (!meetingKey) return null
+
+  const raceSessions = await fetchOpenF1Json<OpenF1Session[]>(
+    `${OPEN_F1_API_BASE}/sessions?meeting_key=${meetingKey}&session_name=Race`
+  )
+  const raceSession = raceSessions[0]
+  if (!raceSession?.session_key) return null
+
+  const [results, drivers] = await Promise.all([
+    fetchOpenF1Json<OpenF1SessionResult[]>(
+      `${OPEN_F1_API_BASE}/session_result?session_key=${raceSession.session_key}&position<=3`
+    ),
+    fetchOpenF1Json<OpenF1Driver[]>(
+      `${OPEN_F1_API_BASE}/drivers?session_key=${raceSession.session_key}`
+    ),
+  ])
+
+  if (!results?.length) return null
+
+  const driversByNumber = new Map(drivers.map((driver) => [driver.driver_number, driver]))
+
+  const buildSuggestion = (position: number) => {
+    const result = results.find((entry) => entry.position === position)
+    if (!result) return null
+
+    const openF1Driver = driversByNumber.get(result.driver_number)
+    if (!openF1Driver) return null
+
+    const localDriver = findLocalDriverMatch(openF1Driver, localDrivers)
+
+    return {
+      code: openF1Driver.name_acronym,
+      fullName: openF1Driver.full_name,
+      localDriverId: localDriver?.id || null,
+    }
+  }
+
+  return {
+    source: 'OpenF1',
+    p1: buildSuggestion(1),
+    p2: buildSuggestion(2),
+    p3: buildSuggestion(3),
+  }
 }

@@ -13,15 +13,22 @@ import {
   type OpenF1ScheduleReviewRow,
 } from '@/utils/openf1'
 import { ApplyScheduleImportForm } from '@/app/admin/schedule/apply-schedule-import-form'
+import { CreateCircuitMatchForm } from '@/app/admin/schedule/create-circuit-match-form'
+import { CreateMissingCircuitsForm } from '@/app/admin/schedule/create-missing-circuits-form'
 import { PendingLink } from '@/components/ui/pending-link'
+import { PageBackLink } from '@/components/ui/page-back-link'
+import { ADMIN_TIME_LABEL, formatAmsterdamDateTime } from '@/utils/amsterdam-time'
 
 export const revalidate = 0
 
 type PageProps = {
   searchParams: Promise<{
     season?: string | string[] | undefined
+    filter?: string | string[] | undefined
   }>
 }
+
+type ScheduleFilter = 'all' | 'sync' | 'add' | 'setup'
 
 function resolveSeason(rawSeason: string | string[] | undefined, fallbackSeason: number) {
   const value = Array.isArray(rawSeason) ? rawSeason[0] : rawSeason
@@ -29,9 +36,17 @@ function resolveSeason(rawSeason: string | string[] | undefined, fallbackSeason:
   return Number.isFinite(parsed) && parsed >= 2020 ? parsed : fallbackSeason
 }
 
+function resolveFilter(rawFilter: string | string[] | undefined): ScheduleFilter {
+  const value = Array.isArray(rawFilter) ? rawFilter[0] : rawFilter
+  if (value === 'sync' || value === 'add' || value === 'setup') {
+    return value
+  }
+  return 'all'
+}
+
 function formatSessionDate(value: string | null) {
   if (!value) return null
-  return format(new Date(value), 'EEE d MMM, HH:mm')
+  return formatAmsterdamDateTime(value) || format(new Date(value), 'EEE d MMM, HH:mm')
 }
 
 function getReviewToneClasses(row: OpenF1ScheduleReviewRow) {
@@ -73,7 +88,7 @@ function getReviewToneClasses(row: OpenF1ScheduleReviewRow) {
 function getReviewLabel(row: OpenF1ScheduleReviewRow) {
   if (row.action === 'update') return 'Ready to sync'
   if (row.action === 'create') return 'Ready to add'
-  if (!row.existingRace && !row.circuitMatch) return 'Needs circuit match'
+  if (!row.existingRace && !row.circuitMatch) return 'Needs circuit setup'
   return 'Already aligned'
 }
 
@@ -180,9 +195,22 @@ function PreviewCard({ row }: { row: OpenF1ScheduleReviewRow }) {
             </>
           ) : (
             <>
-              <div className="font-semibold text-white">Manual mapping needed</div>
+              <div className="font-semibold text-white">Manual circuit setup needed</div>
               <div className="mt-1 text-slate-400">
-                Add or update a circuit before this weekend can be created automatically.
+                Create {imported.circuitShortName || imported.location} in your reference data, then rerun the preview.
+              </div>
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <CreateCircuitMatchForm
+                  name={imported.circuitShortName || imported.location}
+                  city={imported.location}
+                  country={imported.countryName}
+                />
+                <PendingLink
+                  href="/admin/data"
+                  className="inline-flex items-center justify-center rounded-full border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-slate-100 transition-colors hover:bg-white/10"
+                >
+                  Open reference data
+                </PendingLink>
               </div>
             </>
           )}
@@ -208,6 +236,7 @@ export default async function AdminSchedulePage({ searchParams }: PageProps) {
 
   const fallbackSeason = await getCurrentSeason(supabase)
   const selectedSeason = resolveSeason(resolvedSearchParams.season, fallbackSeason)
+  const activeFilter = resolveFilter(resolvedSearchParams.filter)
 
   const [{ data: existingRaces }, { data: circuits }] = await Promise.all([
     supabase
@@ -238,11 +267,18 @@ export default async function AdminSchedulePage({ searchParams }: PageProps) {
   const readyUpdates = reviewRows.filter((row) => row.action === 'update').length
   const readyCreates = reviewRows.filter((row) => row.action === 'create').length
   const needsMapping = reviewRows.filter((row) => row.action === 'skip' && !row.existingRace && !row.circuitMatch).length
+  const visibleRows = reviewRows.filter((row) => {
+    if (activeFilter === 'all') return true
+    if (activeFilter === 'sync') return row.action === 'update'
+    if (activeFilter === 'add') return row.action === 'create'
+    return row.action === 'skip' && !row.existingRace && !row.circuitMatch
+  })
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
+          <PageBackLink href="/admin" label="Back to race control" />
           <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-slate-300">
             <Radio className="h-3.5 w-3.5 text-red-400" />
             OpenF1 schedule sync
@@ -284,6 +320,7 @@ export default async function AdminSchedulePage({ searchParams }: PageProps) {
                 className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-2.5 text-white outline-none ring-0 transition-colors focus:border-red-500/40"
               />
             </div>
+            {activeFilter !== 'all' && <input type="hidden" name="filter" value={activeFilter} />}
 
             <button
               type="submit"
@@ -292,44 +329,72 @@ export default async function AdminSchedulePage({ searchParams }: PageProps) {
               Refresh preview
             </button>
           </form>
+          <div className="mt-3 text-xs text-slate-500">Preview times are shown in {ADMIN_TIME_LABEL}.</div>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-card p-6 shadow-xl">
           <div className="mb-4 flex items-center gap-2 text-sm font-bold uppercase tracking-[0.22em] text-slate-300">
             <CalendarSync className="h-4 w-4 text-red-400" />
-            Apply review
+            Review actions
           </div>
-          <ApplyScheduleImportForm season={selectedSeason} disabled={Boolean(fetchError || reviewRows.length === 0)} />
+          <div className="space-y-3">
+            <CreateMissingCircuitsForm
+              season={selectedSeason}
+              disabled={Boolean(fetchError || needsMapping === 0)}
+            />
+            <ApplyScheduleImportForm season={selectedSeason} disabled={Boolean(fetchError || reviewRows.length === 0)} />
+          </div>
         </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-2xl border border-white/10 bg-card p-5 shadow-xl">
+        <PendingLink
+          href={`/admin/schedule?season=${selectedSeason}&filter=sync`}
+          className={`rounded-2xl border p-5 shadow-xl transition-colors ${
+            activeFilter === 'sync'
+              ? 'border-amber-500/30 bg-amber-500/10'
+              : 'border-white/10 bg-card hover:bg-white/[0.03]'
+          }`}
+        >
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-slate-400">
             <CheckCircle2 className="h-4 w-4 text-amber-300" />
             Ready to sync
           </div>
           <div className="mt-3 text-3xl font-black italic text-white">{readyUpdates}</div>
           <p className="mt-2 text-sm text-slate-400">Existing rounds with timing changes or source updates.</p>
-        </div>
+        </PendingLink>
 
-        <div className="rounded-2xl border border-white/10 bg-card p-5 shadow-xl">
+        <PendingLink
+          href={`/admin/schedule?season=${selectedSeason}&filter=add`}
+          className={`rounded-2xl border p-5 shadow-xl transition-colors ${
+            activeFilter === 'add'
+              ? 'border-emerald-500/30 bg-emerald-500/10'
+              : 'border-white/10 bg-card hover:bg-white/[0.03]'
+          }`}
+        >
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-slate-400">
             <PlusCircle className="h-4 w-4 text-emerald-300" />
             Ready to add
           </div>
           <div className="mt-3 text-3xl font-black italic text-white">{readyCreates}</div>
           <p className="mt-2 text-sm text-slate-400">Imported weekends that can be created from an existing circuit match.</p>
-        </div>
+        </PendingLink>
 
-        <div className="rounded-2xl border border-white/10 bg-card p-5 shadow-xl">
+        <PendingLink
+          href={`/admin/schedule?season=${selectedSeason}&filter=setup`}
+          className={`rounded-2xl border p-5 shadow-xl transition-colors ${
+            activeFilter === 'setup'
+              ? 'border-red-500/30 bg-red-500/10'
+              : 'border-white/10 bg-card hover:bg-white/[0.03]'
+          }`}
+        >
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-slate-400">
             <CircleAlert className="h-4 w-4 text-red-300" />
-            Needs mapping
+            Needs setup
           </div>
           <div className="mt-3 text-3xl font-black italic text-white">{needsMapping}</div>
-          <p className="mt-2 text-sm text-slate-400">Imported weekends that still need a manual circuit match before they can be added.</p>
-        </div>
+          <p className="mt-2 text-sm text-slate-400">Imported weekends that still need a circuit inside the app before they can be added.</p>
+        </PendingLink>
       </div>
 
       {fetchError ? (
@@ -342,21 +407,33 @@ export default async function AdminSchedulePage({ searchParams }: PageProps) {
             <div>
               <h2 className="text-2xl font-black italic tracking-tight text-white">Import preview</h2>
               <p className="mt-1 text-sm text-slate-400">
-                {importedRaces.length} weekends from OpenF1 for {selectedSeason}
+                {visibleRows.length} of {importedRaces.length} weekends from OpenF1 for {selectedSeason}
               </p>
             </div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-300">
-              <Flag className="h-3.5 w-3.5 text-slate-400" />
-              Shared schedule source
+            <div className="flex flex-wrap items-center gap-2">
+              <PendingLink
+                href={`/admin/schedule?season=${selectedSeason}`}
+                className={`inline-flex items-center rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+                  activeFilter === 'all'
+                    ? 'border-white/15 bg-white/10 text-white'
+                    : 'border-white/10 bg-white/5 text-slate-300 hover:bg-white/10'
+                }`}
+              >
+                All
+              </PendingLink>
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-xs font-medium text-slate-300">
+                <Flag className="h-3.5 w-3.5 text-slate-400" />
+                Shared schedule source
+              </div>
             </div>
           </div>
 
-          {reviewRows.length === 0 ? (
+          {visibleRows.length === 0 ? (
             <div className="rounded-2xl border border-white/10 bg-card px-5 py-4 text-sm text-slate-400">
-              No weekends returned for this season yet.
+              No weekends match this filter right now.
             </div>
           ) : (
-            reviewRows.map((row) => <PreviewCard key={row.imported.meetingKey} row={row} />)
+            visibleRows.map((row) => <PreviewCard key={row.imported.meetingKey} row={row} />)
           )}
         </div>
       )}
@@ -369,7 +446,7 @@ export default async function AdminSchedulePage({ searchParams }: PageProps) {
         <div className="mt-3 grid gap-3 text-sm text-slate-300 md:grid-cols-3">
           <p>Imported weekends update FP1, FP2, FP3, qualifying, sprint sessions, race time, and lock time.</p>
           <p>Existing rounds are matched by season + round first, then updated without changing their race status.</p>
-          <p>New rounds are only created when the imported weekend has a confident circuit match inside the app.</p>
+          <p>New rounds are only created when the imported weekend has a circuit ready inside the app.</p>
         </div>
       </div>
     </div>

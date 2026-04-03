@@ -8,6 +8,7 @@ import { getUserTenantContext } from '@/utils/tenant'
 import { TenantContextBanner } from '@/components/ui/tenant-context-banner'
 import { TenantAssignmentRequired } from '@/components/ui/tenant-assignment-required'
 import { PendingLink } from '@/components/ui/pending-link'
+import { PageBackLink } from '@/components/ui/page-back-link'
 
 export const revalidate = 0
 
@@ -26,6 +27,7 @@ type SeasonRace = {
 }
 
 type PredictionRow = {
+  id: string
   race_id: string
 }
 
@@ -37,6 +39,38 @@ type ScoreRow = {
   exact_hits: number
 }
 
+type BonusOptionRow = {
+  id: string
+  label?: string | null
+}
+
+type BonusQuestionRow = {
+  id: string
+  race_id: string
+  question_text: string
+  bonus_options?: BonusOptionRow[] | null
+}
+
+type PredictionBonusAnswerRow = {
+  prediction_id: string
+  bonus_question_id: string
+  bonus_option_id: string
+}
+
+type RaceBonusAnswerRow = {
+  race_id: string
+  bonus_question_id: string
+  correct_bonus_option_id: string
+}
+
+type BonusAuditItem = {
+  questionText: string
+  selectedLabel: string
+  officialLabel: string | null
+  isCorrect: boolean
+  isResolved: boolean
+}
+
 type HistoryEntry = {
   race: SeasonRace
   status: RaceStatus
@@ -44,6 +78,7 @@ type HistoryEntry = {
   score?: ScoreRow
   category: 'awaiting' | 'scored' | 'missed' | 'upcoming'
   summary: string
+  bonusAudit: BonusAuditItem[]
 }
 
 function getCategoryTitle(category: HistoryEntry['category']) {
@@ -96,6 +131,12 @@ function getEntrySummary(status: RaceStatus, hasPredicted: boolean, score?: Scor
   return 'Prediction window is open.'
 }
 
+function getBonusQuestionLabel(questionText: string) {
+  const cleaned = questionText.replace(/\?$/, '').trim()
+  if (cleaned.length <= 28) return cleaned
+  return `${cleaned.slice(0, 28).trimEnd()}…`
+}
+
 export default async function UserHistoryPage() {
   const supabase = await createClient()
   const {
@@ -126,7 +167,7 @@ export default async function UserHistoryPage() {
 
   const { data: predictions, error: predictionsError } = await supabase
     .from('predictions')
-    .select('race_id')
+    .select('id, race_id')
     .eq('user_id', user.id)
 
   if (predictionsError) {
@@ -139,18 +180,90 @@ export default async function UserHistoryPage() {
     .eq('user_id', user.id)
 
   const typedRaces = (races || []) as SeasonRace[]
-  const predictedRaceIds = new Set(((predictions || []) as PredictionRow[]).map((prediction) => prediction.race_id))
+  const typedPredictions = (predictions || []) as PredictionRow[]
+  const predictedRaceIds = new Set(typedPredictions.map((prediction) => prediction.race_id))
   const scoreByRaceId = new Map(((scores || []) as ScoreRow[]).map((score) => [score.race_id, score]))
+  const raceIds = typedRaces.map((race) => race.id)
+  const predictionIds = typedPredictions.map((prediction) => prediction.id)
+
+  const [{ data: bonusQuestions }, { data: predictionBonusAnswers }, { data: raceBonusAnswers }] = await Promise.all([
+    raceIds.length > 0
+      ? supabase
+          .from('bonus_questions')
+          .select('id, race_id, question_text, bonus_options(id, label)')
+          .in('race_id', raceIds)
+          .eq('is_active', true)
+          .order('display_order')
+      : Promise.resolve({ data: [] as BonusQuestionRow[] }),
+    predictionIds.length > 0
+      ? supabase
+          .from('prediction_bonus_answers')
+          .select('prediction_id, bonus_question_id, bonus_option_id')
+          .in('prediction_id', predictionIds)
+      : Promise.resolve({ data: [] as PredictionBonusAnswerRow[] }),
+    raceIds.length > 0
+      ? supabase
+          .from('race_bonus_answers')
+          .select('race_id, bonus_question_id, correct_bonus_option_id')
+          .in('race_id', raceIds)
+      : Promise.resolve({ data: [] as RaceBonusAnswerRow[] }),
+  ])
+
+  const predictionByRaceId = new Map(typedPredictions.map((prediction) => [prediction.race_id, prediction.id]))
+  const questionsByRaceId = new Map<string, BonusQuestionRow[]>()
+  ;((bonusQuestions || []) as BonusQuestionRow[]).forEach((question) => {
+    const group = questionsByRaceId.get(question.race_id) || []
+    group.push(question)
+    questionsByRaceId.set(question.race_id, group)
+  })
+
+  const predictionBonusAnswerMap = new Map<string, string>()
+  ;((predictionBonusAnswers || []) as PredictionBonusAnswerRow[]).forEach((answer) => {
+    predictionBonusAnswerMap.set(`${answer.prediction_id}:${answer.bonus_question_id}`, answer.bonus_option_id)
+  })
+
+  const raceBonusAnswerMap = new Map<string, string>()
+  ;((raceBonusAnswers || []) as RaceBonusAnswerRow[]).forEach((answer) => {
+    raceBonusAnswerMap.set(`${answer.race_id}:${answer.bonus_question_id}`, answer.correct_bonus_option_id)
+  })
 
   const entries = typedRaces.map((race) => {
     const status = getEffectiveRaceStatus(race)
     const hasPredicted = predictedRaceIds.has(race.id)
     const score = scoreByRaceId.get(race.id)
+    const predictionId = predictionByRaceId.get(race.id)
+    const raceQuestions = questionsByRaceId.get(race.id) || []
 
     let category: HistoryEntry['category'] = 'upcoming'
     if (status === 'scored' && hasPredicted) category = 'scored'
     else if ((status === 'locked' || status === 'completed') && hasPredicted) category = 'awaiting'
     else if ((status === 'locked' || status === 'completed' || status === 'scored') && !hasPredicted) category = 'missed'
+
+    const bonusAudit = predictionId
+      ? raceQuestions.flatMap((question) => {
+          const selectedOptionId = predictionBonusAnswerMap.get(`${predictionId}:${question.id}`)
+          const officialOptionId = raceBonusAnswerMap.get(`${race.id}:${question.id}`) || null
+
+          if (!selectedOptionId && !officialOptionId) {
+            return []
+          }
+
+          const selectedLabel =
+            question.bonus_options?.find((option) => option.id === selectedOptionId)?.label || 'No answer'
+          const officialLabel =
+            question.bonus_options?.find((option) => option.id === officialOptionId)?.label || null
+
+          return [
+            {
+              questionText: question.question_text,
+              selectedLabel,
+              officialLabel,
+              isCorrect: Boolean(selectedOptionId && officialOptionId && selectedOptionId === officialOptionId),
+              isResolved: Boolean(officialOptionId),
+            } satisfies BonusAuditItem,
+          ]
+        })
+      : []
 
     return {
       race,
@@ -159,6 +272,7 @@ export default async function UserHistoryPage() {
       score,
       category,
       summary: getEntrySummary(status, hasPredicted, score),
+      bonusAudit,
     }
   })
 
@@ -176,6 +290,7 @@ export default async function UserHistoryPage() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      <PageBackLink href="/predictions" label="Back to My Season" />
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
         <div className="space-y-2">
           <h1 className="flex items-center text-3xl font-black italic tracking-tighter">
@@ -241,6 +356,37 @@ export default async function UserHistoryPage() {
                           {entry.race.circuits?.emoji} {entry.race.circuits?.name}, {entry.race.circuits?.country}
                         </div>
                         <p className="max-w-2xl text-sm text-slate-300">{entry.summary}</p>
+                        {entry.bonusAudit.length > 0 && (entry.category === 'scored' || entry.category === 'awaiting') && (
+                          <div className="flex flex-wrap gap-2 pt-1">
+                            {entry.bonusAudit.map((item) => (
+                              <span
+                                key={`${entry.race.id}-${item.questionText}`}
+                                className={`inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-xs ${
+                                  item.isResolved
+                                    ? item.isCorrect
+                                      ? 'border-green-500/20 bg-green-500/10 text-green-200'
+                                      : 'border-red-500/20 bg-red-500/10 text-red-200'
+                                    : 'border-amber-500/20 bg-amber-500/10 text-amber-200'
+                                }`}
+                                title={
+                                  item.officialLabel
+                                    ? `${item.questionText} · ${item.selectedLabel} · Correct: ${item.officialLabel}`
+                                    : `${item.questionText} · ${item.selectedLabel}`
+                                }
+                              >
+                                <span className="font-bold uppercase tracking-wide text-slate-300/80">
+                                  {getBonusQuestionLabel(item.questionText)}
+                                </span>
+                                <span>{item.selectedLabel}</span>
+                                {item.isResolved && (
+                                  <span className="font-bold">
+                                    {item.isCorrect ? '✓' : '✕'}
+                                  </span>
+                                )}
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
 
                       {entry.score ? (

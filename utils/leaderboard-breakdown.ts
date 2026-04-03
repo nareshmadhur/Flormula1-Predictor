@@ -248,7 +248,7 @@ export function buildUserLeaderboardBreakdowns({
     breakdowns.set(
       userId,
       [...entries].sort(
-        (left, right) => new Date(right.raceStartAt).getTime() - new Date(left.raceStartAt).getTime()
+        (left, right) => new Date(left.raceStartAt).getTime() - new Date(right.raceStartAt).getTime()
       )
     )
   })

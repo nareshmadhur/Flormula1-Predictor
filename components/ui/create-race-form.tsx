@@ -4,6 +4,11 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { createRace } from '@/app/actions/admin'
 import { Plus } from 'lucide-react'
+import {
+  ADMIN_TIME_LABEL,
+  formatAmsterdamInputValue,
+  parseAmsterdamInputToIso,
+} from '@/utils/amsterdam-time'
 
 interface Circuit {
   id: string
@@ -13,32 +18,6 @@ interface Circuit {
 
 interface CreateRaceFormProps {
   circuits: Circuit[]
-}
-
-const CET_DST_MONTHS = [4, 5, 6, 7, 8, 9, 10]
-
-function formatISODateForInput(date: Date) {
-  const pad = (n: number) => n.toString().padStart(2, '0')
-  const yyyy = date.getFullYear()
-  const mm = pad(date.getMonth() + 1)
-  const dd = pad(date.getDate())
-  const hh = pad(date.getHours())
-  const mi = pad(date.getMinutes())
-  return `${yyyy}-${mm}-${dd}T${hh}:${mi}`
-}
-
-function parseCETDateTime(value: string) {
-  const [datePart, timePart] = value.split('T')
-  if (!datePart || !timePart) return null
-
-  const [year, month, day] = datePart.split('-').map(Number)
-  const [hours, minutes] = timePart.split(':').map(Number)
-
-  const isDST = CET_DST_MONTHS.includes(month)
-  const offsetHours = isDST ? 2 : 1
-
-  const utc = Date.UTC(year, month - 1, day, hours - offsetHours, minutes)
-  return new Date(utc)
 }
 
 export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
@@ -63,28 +42,29 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
   const applyPreset = () => {
     if (!formData.race_start_at) return
 
-    const raceStart = parseCETDateTime(formData.race_start_at)
+    const raceStartIso = parseAmsterdamInputToIso(formData.race_start_at)
+    const raceStart = raceStartIso ? new Date(raceStartIso) : null
     if (!raceStart) return
 
     const dayBefore = new Date(raceStart.getTime() - 24 * 60 * 60 * 1000)
     const twoDaysBefore = new Date(raceStart.getTime() - 48 * 60 * 60 * 1000)
 
     const fillStandard = {
-      fp1_at: formatISODateForInput(new Date(dayBefore.setHours(10, 0, 0, 0))),
-      fp2_at: formatISODateForInput(new Date(dayBefore.setHours(13, 0, 0, 0))),
-      fp3_at: formatISODateForInput(new Date(dayBefore.setHours(16, 0, 0, 0))),
-      quali_at: formatISODateForInput(new Date(dayBefore.setHours(19, 0, 0, 0))),
+      fp1_at: formatAmsterdamInputValue(new Date(dayBefore.setHours(10, 0, 0, 0))),
+      fp2_at: formatAmsterdamInputValue(new Date(dayBefore.setHours(13, 0, 0, 0))),
+      fp3_at: formatAmsterdamInputValue(new Date(dayBefore.setHours(16, 0, 0, 0))),
+      quali_at: formatAmsterdamInputValue(new Date(dayBefore.setHours(19, 0, 0, 0))),
       sprint_quali_at: '',
       sprint_at: ''
     }
 
     const fillSprint = {
-      fp1_at: formatISODateForInput(new Date(dayBefore.setHours(10, 0, 0, 0))),
-      fp2_at: formatISODateForInput(new Date(dayBefore.setHours(13, 0, 0, 0))),
-      fp3_at: formatISODateForInput(new Date(dayBefore.setHours(16, 0, 0, 0))),
-      quali_at: formatISODateForInput(new Date(dayBefore.setHours(19, 0, 0, 0))),
-      sprint_quali_at: formatISODateForInput(new Date(twoDaysBefore.setHours(16, 0, 0, 0))),
-      sprint_at: formatISODateForInput(new Date(dayBefore.setHours(17, 0, 0, 0)))
+      fp1_at: formatAmsterdamInputValue(new Date(dayBefore.setHours(10, 0, 0, 0))),
+      fp2_at: formatAmsterdamInputValue(new Date(dayBefore.setHours(13, 0, 0, 0))),
+      fp3_at: formatAmsterdamInputValue(new Date(dayBefore.setHours(16, 0, 0, 0))),
+      quali_at: formatAmsterdamInputValue(new Date(dayBefore.setHours(19, 0, 0, 0))),
+      sprint_quali_at: formatAmsterdamInputValue(new Date(twoDaysBefore.setHours(16, 0, 0, 0))),
+      sprint_at: formatAmsterdamInputValue(new Date(dayBefore.setHours(17, 0, 0, 0)))
     }
 
     if (schedulePreset === 'standard') {
@@ -252,7 +232,7 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Race Date & Time (CET)</label>
+          <label className="block text-sm font-medium mb-1">Race Date & Time ({ADMIN_TIME_LABEL})</label>
           <input
             type="datetime-local"
             name="race_start_at"
@@ -266,7 +246,7 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">FP1 (required)</label>
+            <label className="block text-sm font-medium mb-1">FP1 ({ADMIN_TIME_LABEL}, required)</label>
             <input
               type="datetime-local"
               name="fp1_at"
@@ -279,7 +259,7 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">FP2 (optional)</label>
+            <label className="block text-sm font-medium mb-1">FP2 ({ADMIN_TIME_LABEL}, optional)</label>
             <input
               type="datetime-local"
               name="fp2_at"
@@ -293,7 +273,7 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">FP3 (optional)</label>
+            <label className="block text-sm font-medium mb-1">FP3 ({ADMIN_TIME_LABEL}, optional)</label>
             <input
               type="datetime-local"
               name="fp3_at"
@@ -305,7 +285,7 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Quali (optional)</label>
+            <label className="block text-sm font-medium mb-1">Quali ({ADMIN_TIME_LABEL}, optional)</label>
             <input
               type="datetime-local"
               name="quali_at"
@@ -319,7 +299,7 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-medium mb-1">Sprint (optional)</label>
+            <label className="block text-sm font-medium mb-1">Sprint ({ADMIN_TIME_LABEL}, optional)</label>
             <input
               type="datetime-local"
               name="sprint_at"
@@ -331,7 +311,7 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Sprint Quali (optional)</label>
+            <label className="block text-sm font-medium mb-1">Sprint Quali ({ADMIN_TIME_LABEL}, optional)</label>
             <input
               type="datetime-local"
               name="sprint_quali_at"
@@ -362,7 +342,7 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
         </button>
       </form>
 
-      <p className="mt-2 text-xs text-slate-400">Enter dates in CET. Required: race + FP1; others are optional.</p>
+      <p className="mt-2 text-xs text-slate-400">Enter dates in {ADMIN_TIME_LABEL}. Required: race + FP1; others are optional.</p>
     </div>
   )
 }

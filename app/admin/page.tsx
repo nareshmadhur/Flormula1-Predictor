@@ -1,11 +1,12 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
 import { Settings, ChevronRight } from 'lucide-react'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
+import { getAdminRaceStatusClasses, getAdminRaceStatusLabel } from '@/utils/admin-race-status'
 import { CreateRaceForm } from '@/components/ui/create-race-form'
 import { MaintenanceSection } from '@/components/ui/maintenance-section'
 import { getAdminAccessContext } from '@/utils/admin-access'
+import { PendingLink } from '@/components/ui/pending-link'
 
 export const revalidate = 0
 
@@ -38,7 +39,7 @@ export default async function AdminDashboardPage() {
       <div className="flex flex-col items-center justify-center p-20 text-center">
          <h1 className="text-3xl font-bold text-red-500 mb-4">Platform Admin Only</h1>
          <p className="text-slate-400">Race control is limited to platform admins.</p>
-         <Link href="/" className="mt-6 text-slate-300 underline">Return Home</Link>
+         <PendingLink href="/" className="mt-6 text-slate-300 underline">Return Home</PendingLink>
       </div>
     )
   }
@@ -76,7 +77,7 @@ export default async function AdminDashboardPage() {
               <div className="p-8 text-center text-slate-500 italic">No races defined.</div>
             ) : (
               typedRaces.map((race) => (
-                 <Link href={`/admin/races/${race.id}`} key={race.id} className="flex flex-col sm:flex-row justify-between sm:items-center p-6 hover:bg-white/[0.02] transition-colors group">
+                 <PendingLink href={`/admin/races/${race.id}`} key={race.id} className="flex flex-col sm:flex-row justify-between sm:items-center p-6 hover:bg-white/[0.02] transition-colors group">
                    <div className="space-y-1">
                      <div className="text-xs font-bold text-red-500 uppercase tracking-widest">
                        Round {race.round} • {race.season}
@@ -88,17 +89,13 @@ export default async function AdminDashboardPage() {
                    <div className="flex items-center space-x-6 mt-4 sm:mt-0">
                      <div className="hidden sm:block text-right">
                        <div className="text-xs text-slate-500 uppercase font-bold">Status</div>
-                       <div className={`text-sm font-medium ${
-                         getEffectiveRaceStatus(race) === 'scored' ? 'text-green-500' :
-                         getEffectiveRaceStatus(race) === 'cancelled' ? 'text-red-400' :
-                         getEffectiveRaceStatus(race) === 'upcoming' ? 'text-amber-500' : 'text-slate-400'
-                       }`}>
-                         {getEffectiveRaceStatus(race).toUpperCase()}
+                       <div className={`text-sm font-medium ${getAdminRaceStatusClasses(getEffectiveRaceStatus(race))}`}>
+                         {getAdminRaceStatusLabel(getEffectiveRaceStatus(race))}
                        </div>
                      </div>
                      <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-red-500 transition-colors" />
                    </div>
-                 </Link>
+                 </PendingLink>
               ))
             )}
           </div>
@@ -107,38 +104,38 @@ export default async function AdminDashboardPage() {
         {/* Right col: Utilities */}
         <div className="space-y-6">
 
-          <Link href="/admin/data" className="bg-card border border-white/5 p-6 rounded-2xl shadow-xl hover:bg-white/[0.02] transition-colors flex items-center justify-between group block">
+          <PendingLink href="/admin/data" className="bg-card border border-white/5 p-6 rounded-2xl shadow-xl hover:bg-white/[0.02] transition-colors flex items-center justify-between group block">
              <div>
                <h2 className="text-xl font-bold mb-1">Grid Data</h2>
                <p className="text-sm text-slate-400">Manage Drivers & Teams</p>
              </div>
              <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-red-500 transition-colors" />
-          </Link>
+          </PendingLink>
 
-          <Link href="/admin/schedule" className="bg-card border border-white/5 p-6 rounded-2xl shadow-xl hover:bg-white/[0.02] transition-colors flex items-center justify-between group block">
+          <PendingLink href="/admin/schedule" className="bg-card border border-white/5 p-6 rounded-2xl shadow-xl hover:bg-white/[0.02] transition-colors flex items-center justify-between group block">
              <div>
                <h2 className="text-xl font-bold mb-1">Schedule Sync</h2>
                <p className="text-sm text-slate-400">Review OpenF1 timings before updating the season calendar</p>
              </div>
              <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-red-500 transition-colors" />
-          </Link>
+          </PendingLink>
 
-          <Link href="/admin/tenants" className="bg-card border border-white/5 p-6 rounded-2xl shadow-xl hover:bg-white/[0.02] transition-colors flex items-center justify-between group block">
+          <PendingLink href="/admin/tenants" className="bg-card border border-white/5 p-6 rounded-2xl shadow-xl hover:bg-white/[0.02] transition-colors flex items-center justify-between group block">
              <div>
                <h2 className="text-xl font-bold mb-1">Tenants & Access</h2>
                <p className="text-sm text-slate-400">{tenantCount || 0} tenants and account access controls</p>
              </div>
              <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-red-500 transition-colors" />
-          </Link>
+          </PendingLink>
 
           {access.tenantId && (
-            <Link href="/admin/tenant" className="bg-card border border-white/5 p-6 rounded-2xl shadow-xl hover:bg-white/[0.02] transition-colors flex items-center justify-between group block">
+            <PendingLink href="/admin/tenant" className="bg-card border border-white/5 p-6 rounded-2xl shadow-xl hover:bg-white/[0.02] transition-colors flex items-center justify-between group block">
                <div>
                  <h2 className="text-xl font-bold mb-1">Tenant Ops</h2>
                  <p className="text-sm text-slate-400">Inspect the competition experience inside your own tenant</p>
                </div>
                <ChevronRight className="w-5 h-5 text-slate-600 group-hover:text-red-500 transition-colors" />
-            </Link>
+            </PendingLink>
           )}
 
           <MaintenanceSection />

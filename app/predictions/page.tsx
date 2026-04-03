@@ -196,6 +196,10 @@ function getActiveSectionCopy(tab: SeasonFilterKey) {
   }
 }
 
+function formatRaceDateTime(value: string) {
+  return format(new Date(value), 'MMM d, p')
+}
+
 function RaceListCard({
   race,
   status,
@@ -224,71 +228,59 @@ function RaceListCard({
           ? 'border-yellow-500/20 bg-card'
           : 'border-white/10 bg-card'
 
-  const infoItems =
+  const metaItems =
     filterKey === 'action'
       ? [
           {
-            label: 'Status',
-            value: hasPredicted ? 'Entry locked in' : 'No entry yet',
+            icon: Clock3,
+            value: hasPredicted
+              ? `Lock ${formatRaceDateTime(race.prediction_lock_at)}`
+              : `Closes ${formatDistanceToNowStrict(new Date(race.prediction_lock_at), { addSuffix: true })}`,
           },
           {
-            label: 'Lock',
-            value: format(new Date(race.prediction_lock_at), 'MMM d, p'),
-            detail: formatDistanceToNowStrict(new Date(race.prediction_lock_at), { addSuffix: true }),
-          },
-          {
-            label: 'Race',
-            value: format(new Date(race.race_start_at), 'MMM d, p'),
+            icon: Calendar,
+            value: `Race ${formatRaceDateTime(race.race_start_at)}`,
           },
         ]
       : filterKey === 'waiting'
         ? [
             {
-              label: 'State',
-              value: status === 'locked' ? 'Weekend in progress' : 'Scoring pending',
+              icon: Clock3,
+              value:
+                status === 'locked'
+                  ? `Weekend live`
+                  : `Scoring pending`,
             },
             {
-              label: 'Locked',
-              value: format(new Date(race.prediction_lock_at), 'MMM d, p'),
-            },
-            {
-              label: 'Race',
-              value: format(new Date(race.race_start_at), 'MMM d, p'),
+              icon: Calendar,
+              value: `Race ${formatRaceDateTime(race.race_start_at)}`,
             },
           ]
         : filterKey === 'scored'
           ? [
               {
-                label: 'Score',
+                icon: Trophy,
                 value: typeof score === 'number' ? `${score} pts` : 'Final score',
               },
               {
-                label: 'Race',
-                value: format(new Date(race.race_start_at), 'MMM d, p'),
-              },
-              {
-                label: 'State',
-                value: 'Ready to review',
+                icon: Calendar,
+                value: `Race ${formatRaceDateTime(race.race_start_at)}`,
               },
             ]
           : [
               {
-                label: 'Status',
-                value: 'Missed weekend',
+                icon: AlertCircle,
+                value: 'No entry',
               },
               {
-                label: 'Race',
-                value: format(new Date(race.race_start_at), 'MMM d, p'),
-              },
-              {
-                label: 'Next step',
-                value: 'Review the result',
+                icon: Calendar,
+                value: `Race ${formatRaceDateTime(race.race_start_at)}`,
               },
             ]
 
   return (
     <div className={`rounded-2xl border p-5 shadow-xl transition-colors hover:bg-white/[0.02] ${frameClasses}`}>
-      <div className="flex flex-col gap-4 xl:grid xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)_auto] xl:items-center">
+      <div className="flex flex-col gap-4">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-bold uppercase tracking-widest text-red-500">{getRoundLabel(race.round)}</span>
@@ -312,42 +304,59 @@ function RaceListCard({
             )}
           </div>
 
-          <div className="mt-3">
-            <h2 className="truncate text-2xl font-bold text-white">{race.race_name}</h2>
-            <div className="mt-1 flex items-center text-slate-400">
-              <MapPin className="mr-1.5 h-4 w-4 shrink-0 text-slate-500" />
-              <span className="truncate">
-                {race.circuits?.name}, {race.circuits?.country} {race.circuits?.emoji}
-              </span>
+          <div className="mt-3 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div className="min-w-0">
+              <h2 className="text-2xl font-bold text-white">{race.race_name}</h2>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-slate-400">
+                <span className="inline-flex min-w-0 items-center">
+                  <MapPin className="mr-1.5 h-4 w-4 shrink-0 text-slate-500" />
+                  <span className="min-w-0 break-words">
+                    {race.circuits?.name}, {race.circuits?.country} {race.circuits?.emoji}
+                  </span>
+                </span>
+              </div>
+            </div>
+
+            <div className="w-full lg:w-auto">
+              <PendingLink
+                href={`/race/${race.id}/predict`}
+                className={`inline-flex w-full items-center justify-center gap-1.5 rounded-xl px-5 py-3 font-bold transition-all lg:w-auto ${
+                  isActionable
+                    ? 'bg-red-600 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)] hover:bg-red-500'
+                    : 'border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
+                }`}
+              >
+                {getRaceActionLabel(status, hasPredicted)}
+                <ChevronRight className="ml-1 h-5 w-5" />
+              </PendingLink>
             </div>
           </div>
-        </div>
 
-        <div className="flex flex-wrap gap-2">
-          {infoItems.map((item) => (
-            <div
-              key={`${race.id}-${item.label}`}
-              className="inline-flex min-w-[10rem] flex-col rounded-full border border-white/8 bg-black/25 px-4 py-2.5"
-            >
-              <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{item.label}</span>
-              <span className="mt-1 text-sm font-semibold text-slate-100">{item.value}</span>
-              {item.detail && <span className="text-xs text-slate-500">{item.detail}</span>}
-            </div>
-          ))}
-        </div>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {metaItems.map((item) => {
+              const Icon = item.icon
 
-        <div className="w-full xl:w-auto">
-          <PendingLink
-            href={`/race/${race.id}/predict`}
-            className={`inline-flex w-full items-center justify-center gap-1.5 rounded-xl px-6 py-3 font-bold transition-all xl:w-auto ${
-              isActionable
-                ? 'bg-red-600 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)] hover:bg-red-500'
-                : 'border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
-            }`}
-          >
-            {getRaceActionLabel(status, hasPredicted)}
-            <ChevronRight className="ml-1 h-5 w-5" />
-          </PendingLink>
+              return (
+                <span
+                  key={`${race.id}-${item.value}`}
+                  className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-black/25 px-3 py-1.5 text-sm text-slate-300"
+                >
+                  <Icon className="h-3.5 w-3.5 text-slate-500" />
+                  {item.value}
+                </span>
+              )
+            })}
+            {filterKey === 'action' && hasPredicted && (
+              <span className="inline-flex items-center gap-2 rounded-full border border-green-500/20 bg-green-500/10 px-3 py-1.5 text-sm text-green-300">
+                Entry locked in
+              </span>
+            )}
+            {filterKey === 'waiting' && hasPredicted && (
+              <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-sm text-amber-200">
+                Awaiting the official result
+              </span>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -524,27 +533,19 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
                 </div>
 
                 <div className="mt-4 flex flex-wrap gap-2">
-                  <div className="rounded-full border border-white/8 bg-black/25 px-4 py-2.5">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Status</div>
-                    <div className="mt-1 text-sm font-semibold text-slate-100">{heroContent.status}</div>
-                  </div>
-                  <div className="rounded-full border border-white/8 bg-black/25 px-4 py-2.5">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Lock</div>
-                    <div className="mt-1 text-sm font-semibold text-slate-100">
-                      {format(new Date(hero.race.prediction_lock_at), 'MMM d, p')}
-                    </div>
-                    {hero.kind === 'action' && (
-                      <div className="text-xs text-slate-500">
-                        {formatDistanceToNowStrict(new Date(hero.race.prediction_lock_at), { addSuffix: true })}
-                      </div>
-                    )}
-                  </div>
-                  <div className="rounded-full border border-white/8 bg-black/25 px-4 py-2.5">
-                    <div className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Race</div>
-                    <div className="mt-1 text-sm font-semibold text-slate-100">
-                      {format(new Date(hero.race.race_start_at), 'MMM d, p')}
-                    </div>
-                  </div>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-black/25 px-3 py-1.5 text-sm text-slate-200">
+                    {heroContent.status}
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-black/25 px-3 py-1.5 text-sm text-slate-300">
+                    <Clock3 className="h-3.5 w-3.5 text-slate-500" />
+                    {hero.kind === 'action'
+                      ? `Closes ${formatDistanceToNowStrict(new Date(hero.race.prediction_lock_at), { addSuffix: true })}`
+                      : `Lock ${formatRaceDateTime(hero.race.prediction_lock_at)}`}
+                  </span>
+                  <span className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-black/25 px-3 py-1.5 text-sm text-slate-300">
+                    <Calendar className="h-3.5 w-3.5 text-slate-500" />
+                    Race {formatRaceDateTime(hero.race.race_start_at)}
+                  </span>
                 </div>
 
                 <div className="mt-4 flex items-center text-slate-400">

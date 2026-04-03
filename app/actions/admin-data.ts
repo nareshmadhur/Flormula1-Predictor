@@ -7,6 +7,7 @@ import {
   type AdminProfileRow,
   type AdminScope,
 } from '@/utils/admin-access'
+import { getCountryEmoji } from '@/utils/country-emoji'
 import type { TenantAdminActionState } from '@/app/admin/tenants/action-state'
 
 export async function addDriver(formData: FormData) {
@@ -24,6 +25,81 @@ export async function addDriver(formData: FormData) {
 
   if (error) throw new Error('Failed to add driver: ' + error.message)
   revalidatePath('/admin/data')
+}
+
+export async function addCircuit(formData: FormData) {
+  const { supabase } = await assertPlatformAdmin()
+  const name = (formData.get('name') as string | null)?.trim()
+  const city = (formData.get('city') as string | null)?.trim() || null
+  const country = (formData.get('country') as string | null)?.trim() || null
+  const emoji = (formData.get('emoji') as string | null)?.trim() || getCountryEmoji(country)
+
+  if (!name) throw new Error('Circuit name is required')
+
+  const { data: existingCircuits } = await supabase
+    .from('circuits')
+    .select('id, name, city, country')
+    .order('name')
+
+  const normalizedName = name.toLowerCase()
+  const normalizedCity = city?.toLowerCase() || ''
+  const normalizedCountry = country?.toLowerCase() || ''
+
+  const duplicate = (existingCircuits || []).find((circuit) => {
+    return (
+      circuit.name.toLowerCase() === normalizedName &&
+      (circuit.city || '').toLowerCase() === normalizedCity &&
+      (circuit.country || '').toLowerCase() === normalizedCountry
+    )
+  })
+
+  if (duplicate) {
+    throw new Error('That circuit already exists in reference data.')
+  }
+
+  const { error } = await supabase.from('circuits').insert({
+    name,
+    city,
+    country,
+    emoji,
+  })
+
+  if (error) throw new Error('Failed to add circuit: ' + error.message)
+  revalidatePath('/admin/data')
+  revalidatePath('/admin/schedule')
+}
+
+export async function updateCircuit(formData: FormData) {
+  const { supabase } = await assertPlatformAdmin()
+  const circuitId = (formData.get('circuit_id') as string | null)?.trim()
+  const name = (formData.get('name') as string | null)?.trim()
+  const city = (formData.get('city') as string | null)?.trim() || null
+  const country = (formData.get('country') as string | null)?.trim() || null
+  const rawEmoji = (formData.get('emoji') as string | null)?.trim()
+  const emoji = rawEmoji || getCountryEmoji(country)
+
+  if (!circuitId) throw new Error('Circuit ID is required')
+  if (!name) throw new Error('Circuit name is required')
+
+  const { error } = await supabase
+    .from('circuits')
+    .update({
+      name,
+      city,
+      country,
+      emoji,
+    })
+    .eq('id', circuitId)
+
+  if (error) throw new Error('Failed to update circuit: ' + error.message)
+
+  revalidatePath('/admin')
+  revalidatePath('/admin/data')
+  revalidatePath('/admin/schedule')
+  revalidatePath('/')
+  revalidatePath('/season')
+  revalidatePath('/predictions')
+  revalidatePath('/leaderboard')
 }
 
 export async function toggleDriverActive(driverId: string, currentActive: boolean) {

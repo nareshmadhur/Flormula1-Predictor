@@ -4,6 +4,7 @@ import { IdCard, UserRound } from 'lucide-react'
 import { getProfileDisplayName } from '@/utils/profile-name'
 import { getUserTenantContext } from '@/utils/tenant'
 import { TenantContextBanner } from '@/components/ui/tenant-context-banner'
+import { PageBackLink } from '@/components/ui/page-back-link'
 import { ProfileForm } from './profile-form'
 
 export const revalidate = 0
@@ -31,6 +32,7 @@ export default async function ProfilePage() {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      <PageBackLink href="/predictions" label="Back to My Season" />
       <section className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 to-black p-6 shadow-2xl md:p-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="space-y-2">

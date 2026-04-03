@@ -1,7 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { ChevronDown, Medal, Trophy } from 'lucide-react'
 import { format } from 'date-fns'
-import { Fragment } from 'react'
 import { getRoundLabel } from '@/utils/race-copy'
 import { getCurrentSeason } from '@/utils/season'
 import { getUserTenantContext } from '@/utils/tenant'
@@ -137,6 +136,7 @@ function getSlotStatusText(slot: PodiumSlotBreakdown) {
 }
 
 const summaryGridTemplate = '4rem minmax(0,1fr) 5.5rem 5.5rem 5.5rem 1.5rem'
+const breakdownGridTemplate = 'minmax(210px, 2.3fr) repeat(3, minmax(88px, 1fr)) minmax(92px, 0.9fr) minmax(56px, 0.55fr)'
 
 export default async function LeaderboardPage({ searchParams }: LeaderboardPageProps) {
   const supabase = await createClient()
@@ -484,103 +484,102 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
                     </div>
                   ) : (
                     <div className="overflow-x-auto">
-                      <table className="min-w-[920px] w-full table-fixed border-separate border-spacing-y-1.5 text-sm">
-                        <colgroup>
-                          <col className="w-[30%]" />
-                          <col className="w-[14%]" />
-                          <col className="w-[14%]" />
-                          <col className="w-[14%]" />
-                          <col className="w-[18%]" />
-                          <col className="w-[10%]" />
-                        </colgroup>
-                        <thead>
-                          <tr className="text-[11px] font-bold uppercase tracking-widest text-slate-500">
-                            <th className="rounded-l-xl border border-white/10 bg-black/20 px-4 py-2.5 text-left">Race</th>
-                            <th className="border-y border-white/10 bg-black/20 px-3 py-2.5 text-center">P1</th>
-                            <th className="border-y border-white/10 bg-black/20 px-3 py-2.5 text-center">P2</th>
-                            <th className="border-y border-white/10 bg-black/20 px-3 py-2.5 text-center">P3</th>
-                            <th className="border-y border-white/10 bg-black/20 px-3 py-2.5 text-center">Bonus</th>
-                            <th className="rounded-r-xl border border-white/10 bg-black/20 px-3 py-2.5 text-right">Pts</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {userBreakdown.map((race) => {
-                            const showActualPodium = race.slots.some((slot) => slot.outcome !== 'exact')
-                            const showBonusDetail = race.bonusItems.length > 0
-                            const showDetailRow = showActualPodium || showBonusDetail
+                      <div className="min-w-[720px] space-y-1.5 text-sm lg:min-w-0">
+                        <div
+                          className="grid text-[11px] font-bold uppercase tracking-widest text-slate-500"
+                          style={{ gridTemplateColumns: breakdownGridTemplate }}
+                        >
+                          <div className="rounded-l-xl border border-white/10 bg-black/20 px-3 py-2 text-left">Race</div>
+                          <div className="border-y border-white/10 bg-black/20 px-2 py-2 text-center">P1</div>
+                          <div className="border-y border-white/10 bg-black/20 px-2 py-2 text-center">P2</div>
+                          <div className="border-y border-white/10 bg-black/20 px-2 py-2 text-center">P3</div>
+                          <div className="border-y border-white/10 bg-black/20 px-2 py-2 text-center">Bonus</div>
+                          <div className="rounded-r-xl border border-white/10 bg-black/20 px-2 py-2 text-right">Pts</div>
+                        </div>
 
-                            return (
-                            <Fragment key={race.raceId}>
-                              <tr className="align-top">
-                                <td className="rounded-l-xl border border-white/5 bg-black/25 px-4 py-3">
+                        {userBreakdown.map((race) => {
+                          const showActualPodium = race.slots.some((slot) => slot.outcome !== 'exact')
+                          const showBonusDetail = race.bonusItems.length > 0
+                          const showDetailRow = showActualPodium || showBonusDetail
+
+                          return (
+                            <div
+                              key={race.raceId}
+                              className="overflow-hidden rounded-xl border border-white/5"
+                            >
+                              <div
+                                className="grid items-stretch"
+                                style={{ gridTemplateColumns: breakdownGridTemplate }}
+                              >
+                                <div className={`border-r border-white/5 bg-black/25 px-3 py-2.5 ${showDetailRow ? 'rounded-tl-xl' : 'rounded-l-xl'}`}>
                                   <div className="flex items-center gap-2">
                                     <span className="text-xs font-bold uppercase tracking-widest text-red-500">
                                       {getRoundLabel(race.round)}
                                     </span>
-                                    <span className="truncate font-bold text-white">{race.raceName}</span>
+                                    <span className="truncate text-[13px] font-bold leading-tight text-white">{race.raceName}</span>
                                   </div>
-                                  <div className="mt-1 text-xs text-slate-500">{format(new Date(race.raceStartAt), 'PPP')}</div>
-                                </td>
+                                  <div className="mt-0.5 text-[11px] text-slate-500">{format(new Date(race.raceStartAt), 'PPP')}</div>
+                                </div>
 
                                 {race.slots.map((slot) => (
-                                  <td
+                                  <div
                                     key={`${race.raceId}-${slot.slot}`}
-                                    className="border-y border-white/5 bg-black/25 px-3 py-2.5 text-center"
+                                    className="border-r border-white/5 bg-black/25 px-2 py-2 text-center last:border-r-0"
                                   >
                                     <div
-                                      className={`inline-flex min-w-[88px] items-center justify-center rounded-full border px-3 py-1.5 text-sm font-bold ${getOutcomeClasses(slot.outcome)}`}
+                                      className={`inline-flex min-w-[72px] items-center justify-center rounded-full border px-2.5 py-1 text-[13px] font-bold ${getOutcomeClasses(slot.outcome)}`}
                                     >
                                       <span className="truncate font-black italic leading-none">{slot.predictedLabel}</span>
-                                      <span className="ml-2 text-[11px] font-bold uppercase tracking-widest opacity-85">
+                                      <span className="ml-1.5 text-[10px] font-bold uppercase tracking-widest opacity-85">
                                         {getSlotStatusText(slot)}
                                       </span>
                                     </div>
-                                  </td>
+                                  </div>
                                 ))}
 
-                                <td className="border-y border-white/5 bg-black/25 px-3 py-2.5 text-center">
-                                  <div className="inline-flex min-w-[56px] items-center justify-center rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-bold text-white">
+                                <div className="border-r border-white/5 bg-black/25 px-2 py-2 text-center">
+                                  <div className="inline-flex min-w-[48px] items-center justify-center rounded-full border border-white/10 bg-white/5 px-2 py-1 text-[11px] font-bold text-white">
                                     {race.bonusTotalCount > 0 ? `${race.bonusCorrectCount}/${race.bonusTotalCount}` : '-'}
                                   </div>
-                                </td>
+                                </div>
 
-                                <td className="rounded-r-xl border border-white/5 bg-black/25 px-3 py-2.5 text-right">
-                                  <div className="text-lg font-black italic text-red-400">{race.totalPoints}</div>
-                                </td>
-                              </tr>
+                                <div className={`bg-black/25 px-2 py-2 text-right ${showDetailRow ? 'rounded-tr-xl' : 'rounded-r-xl'}`}>
+                                  <div className="text-base font-black italic text-red-400">{race.totalPoints}</div>
+                                </div>
+                              </div>
 
                               {showDetailRow && (
-                                <tr className="text-xs text-slate-300">
-                                  <td className="rounded-l-xl border border-white/5 bg-black/20 px-4 py-2.5 font-bold uppercase tracking-widest text-slate-500">
+                                <div
+                                  className="grid items-stretch border-t border-white/5 text-xs text-slate-300"
+                                  style={{ gridTemplateColumns: breakdownGridTemplate }}
+                                >
+                                  <div className="rounded-bl-xl bg-black/20 px-3 py-2 font-bold uppercase tracking-widest text-slate-500">
                                     {showActualPodium ? 'Actual' : 'Bonus'}
-                                  </td>
+                                  </div>
                                   {showActualPodium ? (
                                     <>
-                                      <td className="border-y border-white/5 bg-black/20 px-3 py-2.5 text-center">
+                                      <div className="bg-black/20 px-2 py-2 text-center">
                                         {race.actualPodiumLabels[0]?.replace(/^P1\s/, '')}
-                                      </td>
-                                      <td className="border-y border-white/5 bg-black/20 px-3 py-2.5 text-center">
+                                      </div>
+                                      <div className="bg-black/20 px-2 py-2 text-center">
                                         {race.actualPodiumLabels[1]?.replace(/^P2\s/, '')}
-                                      </td>
-                                      <td className="border-y border-white/5 bg-black/20 px-3 py-2.5 text-center">
+                                      </div>
+                                      <div className="bg-black/20 px-2 py-2 text-center">
                                         {race.actualPodiumLabels[2]?.replace(/^P3\s/, '')}
-                                      </td>
+                                      </div>
                                     </>
                                   ) : (
-                                    <td
-                                      colSpan={3}
-                                      className="border-y border-white/5 bg-black/20 px-3 py-2.5 text-center text-slate-500"
-                                    >
+                                    <div className="col-span-3 bg-black/20 px-2 py-2 text-center text-slate-500">
                                       Podium matched
-                                    </td>
+                                    </div>
                                   )}
-                                  <td className="border-y border-white/5 bg-black/20 px-3 py-2.5">
+                                  <div className="bg-black/20 px-2 py-2">
                                     {showBonusDetail ? (
                                       <div className="flex flex-wrap items-center justify-center gap-1">
                                         {race.bonusItems.map((item) => (
                                           <span
                                             key={`${race.raceId}-${item.label}`}
-                                            className={`rounded-full border px-2 py-0.5 text-[10px] font-bold leading-none ${
+                                            className={`rounded-full border px-1.5 py-0.5 text-[10px] font-bold leading-none ${
                                               item.isCorrect
                                                 ? 'border-green-500/20 bg-green-500/10 text-green-200'
                                                 : 'border-red-500/20 bg-red-500/10 text-red-200'
@@ -594,15 +593,14 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
                                     ) : (
                                       <div className="text-center text-slate-500">-</div>
                                     )}
-                                  </td>
-                                  <td className="rounded-r-xl border border-white/5 bg-black/20 px-3 py-2.5" />
-                                </tr>
+                                  </div>
+                                  <div className="rounded-br-xl bg-black/20 px-2 py-2" />
+                                </div>
                               )}
-                            </Fragment>
-                            )
-                          })}
-                        </tbody>
-                      </table>
+                            </div>
+                          )
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>

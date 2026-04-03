@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { rebuildLeaderboardForSeason } from '@/utils/leaderboard'
 import { assertPlatformAdmin } from '@/utils/admin-access'
+import { parseAmsterdamInputToIso } from '@/utils/amsterdam-time'
 
 type NewRacePayload = {
   season: number
@@ -29,8 +30,8 @@ function stripSourceMetadata<T extends Record<string, unknown>>(payload: T) {
   return clone
 }
 
-function getPredictionLockAt(fp1At: string | null, raceStartAt: Date) {
-  const lockSource = fp1At ? new Date(fp1At) : raceStartAt
+function getPredictionLockAt(fp1AtIso: string | null, raceStartAtIso: string) {
+  const lockSource = fp1AtIso ? new Date(fp1AtIso) : new Date(raceStartAtIso)
   return new Date(lockSource.getTime() - 5 * 60000)
 }
 
@@ -41,13 +42,15 @@ export async function createRace(formData: FormData) {
   const round = parseInt(formData.get('round') as string)
   const raceName = formData.get('race_name') as string
   const circuitId = formData.get('circuit_id') as string
-  const raceStartAt = new Date(formData.get('race_start_at') as string)
-  const fp1At = formData.get('fp1_at') as string | null
-  const fp2At = formData.get('fp2_at') as string | null
-  const fp3At = formData.get('fp3_at') as string | null
-  const qualiAt = formData.get('quali_at') as string | null
-  const sprintAt = formData.get('sprint_at') as string | null
-  const sprintQualiAt = formData.get('sprint_quali_at') as string | null
+  const raceStartAt = parseAmsterdamInputToIso(formData.get('race_start_at') as string)
+  const fp1At = parseAmsterdamInputToIso(formData.get('fp1_at') as string | null)
+  const fp2At = parseAmsterdamInputToIso(formData.get('fp2_at') as string | null)
+  const fp3At = parseAmsterdamInputToIso(formData.get('fp3_at') as string | null)
+  const qualiAt = parseAmsterdamInputToIso(formData.get('quali_at') as string | null)
+  const sprintAt = parseAmsterdamInputToIso(formData.get('sprint_at') as string | null)
+  const sprintQualiAt = parseAmsterdamInputToIso(formData.get('sprint_quali_at') as string | null)
+
+  if (!raceStartAt) throw new Error('Race start is required')
 
   // By default, lock predictions 5 minutes before FP1.
   // Legacy races without FP1 fall back to race start until FP1 is supplied.
@@ -58,7 +61,7 @@ export async function createRace(formData: FormData) {
     round,
     race_name: raceName,
     circuit_id: circuitId,
-    race_start_at: raceStartAt.toISOString(),
+    race_start_at: raceStartAt,
     prediction_lock_at: lockAt.toISOString(),
     status: 'upcoming'
   }
@@ -80,7 +83,7 @@ export async function createRace(formData: FormData) {
       round,
       race_name: raceName,
       circuit_id: circuitId,
-      race_start_at: raceStartAt.toISOString(),
+      race_start_at: raceStartAt,
       prediction_lock_at: lockAt.toISOString(),
       status: 'upcoming'
     }
@@ -131,20 +134,22 @@ export async function updateRace(formData: FormData) {
   const raceId = formData.get('race_id') as string
   const raceName = formData.get('race_name') as string
   const circuitId = formData.get('circuit_id') as string
-  const raceStartAt = new Date(formData.get('race_start_at') as string)
-  const fp1At = formData.get('fp1_at') as string | null
-  const fp2At = formData.get('fp2_at') as string | null
-  const fp3At = formData.get('fp3_at') as string | null
-  const qualiAt = formData.get('quali_at') as string | null
-  const sprintAt = formData.get('sprint_at') as string | null
-  const sprintQualiAt = formData.get('sprint_quali_at') as string | null
+  const raceStartAt = parseAmsterdamInputToIso(formData.get('race_start_at') as string)
+  const fp1At = parseAmsterdamInputToIso(formData.get('fp1_at') as string | null)
+  const fp2At = parseAmsterdamInputToIso(formData.get('fp2_at') as string | null)
+  const fp3At = parseAmsterdamInputToIso(formData.get('fp3_at') as string | null)
+  const qualiAt = parseAmsterdamInputToIso(formData.get('quali_at') as string | null)
+  const sprintAt = parseAmsterdamInputToIso(formData.get('sprint_at') as string | null)
+  const sprintQualiAt = parseAmsterdamInputToIso(formData.get('sprint_quali_at') as string | null)
+
+  if (!raceStartAt) throw new Error('Race start is required')
 
   const lockAt = getPredictionLockAt(fp1At, raceStartAt)
 
   const payload = {
     race_name: raceName,
     circuit_id: circuitId,
-    race_start_at: raceStartAt.toISOString(),
+    race_start_at: raceStartAt,
     fp1_at: fp1At || null,
     fp2_at: fp2At || null,
     fp3_at: fp3At || null,

@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { format } from 'date-fns'
 import { ArrowRight, Calendar, ChevronRight, Flag, Timer, Trophy } from 'lucide-react'
 import { PendingLink } from '@/components/ui/pending-link'
+import { PageBackLink } from '@/components/ui/page-back-link'
 import { getProfileDisplayName } from '@/utils/profile-name'
 import { getPublicSeasonData, type PublicSeasonLeaderboardEntry, type PublicSeasonRaceSummary } from '@/utils/public-season'
 import { getRoundLabel } from '@/utils/race-copy'
@@ -222,6 +223,7 @@ export default async function PublicSeasonPage({ searchParams }: PageProps) {
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      <PageBackLink href="/" label="Back to home" />
       <section className="rounded-3xl border border-white/10 bg-gradient-to-br from-slate-950 via-slate-900 to-black p-6 shadow-2xl md:p-8">
         <div className="flex flex-wrap items-center gap-3">
           <span className="rounded-full border border-red-500/30 bg-red-500/15 px-3 py-1 text-sm font-bold uppercase tracking-wider text-red-300">
