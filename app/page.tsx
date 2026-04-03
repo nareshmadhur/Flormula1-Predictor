@@ -1,5 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
-import { ArrowRight, ChevronRight, Flag, Timer, Trophy } from 'lucide-react'
+import { ArrowRight, ChevronRight, Timer, Trophy } from 'lucide-react'
 import { format, isPast } from 'date-fns'
 import { getCurrentSeason } from '@/utils/season'
 import { getProfileDisplayName } from '@/utils/profile-name'
@@ -8,6 +8,8 @@ import { getUserTenantContext } from '@/utils/tenant'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { getCompetitionRank, sortCompetitionStandings } from '@/utils/competition'
 import { getRoundLabel } from '@/utils/race-copy'
+import { SectionHeader } from '@/components/ui/section-header'
+import { RaceMetaStrip } from '@/components/ui/race-meta-strip'
 
 export const revalidate = 0
 
@@ -126,19 +128,19 @@ export default async function HomePage() {
             )}
           </div>
 
-          <div className="space-y-3">
-            <h1 className="text-4xl font-black italic tracking-tighter md:text-5xl">{standingsTitle}</h1>
-
-            {user && currentUserRank && currentUserEntry ? (
-              <div className="flex flex-wrap gap-3 text-sm font-bold uppercase tracking-widest text-slate-200">
-                <span className="rounded-full border border-white/10 bg-black/30 px-4 py-2">
-                  #{currentUserRank} · {currentUserEntry.total_points} pts · {currentUserEntry.exact_hits} exact
-                </span>
-              </div>
-            ) : (
-              <div className="text-sm font-medium text-slate-400">Lock: FP1 - 5m</div>
-            )}
-          </div>
+          <SectionHeader
+            title={standingsTitle}
+            description={!user || !currentUserRank || !currentUserEntry ? 'Lock: FP1 - 5m' : undefined}
+            aside={
+              user && currentUserRank && currentUserEntry ? (
+                <div className="flex flex-wrap gap-3 text-sm font-bold uppercase tracking-widest text-slate-200">
+                  <span className="rounded-full border border-white/10 bg-black/30 px-4 py-2">
+                    #{currentUserRank} · {currentUserEntry.total_points} pts · {currentUserEntry.exact_hits} exact
+                  </span>
+                </div>
+              ) : null
+            }
+          />
 
           <div className="rounded-3xl border border-white/10 bg-black/35 p-5 shadow-xl">
             <div className="mb-4 flex items-center justify-between gap-3">
@@ -240,9 +242,7 @@ export default async function HomePage() {
 
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-3xl border border-white/10 bg-card p-6 shadow-xl">
-          <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-red-400">
-            <Flag className="h-4 w-4" /> Next Race
-          </div>
+          <SectionHeader eyebrow="Next race" title="Next race" />
 
           {nextRace ? (
             <div className="mt-4 space-y-4">
@@ -256,26 +256,20 @@ export default async function HomePage() {
                 </p>
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="rounded-2xl border border-white/5 bg-black/30 p-4">
-                  <div className="mb-1 flex items-center text-xs font-bold uppercase tracking-widest text-slate-500">
-                    <Timer className="mr-1 h-3.5 w-3.5 text-red-400" /> Race Start
-                  </div>
-                  <div className="font-semibold text-white">{format(new Date(nextRace.race_start_at), 'PPP p')}</div>
-                </div>
-                <div className="rounded-2xl border border-white/5 bg-black/30 p-4">
-                  <div className="mb-1 text-xs font-bold uppercase tracking-widest text-slate-500">
-                    Lock (FP1 - 5m)
-                  </div>
-                  <div
-                    className={`font-semibold ${
-                      isPast(new Date(nextRace.prediction_lock_at)) ? 'text-red-400' : 'text-amber-300'
-                    }`}
-                  >
-                    {format(new Date(nextRace.prediction_lock_at), 'PPP p')}
-                  </div>
-                </div>
-              </div>
+              <RaceMetaStrip
+                items={[
+                  {
+                    label: 'Race',
+                    value: format(new Date(nextRace.race_start_at), 'PPP p'),
+                    icon: Timer,
+                  },
+                  {
+                    label: 'Lock',
+                    value: format(new Date(nextRace.prediction_lock_at), 'PPP p'),
+                    tone: isPast(new Date(nextRace.prediction_lock_at)) ? 'pending' : 'open',
+                  },
+                ]}
+              />
 
               <div className="flex flex-wrap gap-4 pt-1">
                 <PendingLink
@@ -302,9 +296,7 @@ export default async function HomePage() {
         </section>
 
         <section className="rounded-3xl border border-white/10 bg-card p-6 shadow-xl">
-          <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-widest text-slate-400">
-            <Trophy className="h-4 w-4 text-yellow-500" /> Latest Results
-          </div>
+          <SectionHeader eyebrow="Latest results" title="Latest results" />
 
           {latestScored ? (
             <div className="mt-4 space-y-4">

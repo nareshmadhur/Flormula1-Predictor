@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { CalendarClock, History, Trophy } from 'lucide-react'
+import { CalendarClock, Trophy } from 'lucide-react'
 import { getCurrentSeason } from '@/utils/season'
 import { getRoundLabel } from '@/utils/race-copy'
 import { getEffectiveRaceStatus, type RaceStatus } from '@/utils/race-status'
@@ -9,6 +9,9 @@ import { TenantContextBanner } from '@/components/ui/tenant-context-banner'
 import { TenantAssignmentRequired } from '@/components/ui/tenant-assignment-required'
 import { PendingLink } from '@/components/ui/pending-link'
 import { PageBackLink } from '@/components/ui/page-back-link'
+import { RaceStatusPill } from '@/components/ui/race-status-pill'
+import { SectionHeader } from '@/components/ui/section-header'
+import { getMemberRaceActionLabel } from '@/utils/race-experience'
 
 export const revalidate = 0
 
@@ -89,11 +92,7 @@ function getCategoryTitle(category: HistoryEntry['category']) {
 }
 
 function getActionLabel(entry: HistoryEntry) {
-  if (entry.category === 'upcoming') {
-    return entry.hasPredicted ? 'Edit pick' : 'Predict now'
-  }
-
-  return 'Race recap'
+  return getMemberRaceActionLabel(entry.status, entry.hasPredicted)
 }
 
 function getCategoryOrder(category: HistoryEntry['category']) {
@@ -291,15 +290,12 @@ export default async function UserHistoryPage() {
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
       <PageBackLink href="/predictions" label="Back to My Season" />
-      <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-        <div className="space-y-2">
-          <h1 className="flex items-center text-3xl font-black italic tracking-tighter">
-            <History className="mr-3 h-8 w-8 text-red-500" /> MY SEASON
-          </h1>
-          <p className="text-sm text-slate-400">See what is entered, still live, scored, or missed.</p>
-        </div>
-        <TenantContextBanner tenantName={tenantContext.tenantName} label="Playing in" />
-      </div>
+      <SectionHeader
+        eyebrow="History"
+        title="My season"
+        description="Entered, pending, scored, and missed weekends."
+        aside={<TenantContextBanner tenantName={tenantContext.tenantName} label="Playing in" />}
+      />
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <div className="rounded-2xl border border-white/5 bg-card p-4 shadow-xl">
@@ -332,14 +328,17 @@ export default async function UserHistoryPage() {
 
             return (
               <section key={category} className="space-y-4">
-                <div className="flex items-center gap-3">
-                  {category === 'scored' ? (
-                    <Trophy className="h-6 w-6 text-red-500" />
-                  ) : (
-                    <CalendarClock className="h-6 w-6 text-red-500" />
-                  )}
-                  <h2 className="text-2xl font-black italic tracking-tighter">{getCategoryTitle(category)}</h2>
-                </div>
+                <SectionHeader
+                  eyebrow="Season story"
+                  title={getCategoryTitle(category)}
+                  aside={
+                    category === 'scored' ? (
+                      <Trophy className="h-6 w-6 text-red-500" />
+                    ) : (
+                      <CalendarClock className="h-6 w-6 text-red-500" />
+                    )
+                  }
+                />
 
                 <div className="grid gap-4">
                   {sectionEntries.map((entry) => (
@@ -348,8 +347,11 @@ export default async function UserHistoryPage() {
                     className="flex flex-col gap-4 rounded-2xl border border-white/5 bg-card p-5 shadow-xl transition-colors hover:bg-white/[0.02] md:flex-row md:items-center md:justify-between"
                     >
                       <div className="flex-1 space-y-2">
-                        <div className="text-sm font-bold uppercase tracking-widest text-red-500">
-                          {getRoundLabel(entry.race.round)}
+                        <div className="flex flex-wrap items-center gap-2">
+                          <div className="text-sm font-bold uppercase tracking-widest text-red-500">
+                            {getRoundLabel(entry.race.round)}
+                          </div>
+                          <RaceStatusPill status={entry.status} size="xs" />
                         </div>
                         <h3 className="text-xl font-bold">{entry.race.race_name}</h3>
                         <div className="text-sm text-slate-400">

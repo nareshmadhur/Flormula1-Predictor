@@ -2,8 +2,9 @@
 
 import { useMemo, useState } from 'react'
 import { submitPrediction } from '@/app/actions/predictions'
-import { AlertCircle, CheckCircle, ChevronDown, ChevronUp, Search, Trophy, X } from 'lucide-react'
+import { AlertCircle, CheckCircle, ChevronDown, ChevronUp, Search, X } from 'lucide-react'
 import { RaceStartLights } from '@/components/ui/race-start-lights'
+import { SectionHeader } from '@/components/ui/section-header'
 
 type RaceFormData = {
   id: string
@@ -276,18 +277,15 @@ export default function PredictionForm({
   return (
     <form onSubmit={handleSubmit} className="space-y-6 pb-28">
       <section className="rounded-3xl border border-white/10 bg-card p-6 shadow-2xl md:p-8">
-        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Podium</div>
-            <h2 className="mt-1 flex items-center text-xl font-black italic tracking-tighter text-white md:text-2xl">
-              <Trophy className="mr-2 h-5 w-5 text-red-500" /> Pick Your Top Three
-            </h2>
-          </div>
-
-          <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-sm font-bold text-slate-300">
-            {[p1, p2, p3].filter(Boolean).length}/3 picked
-          </div>
-        </div>
+        <SectionHeader
+          eyebrow="Podium"
+          title="Pick your top three"
+          aside={
+            <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-sm font-bold text-slate-300">
+              {[p1, p2, p3].filter(Boolean).length}/3 picked
+            </div>
+          }
+        />
 
         <div className="mt-5 grid gap-3 lg:grid-cols-3">
             <PodiumDraftSlot
@@ -400,10 +398,7 @@ export default function PredictionForm({
             onClick={() => setBonusOpen((current) => !current)}
             className="flex w-full items-center justify-between gap-3 text-left"
           >
-            <div>
-              <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Bonus</div>
-              <div className="mt-1 text-lg font-bold text-white">Bonus calls</div>
-            </div>
+            <SectionHeader eyebrow="Bonus" title="Bonus calls" />
 
             <div className="flex items-center gap-3">
               <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-sm font-bold text-slate-300">

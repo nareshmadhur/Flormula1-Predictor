@@ -135,21 +135,21 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
 
   return (
     <div className="bg-card border border-white/5 p-6 rounded-2xl shadow-xl">
-      <h2 className="text-xl font-bold mb-4 flex items-center">
+      <h2 className="mb-4 flex items-center text-xl font-bold">
         <Plus className="w-5 h-5 mr-2" />
-        Create Race
+        Add race weekend
       </h2>
 
-      <label className="block text-sm font-medium mb-2">Schedule preset</label>
+      <label className="mb-2 block text-sm font-medium">Weekend template</label>
       <select
         value={schedulePreset}
         onChange={e => setSchedulePreset(e.target.value as 'standard' | 'sprint' | 'custom')}
         className="mb-4 w-full px-3 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500"
         disabled={isLoading}
       >
-        <option value="standard">Standard schedule (default)</option>
-        <option value="sprint">Sprint weekend (preset)</option>
-        <option value="custom">Custom (manual entry)</option>
+        <option value="standard">Standard weekend</option>
+        <option value="sprint">Sprint weekend</option>
+        <option value="custom">Custom schedule</option>
       </select>
 
       {feedback && (
@@ -166,10 +166,10 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-slate-300">
-          Prediction lock is set automatically to 5 minutes before FP1.
+          Prediction lock is set automatically to FP1 minus 5 minutes.
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-sm font-medium mb-1">Race Name</label>
             <input
@@ -197,7 +197,7 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-sm font-medium mb-1">Season</label>
             <input
@@ -221,7 +221,7 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
               required
               disabled={isLoading}
             >
-              <option value="">Select Circuit</option>
+              <option value="">Select circuit</option>
               {circuits.map(circuit => (
                 <option key={circuit.id} value={circuit.id}>
                   {circuit.emoji} {circuit.name}
@@ -232,7 +232,7 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
         </div>
 
         <div>
-          <label className="block text-sm font-medium mb-1">Race Date & Time ({ADMIN_TIME_LABEL})</label>
+          <label className="block text-sm font-medium mb-1">Race date & time ({ADMIN_TIME_LABEL})</label>
           <input
             type="datetime-local"
             name="race_start_at"
@@ -244,7 +244,7 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
           />
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-sm font-medium mb-1">FP1 ({ADMIN_TIME_LABEL}, required)</label>
             <input
@@ -271,7 +271,7 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-sm font-medium mb-1">FP3 ({ADMIN_TIME_LABEL}, optional)</label>
             <input
@@ -285,7 +285,7 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Quali ({ADMIN_TIME_LABEL}, optional)</label>
+            <label className="block text-sm font-medium mb-1">Qualifying ({ADMIN_TIME_LABEL}, optional)</label>
             <input
               type="datetime-local"
               name="quali_at"
@@ -297,7 +297,7 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
           </div>
         </div>
 
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid gap-4 sm:grid-cols-2">
           <div>
             <label className="block text-sm font-medium mb-1">Sprint ({ADMIN_TIME_LABEL}, optional)</label>
             <input
@@ -311,7 +311,7 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
           </div>
 
           <div>
-            <label className="block text-sm font-medium mb-1">Sprint Quali ({ADMIN_TIME_LABEL}, optional)</label>
+            <label className="block text-sm font-medium mb-1">Sprint qualifying ({ADMIN_TIME_LABEL}, optional)</label>
             <input
               type="datetime-local"
               name="sprint_quali_at"
@@ -326,17 +326,17 @@ export function CreateRaceForm({ circuits }: CreateRaceFormProps) {
         <button
           type="submit"
           disabled={isLoading}
-          className="w-full bg-red-500 hover:bg-red-600 disabled:bg-red-500/50 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center"
+          className="flex w-full items-center justify-center rounded-lg bg-red-500 px-4 py-3 font-bold text-white transition-colors hover:bg-red-600 disabled:cursor-not-allowed disabled:bg-red-500/50"
         >
           {isLoading ? (
             <>
               <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-              Creating Race...
+              Adding race...
             </>
           ) : (
             <>
               <Plus className="w-4 h-4 mr-2" />
-              Create Race
+              Add race
             </>
           )}
         </button>

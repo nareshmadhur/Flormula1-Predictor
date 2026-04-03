@@ -60,7 +60,10 @@ export function MaintenanceSection() {
 
   return (
     <div className="bg-card border border-white/5 p-6 rounded-2xl shadow-xl">
-      <h2 className="text-xl font-bold mb-4">Maintenance</h2>
+      <h2 className="text-xl font-bold mb-1">Repair & upkeep</h2>
+      <p className="mb-4 text-sm text-slate-400">
+        Refresh derived race states and rebuild standings after historic fixes.
+      </p>
 
       {message && (
         <div
@@ -78,36 +81,46 @@ export function MaintenanceSection() {
         <button
           onClick={handleUpdateStatuses}
           disabled={isLoading}
-          className="w-full bg-slate-700 hover:bg-slate-600 disabled:bg-slate-700/50 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center"
+          className="w-full rounded-xl bg-slate-700 px-4 py-3 text-left text-white transition-colors hover:bg-slate-600 disabled:cursor-not-allowed disabled:bg-slate-700/50"
         >
           {isLoading ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-              Updating...
-            </>
+            <span className="flex items-center gap-3">
+              <div className="h-4 w-4 shrink-0 animate-spin rounded-full border-b-2 border-white"></div>
+              <span className="min-w-0 break-words text-sm font-bold">Refreshing race states...</span>
+            </span>
           ) : (
-            <>
-              <RefreshCw className="w-4 h-4 mr-2" />
-              Update Race Statuses
-            </>
+            <span className="flex items-start gap-3">
+              <RefreshCw className="mt-0.5 h-4 w-4 shrink-0" />
+              <span className="min-w-0">
+                <span className="block break-words text-sm font-bold">Refresh race states</span>
+                <span className="mt-1 block break-words text-xs font-medium text-slate-300">
+                  Update which races are open, live, waiting on results, or need scoring.
+                </span>
+              </span>
+            </span>
           )}
         </button>
 
         <button
           onClick={handleRepairScores}
           disabled={isRepairing}
-          className="w-full bg-red-600/80 hover:bg-red-500 disabled:bg-red-600/40 disabled:cursor-not-allowed text-white font-bold py-3 px-4 rounded-lg transition-colors flex items-center justify-center"
+          className="w-full rounded-xl bg-red-600/80 px-4 py-3 text-left text-white transition-colors hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-red-600/40"
         >
           {isRepairing ? (
-            <>
-              <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
-              Repairing...
-            </>
+            <span className="flex items-center gap-3">
+              <div className="h-4 w-4 shrink-0 animate-spin rounded-full border-b-2 border-white"></div>
+              <span className="min-w-0 break-words text-sm font-bold">Repairing scores and standings...</span>
+            </span>
           ) : (
-            <>
-              <Wrench className="w-4 h-4 mr-2" />
-              Repair Scores & Leaderboard
-            </>
+            <span className="flex items-start gap-3">
+              <Wrench className="mt-0.5 h-4 w-4 shrink-0" />
+              <span className="min-w-0">
+                <span className="block break-words text-sm font-bold">Repair scores & standings</span>
+                <span className="mt-1 block break-words text-xs font-medium text-red-100/80">
+                  Recalculate scored weekends and rebuild the leaderboard from the current source of truth.
+                </span>
+              </span>
+            </span>
           )}
         </button>
       </div>

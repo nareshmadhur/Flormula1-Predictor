@@ -8,6 +8,10 @@ import { getCurrentSeason } from '@/utils/season'
 import { getUserTenantContext } from '@/utils/tenant'
 import { TenantAssignmentRequired } from '@/components/ui/tenant-assignment-required'
 import { PendingLink } from '@/components/ui/pending-link'
+import { RaceStatusPill } from '@/components/ui/race-status-pill'
+import { RaceMetaStrip } from '@/components/ui/race-meta-strip'
+import { SectionHeader } from '@/components/ui/section-header'
+import { getMemberRaceActionLabel, getRaceParticipationLabel, getRaceTone } from '@/utils/race-experience'
 
 export const revalidate = 0
 
@@ -52,30 +56,6 @@ type FilterCard = {
   count: number
   href: string
   icon: typeof Calendar
-}
-
-function getRaceStatusLabel(status: RaceStatus) {
-  if (status === 'upcoming') return 'Predictions open'
-  if (status === 'locked') return 'Locked'
-  if (status === 'completed') return 'Scoring pending'
-  if (status === 'scored') return 'Final score'
-  return 'Cancelled'
-}
-
-function getRaceActionLabel(status: RaceStatus, hasPredicted: boolean) {
-  if (status === 'upcoming') {
-    return hasPredicted ? 'Edit Entry' : 'Make Prediction'
-  }
-
-  if (status === 'locked' || status === 'completed') {
-    return hasPredicted ? 'Track Results' : 'Review Weekend'
-  }
-
-  if (status === 'scored') {
-    return hasPredicted ? 'View Recap' : 'Review Weekend'
-  }
-
-  return 'View Details'
 }
 
 function getDefaultTab({
@@ -216,16 +196,17 @@ function RaceListCard({
   isFeatured?: boolean
 }) {
   const isActionable = status === 'upcoming'
+  const tone = getRaceTone(status)
 
   const frameClasses =
-    filterKey === 'action'
+    tone === 'open'
       ? hasPredicted
         ? 'border-green-500/20 bg-card'
         : 'border-red-500/20 bg-card'
-      : filterKey === 'waiting'
+      : tone === 'pending'
         ? 'border-amber-500/20 bg-card'
-        : filterKey === 'scored'
-          ? 'border-yellow-500/20 bg-card'
+        : tone === 'scored'
+          ? 'border-emerald-500/20 bg-card'
           : 'border-white/10 bg-card'
 
   const metaItems =
@@ -284,9 +265,7 @@ function RaceListCard({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-bold uppercase tracking-widest text-red-500">{getRoundLabel(race.round)}</span>
-            <span className="rounded-full border border-white/10 bg-black/30 px-2.5 py-1 text-xs font-medium text-slate-300">
-              {getRaceStatusLabel(status)}
-            </span>
+            <RaceStatusPill status={status} size="xs" />
             {isFeatured && (
               <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-slate-300">
                 Featured above
@@ -326,37 +305,41 @@ function RaceListCard({
                     : 'border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
                 }`}
               >
-                {getRaceActionLabel(status, hasPredicted)}
+                {getMemberRaceActionLabel(status, hasPredicted)}
                 <ChevronRight className="ml-1 h-5 w-5" />
               </PendingLink>
             </div>
           </div>
 
-          <div className="mt-3 flex flex-wrap gap-2">
-            {metaItems.map((item) => {
-              const Icon = item.icon
-
-              return (
-                <span
-                  key={`${race.id}-${item.value}`}
-                  className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-black/25 px-3 py-1.5 text-sm text-slate-300"
-                >
-                  <Icon className="h-3.5 w-3.5 text-slate-500" />
-                  {item.value}
-                </span>
-              )
-            })}
-            {filterKey === 'action' && hasPredicted && (
-              <span className="inline-flex items-center gap-2 rounded-full border border-green-500/20 bg-green-500/10 px-3 py-1.5 text-sm text-green-300">
-                Entry locked in
-              </span>
-            )}
-            {filterKey === 'waiting' && hasPredicted && (
-              <span className="inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-sm text-amber-200">
-                Awaiting the official result
-              </span>
-            )}
-          </div>
+          <RaceMetaStrip
+            className="mt-3"
+            items={[
+              ...metaItems.map((item) => ({
+                label: undefined,
+                value: item.value,
+                icon: item.icon,
+                tone: (
+                  filterKey === 'action'
+                    ? 'open'
+                    : filterKey === 'waiting'
+                      ? 'pending'
+                      : filterKey === 'scored'
+                        ? 'scored'
+                        : 'default'
+                ) as 'default' | 'open' | 'pending' | 'scored',
+              })),
+              {
+                value: getRaceParticipationLabel(status, hasPredicted),
+                icon: hasPredicted ? Trophy : AlertCircle,
+                tone:
+                  hasPredicted && status === 'upcoming'
+                    ? 'scored'
+                    : filterKey === 'waiting'
+                      ? 'pending'
+                      : 'default',
+              },
+            ]}
+          />
         </div>
       </div>
     </div>
@@ -510,13 +493,11 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
               )}
             </div>
 
-            <div className="space-y-2">
-              <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">My Season</div>
-              <h1 className="text-3xl font-black italic tracking-tighter text-white md:text-5xl">
-                {heroContent.headline}
-              </h1>
-              <p className="max-w-2xl text-slate-300">{heroContent.description}</p>
-            </div>
+            <SectionHeader
+              eyebrow="My Season"
+              title={heroContent.headline}
+              description={heroContent.description}
+            />
 
             {hero.race ? (
               <div className="rounded-2xl border border-white/10 bg-black/30 p-5">
@@ -527,26 +508,27 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
                   <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-slate-300">
                     {getRoundLabel(hero.race.round)}
                   </span>
-                  <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-slate-300">
-                    {getRaceStatusLabel(getEffectiveRaceStatus(hero.race))}
-                  </span>
+                  <RaceStatusPill status={getEffectiveRaceStatus(hero.race)} size="xs" />
                 </div>
 
-                <div className="mt-4 flex flex-wrap gap-2">
-                  <span className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-black/25 px-3 py-1.5 text-sm text-slate-200">
-                    {heroContent.status}
-                  </span>
-                  <span className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-black/25 px-3 py-1.5 text-sm text-slate-300">
-                    <Clock3 className="h-3.5 w-3.5 text-slate-500" />
-                    {hero.kind === 'action'
-                      ? `Closes ${formatDistanceToNowStrict(new Date(hero.race.prediction_lock_at), { addSuffix: true })}`
-                      : `Lock ${formatRaceDateTime(hero.race.prediction_lock_at)}`}
-                  </span>
-                  <span className="inline-flex items-center gap-2 rounded-full border border-white/8 bg-black/25 px-3 py-1.5 text-sm text-slate-300">
-                    <Calendar className="h-3.5 w-3.5 text-slate-500" />
-                    Race {formatRaceDateTime(hero.race.race_start_at)}
-                  </span>
-                </div>
+                <RaceMetaStrip
+                  className="mt-4"
+                  items={[
+                    { value: heroContent.status, icon: heroHasPredicted ? Trophy : AlertCircle },
+                    {
+                      value:
+                        hero.kind === 'action'
+                          ? `Closes ${formatDistanceToNowStrict(new Date(hero.race.prediction_lock_at), { addSuffix: true })}`
+                          : `Lock ${formatRaceDateTime(hero.race.prediction_lock_at)}`,
+                      icon: Clock3,
+                      tone: hero.kind === 'action' ? 'open' : 'pending',
+                    },
+                    {
+                      value: `Race ${formatRaceDateTime(hero.race.race_start_at)}`,
+                      icon: Calendar,
+                    },
+                  ]}
+                />
 
                 <div className="mt-4 flex items-center text-slate-400">
                   <MapPin className="mr-1.5 h-4 w-4 shrink-0 text-slate-500" />
@@ -563,7 +545,7 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
                       : 'border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
                   }`}
                 >
-                  {getRaceActionLabel(getEffectiveRaceStatus(hero.race), heroHasPredicted)}
+                  {getMemberRaceActionLabel(getEffectiveRaceStatus(hero.race), heroHasPredicted)}
                   <ChevronRight className="ml-1 h-5 w-5" />
                 </PendingLink>
               </div>
@@ -616,16 +598,16 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
       </section>
 
       <section className="space-y-4">
-        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-          <div>
-            <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">{activeSection.title}</div>
-            <h2 className="mt-1 text-2xl font-black italic tracking-tight text-white">{activeSection.title}</h2>
-            <p className="text-slate-400">{activeSection.description}</p>
-          </div>
-          <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-sm font-bold text-slate-300">
-            {activeRaces.length} race{activeRaces.length === 1 ? '' : 's'}
-          </div>
-        </div>
+        <SectionHeader
+          eyebrow={activeSection.title}
+          title={activeSection.title}
+          description={activeSection.description}
+          aside={
+            <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-sm font-bold text-slate-300">
+              {activeRaces.length} race{activeRaces.length === 1 ? '' : 's'}
+            </div>
+          }
+        />
 
         {activeRaces.length === 0 ? (
           <div className="rounded-2xl border border-white/5 bg-card p-8 text-center text-slate-400 shadow-xl">

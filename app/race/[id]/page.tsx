@@ -1,6 +1,6 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { Calendar, ChevronRight, CircleHelp, Clock3, Flag, Trophy } from 'lucide-react'
+import { Calendar, ChevronRight, Clock3, Flag } from 'lucide-react'
 import { format } from 'date-fns'
 import { getEffectiveRaceStatus, RaceStatus } from '@/utils/race-status'
 import {
@@ -11,19 +11,15 @@ import {
 import { getRoundLabel } from '@/utils/race-copy'
 import { getAbsoluteUrl } from '@/utils/site'
 import { PendingLink } from '@/components/ui/pending-link'
+import { RaceStatusPill } from '@/components/ui/race-status-pill'
+import { RaceMetaStrip } from '@/components/ui/race-meta-strip'
+import { SectionHeader } from '@/components/ui/section-header'
+import { getRaceTone } from '@/utils/race-experience'
 
 export const revalidate = 0
 
 type PageProps = {
   params: Promise<{ id: string }>
-}
-
-function getStatusLabel(status: RaceStatus) {
-  if (status === 'upcoming') return 'Predictions Open'
-  if (status === 'locked') return 'Predictions Locked'
-  if (status === 'completed') return 'Awaiting Published Results'
-  if (status === 'scored') return 'Scored And Published'
-  return 'Cancelled'
 }
 
 function getStatusDescription(status: RaceStatus) {
@@ -130,45 +126,36 @@ export default async function PublicRacePage({ params }: PageProps) {
             <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-sm font-medium text-slate-200">
               {getRoundLabel(race.round)}
             </span>
-            <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1 text-sm font-medium text-slate-200">
-              {getStatusLabel(effectiveStatus)}
+            <RaceStatusPill status={effectiveStatus} />
+          </div>
+
+          <SectionHeader
+            title={race.race_name}
+            description={getStatusDescription(effectiveStatus)}
+          />
+
+          <p className="flex items-center gap-2 text-base text-slate-300 md:text-lg">
+            <span className="text-2xl">{race.circuits?.emoji}</span>
+            <span>
+              {race.circuits?.name}, {race.circuits?.country}
             </span>
-          </div>
+          </p>
 
-          <div className="space-y-2">
-            <h1 className="text-4xl font-black italic tracking-tighter md:text-5xl">{race.race_name}</h1>
-            <p className="flex items-center gap-2 text-base text-slate-300 md:text-lg">
-              <span className="text-2xl">{race.circuits?.emoji}</span>
-              <span>
-                {race.circuits?.name}, {race.circuits?.country}
-              </span>
-            </p>
-          </div>
-
-          <p className="max-w-3xl text-slate-300">{getStatusDescription(effectiveStatus)}</p>
-
-          <div className="grid gap-3 md:grid-cols-3">
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-              <div className="flex items-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                <Calendar className="mr-2 h-4 w-4 text-red-400" /> Race Start
-              </div>
-              <div className="mt-2 text-base font-bold text-white">
-                {format(new Date(race.race_start_at), 'PPP p')}
-              </div>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-              <div className="flex items-center text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">
-                <Clock3 className="mr-2 h-4 w-4 text-amber-400" /> Prediction Lock (FP1 - 5m)
-              </div>
-              <div className="mt-2 text-base font-bold text-white">
-                {format(new Date(race.prediction_lock_at), 'PPP p')}
-              </div>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-black/30 p-4">
-              <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Public page</div>
-              <div className="mt-2 text-sm font-medium text-slate-300">Schedule and results.</div>
-            </div>
-          </div>
+          <RaceMetaStrip
+            items={[
+              {
+                label: 'Race',
+                value: format(new Date(race.race_start_at), 'PPP p'),
+                icon: Calendar,
+              },
+              {
+                label: 'Lock',
+                value: format(new Date(race.prediction_lock_at), 'PPP p'),
+                icon: Clock3,
+                tone: effectiveStatus === 'upcoming' ? 'open' : getRaceTone(effectiveStatus),
+              },
+            ]}
+          />
 
           <div className="flex flex-wrap gap-4">
             <PendingLink
@@ -198,12 +185,10 @@ export default async function PublicRacePage({ params }: PageProps) {
 
       <div className="grid gap-6 lg:grid-cols-[1.1fr,0.9fr]">
         <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-2xl md:p-6">
-          <h2 className="mb-5 flex items-center border-b border-white/5 pb-3 text-xl font-black italic tracking-tighter md:text-2xl">
-            <Trophy className="mr-2 h-5 w-5 text-red-500" /> Official podium
-          </h2>
+          <SectionHeader eyebrow="Results" title="Official podium" />
 
           {officialPodium.length > 0 ? (
-            <div className="space-y-3">
+            <div className="mt-4 space-y-3">
               {officialPodium.map((entry) => (
                 <div key={entry.label} className="rounded-2xl border border-white/5 bg-black/30 px-4 py-3">
                   <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">{entry.label}</div>
@@ -212,23 +197,21 @@ export default async function PublicRacePage({ params }: PageProps) {
               ))}
             </div>
           ) : (
-            <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5 text-amber-200">
+            <div className="mt-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5 text-amber-200">
               Official podium pending.
             </div>
           )}
         </section>
 
         <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-2xl md:p-6">
-          <h2 className="mb-5 flex items-center border-b border-white/5 pb-3 text-xl font-black italic tracking-tighter md:text-2xl">
-            <CircleHelp className="mr-2 h-5 w-5 text-red-500" /> Bonus tracker
-          </h2>
+          <SectionHeader eyebrow="Bonus" title="Bonus tracker" />
 
           {bonusQuestions.length === 0 ? (
-            <div className="rounded-2xl border border-white/5 bg-black/30 p-5 text-slate-400">
+            <div className="mt-4 rounded-2xl border border-white/5 bg-black/30 p-5 text-slate-400">
               No bonus questions.
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="mt-4 space-y-3">
               {bonusQuestions.map((question) => (
                 <div key={question.id} className="rounded-2xl border border-white/5 bg-black/30 px-4 py-3">
                   <div className="flex items-center justify-between gap-3">

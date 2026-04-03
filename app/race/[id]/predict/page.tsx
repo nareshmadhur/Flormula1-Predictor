@@ -8,6 +8,10 @@ import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { getUserTenantContext } from '@/utils/tenant'
 import { TenantAssignmentRequired } from '@/components/ui/tenant-assignment-required'
 import { getCompetitionRank, sortCompetitionStandings } from '@/utils/competition'
+import { RaceStatusPill } from '@/components/ui/race-status-pill'
+import { RaceMetaStrip } from '@/components/ui/race-meta-strip'
+import { SectionHeader } from '@/components/ui/section-header'
+import { getRaceParticipationLabel, getRaceTone } from '@/utils/race-experience'
 
 type Driver = {
   id: string
@@ -298,17 +302,6 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
     groupMovement = getMovementLabel(currentGroupRank, previousGroupRank)
   }
 
-  const stateLabel =
-    effectiveStatus === 'upcoming'
-      ? 'Predictions open'
-      : effectiveStatus === 'locked'
-        ? 'Weekend live'
-        : effectiveStatus === 'completed'
-          ? 'Scoring pending'
-          : effectiveStatus === 'scored'
-            ? 'Final result'
-            : 'Closed'
-
   const compactNote =
     effectiveStatus === 'upcoming'
       ? prediction
@@ -330,42 +323,52 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
     <div className="mx-auto max-w-5xl space-y-5 animate-in fade-in duration-500">
       <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-2xl md:p-6">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs font-bold uppercase tracking-[0.25em] text-red-500">{stateLabel}</span>
           <span className="rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-xs font-medium text-slate-300">
             {getRoundLabel(race.round)}
           </span>
+          <RaceStatusPill status={effectiveStatus} size="xs" />
           {effectiveStatus === 'upcoming' && lockCountdown && (
             <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-xs font-medium text-slate-300">
               <TimerReset className="h-3.5 w-3.5 text-red-400" />
               Locks {lockCountdown}
             </span>
           )}
-          <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-xs font-medium text-slate-300">
-            {prediction ? <ClipboardList className="h-3.5 w-3.5 text-green-400" /> : <AlertCircle className="h-3.5 w-3.5 text-amber-400" />}
-            {prediction ? 'Entry locked in' : 'No entry yet'}
-          </span>
         </div>
 
-        <div className="mt-4 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
-          <div className="min-w-0">
-            <h1 className="text-3xl font-black italic tracking-tighter text-white md:text-4xl">{race.race_name}</h1>
-            <p className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-400 md:text-base">
-              <span className="text-lg">{race.circuits?.emoji}</span>
-              <span>
-                {race.circuits?.name}, {race.circuits?.country}
-              </span>
-            </p>
-            <p className="mt-3 text-sm text-slate-300">{compactNote}</p>
-          </div>
+        <div className="mt-4 space-y-4">
+          <SectionHeader title={race.race_name} description={compactNote} />
 
-          <div className="flex flex-wrap gap-2 lg:justify-end">
-            <span className="rounded-full border border-white/10 bg-black/25 px-3 py-2 text-sm font-medium text-slate-300">
-              Lock {format(new Date(race.prediction_lock_at), 'MMM d, p')}
+          <p className="flex flex-wrap items-center gap-2 text-sm text-slate-400 md:text-base">
+            <span className="text-lg">{race.circuits?.emoji}</span>
+            <span>
+              {race.circuits?.name}, {race.circuits?.country}
             </span>
-            <span className="rounded-full border border-white/10 bg-black/25 px-3 py-2 text-sm font-medium text-slate-300">
-              Race {format(new Date(race.race_start_at), 'MMM d, p')}
-            </span>
-          </div>
+          </p>
+
+          <RaceMetaStrip
+            items={[
+              {
+                label: 'Entry',
+                value: getRaceParticipationLabel(effectiveStatus, Boolean(prediction)),
+                icon: prediction ? ClipboardList : AlertCircle,
+                tone:
+                  prediction && effectiveStatus === 'upcoming'
+                    ? 'scored'
+                    : getRaceTone(effectiveStatus),
+              },
+              {
+                label: 'Lock',
+                value: format(new Date(race.prediction_lock_at), 'MMM d, p'),
+                icon: TimerReset,
+                tone: effectiveStatus === 'upcoming' ? 'open' : getRaceTone(effectiveStatus),
+              },
+              {
+                label: 'Race',
+                value: format(new Date(race.race_start_at), 'MMM d, p'),
+                icon: Trophy,
+              },
+            ]}
+          />
         </div>
       </section>
 
@@ -384,12 +387,10 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
         <div className="grid gap-5 pb-12 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
           <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-2xl md:p-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-              <div>
-                <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Race Audit</div>
-                <h2 className="mt-1 text-xl font-black italic tracking-tight text-white md:text-2xl">
-                  {prediction ? 'Your Call vs Official' : 'Official Result'}
-                </h2>
-              </div>
+              <SectionHeader
+                eyebrow="Race audit"
+                title={prediction ? 'Your call vs official' : 'Official result'}
+              />
 
               {!prediction && (
                 <div className="inline-flex items-center rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 text-xs font-medium uppercase tracking-[0.2em] text-amber-300">
@@ -488,7 +489,7 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
             {effectiveStatus === 'scored' && userScore ? (
               <>
                 <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-2xl md:p-6">
-                  <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Weekend</div>
+                  <SectionHeader eyebrow="Weekend" title="Weekend result" />
                   <div className="mt-4 grid gap-3 sm:grid-cols-3">
                     <div className="rounded-2xl border border-white/5 bg-black/30 p-4 text-center">
                       <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Total</div>

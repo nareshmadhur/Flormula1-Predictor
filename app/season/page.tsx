@@ -3,10 +3,14 @@ import { format } from 'date-fns'
 import { ArrowRight, Calendar, ChevronRight, Flag, Timer, Trophy } from 'lucide-react'
 import { PendingLink } from '@/components/ui/pending-link'
 import { PageBackLink } from '@/components/ui/page-back-link'
+import { RaceStatusPill } from '@/components/ui/race-status-pill'
+import { RaceMetaStrip } from '@/components/ui/race-meta-strip'
+import { SectionHeader } from '@/components/ui/section-header'
 import { getProfileDisplayName } from '@/utils/profile-name'
 import { getPublicSeasonData, type PublicSeasonLeaderboardEntry, type PublicSeasonRaceSummary } from '@/utils/public-season'
 import { getRoundLabel } from '@/utils/race-copy'
 import { getAbsoluteUrl } from '@/utils/site'
+import { getPublicRaceActionLabel, getRaceTone } from '@/utils/race-experience'
 
 export const revalidate = 0
 
@@ -24,14 +28,6 @@ function getLeaderboardProfile(entry: PublicSeasonLeaderboardEntry) {
   }
 
   return entry.profiles || null
-}
-
-function getRaceStatusLabel(race: PublicSeasonRaceSummary) {
-  if (race.effectiveStatus === 'upcoming') return 'Open now'
-  if (race.effectiveStatus === 'locked') return 'Locked'
-  if (race.effectiveStatus === 'completed') return 'Results pending'
-  if (race.effectiveStatus === 'scored') return 'Scored'
-  return 'Cancelled'
 }
 
 function resolveTimelineFilter(rawValue: string | undefined): TimelineFilter {
@@ -56,12 +52,6 @@ function matchesTimelineFilter(race: PublicSeasonRaceSummary, filter: TimelineFi
   }
   if (filter === 'scored') return race.effectiveStatus === 'scored'
   return race.effectiveStatus === 'cancelled'
-}
-
-function getTimelineActionLabel(race: PublicSeasonRaceSummary) {
-  if (race.effectiveStatus === 'scored') return 'Recap'
-  if (race.effectiveStatus === 'cancelled') return 'Details'
-  return 'Race'
 }
 
 function getTimelineTone(status: PublicSeasonRaceSummary['effectiveStatus']) {
@@ -113,7 +103,7 @@ function PublicRaceRow({
 }: {
   race: PublicSeasonRaceSummary
 }) {
-  const actionLabel = getTimelineActionLabel(race)
+  const actionLabel = getPublicRaceActionLabel(race.effectiveStatus)
   const isCancelled = race.effectiveStatus === 'cancelled'
   const primaryTimeLabel = race.effectiveStatus === 'upcoming' ? 'Lock' : 'Race'
   const primaryTimeValue =
@@ -125,9 +115,7 @@ function PublicRaceRow({
       <div className="space-y-2.5">
         <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-slate-500">
           <span className={tone.round}>{getRoundLabel(race.round)}</span>
-          <span className={`rounded-full border px-2 py-1 text-[11px] tracking-[0.18em] ${tone.statusPill}`}>
-            {getRaceStatusLabel(race)}
-          </span>
+          <RaceStatusPill status={race.effectiveStatus} size="xs" />
         </div>
 
         <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-center">
@@ -145,12 +133,16 @@ function PublicRaceRow({
           </div>
 
           <div className="flex flex-wrap items-center gap-2 md:justify-end">
-            <div className={`rounded-xl border px-3 py-1.5 ${tone.meta}`}>
-              <div className={`text-[10px] font-bold uppercase tracking-[0.18em] ${tone.metaLabel}`}>{primaryTimeLabel}</div>
-              <div className={`mt-0.5 text-sm font-semibold ${isCancelled ? 'text-slate-300' : 'text-white'}`}>
-                {format(new Date(primaryTimeValue), 'MMM d, p')}
-              </div>
-            </div>
+            <RaceMetaStrip
+              items={[
+                {
+                  label: primaryTimeLabel,
+                  value: format(new Date(primaryTimeValue), 'MMM d, p'),
+                  icon: race.effectiveStatus === 'upcoming' ? Timer : Calendar,
+                  tone: getRaceTone(race.effectiveStatus),
+                },
+              ]}
+            />
 
             <PendingLink
               href={`/race/${race.id}`}
@@ -237,28 +229,28 @@ export default async function PublicSeasonPage({ searchParams }: PageProps) {
           </span>
         </div>
 
-        <div className="mt-4 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div className="space-y-2">
-            <div className="text-sm font-bold uppercase tracking-[0.24em] text-slate-500">Season</div>
-            <h1 className="text-4xl font-black italic tracking-tighter text-white md:text-5xl">Season {currentSeason}</h1>
-          </div>
-
-          <div className="flex flex-wrap gap-3">
-            <PendingLink
-              href="/leaderboard"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-white transition-colors hover:bg-white/10"
-            >
-              Standings
-            </PendingLink>
-            <PendingLink
-              href="/signup"
-              className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
-            >
-              Join before next lock
-              <ChevronRight className="h-5 w-5" />
-            </PendingLink>
-          </div>
-        </div>
+        <SectionHeader
+          className="mt-4"
+          eyebrow="Season"
+          title={`Season ${currentSeason}`}
+          aside={
+            <div className="flex flex-wrap gap-3">
+              <PendingLink
+                href="/leaderboard"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-white transition-colors hover:bg-white/10"
+              >
+                Standings
+              </PendingLink>
+              <PendingLink
+                href="/signup"
+                className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
+              >
+                Join before next lock
+                <ChevronRight className="h-5 w-5" />
+              </PendingLink>
+            </div>
+          }
+        />
       </section>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -341,32 +333,32 @@ export default async function PublicSeasonPage({ searchParams }: PageProps) {
       </div>
 
       <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-xl">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-          <div>
-            <div className="text-sm font-bold uppercase tracking-widest text-slate-400">Season timeline</div>
-            <div className="mt-1 text-sm text-slate-500">Newest rounds first.</div>
-          </div>
+        <SectionHeader
+          eyebrow="Season timeline"
+          title="Season timeline"
+          description="Newest rounds first."
+          aside={
+            <div className="flex flex-wrap gap-2">
+              {filterLinks.map((filter) => {
+                const isActive = filter.key === activeFilter
 
-          <div className="flex flex-wrap gap-2">
-            {filterLinks.map((filter) => {
-              const isActive = filter.key === activeFilter
-
-              return (
-                <PendingLink
-                  key={filter.key}
-                  href={filter.href}
-                  className={`rounded-full border px-3 py-1.5 text-xs font-bold uppercase tracking-[0.2em] transition-colors ${
-                    isActive
-                      ? 'border-red-500/30 bg-red-500/12 text-red-200'
-                      : 'border-white/10 bg-black/20 text-slate-300 hover:bg-white/10'
-                  }`}
-                >
-                  {filter.label} {filter.count}
-                </PendingLink>
-              )
-            })}
-          </div>
-        </div>
+                return (
+                  <PendingLink
+                    key={filter.key}
+                    href={filter.href}
+                    className={`rounded-full border px-3 py-1.5 text-xs font-bold uppercase tracking-[0.2em] transition-colors ${
+                      isActive
+                        ? 'border-red-500/30 bg-red-500/12 text-red-200'
+                        : 'border-white/10 bg-black/20 text-slate-300 hover:bg-white/10'
+                    }`}
+                  >
+                    {filter.label} {filter.count}
+                  </PendingLink>
+                )
+              })}
+            </div>
+          }
+        />
 
         <div className="mt-5 space-y-3">
           {timelineRaces.length === 0 ? (
@@ -380,18 +372,21 @@ export default async function PublicSeasonPage({ searchParams }: PageProps) {
       </section>
 
       <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-xl">
-        <div className="mb-4 flex items-center justify-between gap-3">
-          <div className="text-sm font-bold uppercase tracking-widest text-slate-400">Standings</div>
-          <PendingLink
-            href="/leaderboard"
-            className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-white/10"
-          >
-            Full
-            <ArrowRight className="h-3.5 w-3.5" />
-          </PendingLink>
-        </div>
+        <SectionHeader
+          eyebrow="Standings"
+          title="Standings"
+          aside={
+            <PendingLink
+              href="/leaderboard"
+              className="inline-flex items-center gap-1 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-white/10"
+            >
+              Full
+              <ArrowRight className="h-3.5 w-3.5" />
+            </PendingLink>
+          }
+        />
 
-        <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-4 grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
           {leaderboard.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-slate-500 lg:col-span-2 xl:col-span-3">
               No standings yet.
