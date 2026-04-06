@@ -112,6 +112,151 @@ Important app areas:
 - `utils/openf1.ts`: OpenF1 schedule ingestion and review mapping
 - `supabase/migrations/*`: schema and data model
 
+## Runtime Architecture
+
+### When API Calls Happen
+
+The app uses two kinds of APIs:
+- Supabase
+  This is the main runtime backend. Most page requests and nearly all writes go through Supabase.
+- OpenF1
+  This is only used for admin/import workflows and one-off reference-data sync scripts.
+
+In practice:
+- normal page loads use Next.js server rendering plus Supabase reads
+- user actions like submitting predictions use server actions plus Supabase writes
+- admin schedule sync uses OpenF1 for season/session data, then writes reviewed updates into Supabase
+- admin race control can use OpenF1 to suggest a podium, but does not auto-publish results
+- one-time scripts can pull OpenF1 reference data into Supabase without changing historic prediction IDs
+
+### System Diagram
+
+```mermaid
+flowchart LR
+  Browser["Browser"] --> Next["Next.js App Router
+Server Components + Server Actions"]
+  Next --> Supabase["Supabase
+Auth + Postgres + RLS"]
+  Next --> OpenF1["OpenF1 API
+Schedule + Podium Suggestion"]
+  Scripts["One-time scripts"] --> OpenF1
+  Scripts --> Supabase
+```
+
+### Block Descriptions
+
+- `Browser`
+  The user interface in the client. It mostly receives already-rendered HTML from the Next.js server and triggers navigation or form submissions.
+- `Next.js App Router`
+  The application runtime. Server components fetch data for page renders, and server actions handle trusted writes such as prediction saves, admin edits, and scoring operations.
+- `Supabase`
+  The primary system of record. It handles auth, profiles, tenants, races, predictions, scores, leaderboard cache, drivers, constructors, circuits, and official results.
+- `OpenF1 API`
+  The external source used for season schedule/session import and optional podium suggestions on admin race pages.
+- `One-time scripts`
+  Local maintenance scripts used for seed/setup/reference-data sync, such as updating current drivers and constructors to match the latest OpenF1 grid.
+
+## Request And Action Flows
+
+### 1. Read Flow
+
+```mermaid
+flowchart TD
+  User["User opens page"] --> Route["Next.js route render"]
+  Route --> Auth["Supabase auth.getUser() when needed"]
+  Route --> Reads["Supabase reads
+races, predictions, scores, leaderboard"]
+  Reads --> Render["Server-rendered HTML returned to browser"]
+```
+
+What this means:
+- most pages do not call external APIs directly from the browser
+- the Next.js server reads from Supabase and returns the final UI
+- this applies to pages like `/`, `/season`, `/leaderboard`, `/predictions`, `/me/history`, and `/race/[id]/predict`
+
+### 2. Prediction Flow
+
+```mermaid
+flowchart TD
+  User["User edits entry"] --> Form["Prediction form"]
+  Form --> Action["submitPrediction server action"]
+  Action --> Validate["Validate race state, lock, and duplicates"]
+  Validate --> Write["Write prediction + bonus answers to Supabase"]
+  Write --> Revalidate["Revalidate affected pages"]
+  Revalidate --> UI["Updated predict / season / history views"]
+```
+
+What this means:
+- prediction submission is trusted server-side logic
+- bonus answers are written alongside podium picks
+- lock enforcement is checked again on the server before saving
+
+### 3. Schedule Import Flow
+
+```mermaid
+flowchart TD
+  Admin["Platform admin"] --> Preview["/admin/schedule preview"]
+  Preview --> OpenF1["Fetch OpenF1 season schedule + sessions"]
+  OpenF1 --> Review["Build review rows
+match races + circuits"]
+  Review --> Apply["Apply ready changes"]
+  Apply --> Supabase["Update or create races in Supabase"]
+```
+
+What this means:
+- OpenF1 is not continuously syncing in the background today
+- admins preview imported data before applying it
+- unmatched circuits stay in review until they are mapped or created
+
+### 4. Podium Suggestion Flow
+
+```mermaid
+flowchart TD
+  Admin["Admin opens race control"] --> RaceAdmin["/admin/races/[id]"]
+  RaceAdmin --> OpenF1["Fetch race-session podium suggestion from OpenF1"]
+  OpenF1 --> Suggest["Suggest local driver matches for P1/P2/P3"]
+  Suggest --> AdminReview["Admin reviews and saves official result manually"]
+```
+
+What this means:
+- OpenF1 can suggest the podium
+- official race results are still admin-reviewed and manually saved
+- bonus answers remain fully app-specific and manual
+
+### 5. Scoring And Repair Flow
+
+```mermaid
+flowchart TD
+  Admin["Admin saves official results"] --> Score["Calculate race scores"]
+  Score --> RaceScores["Recalculate user_race_scores"]
+  RaceScores --> Leaderboard["Rebuild leaderboard cache"]
+  Leaderboard --> Revalidate["Revalidate admin, leaderboard, season, and history pages"]
+
+  Admin2["Admin runs repair"] --> Repair["Repair scores & leaderboard"]
+  Repair --> RaceScores
+```
+
+What this means:
+- scoring remains intentionally manual today
+- the manual step is safer because official result review and bonus-answer entry are admin-controlled
+- repair tools exist to recover from historic edits or stale leaderboard state
+
+## Necessary Flows To Understand
+
+These are the flows worth documenting and maintaining clearly:
+- `Read flow`
+  How public and private pages fetch current state from Supabase.
+- `Prediction flow`
+  How user picks are validated and saved.
+- `Schedule import flow`
+  How OpenF1 data becomes reviewed race/session data in the app.
+- `Podium suggestion flow`
+  How OpenF1 can assist result entry without becoming the final source of truth.
+- `Scoring and repair flow`
+  How official results become user scores and leaderboard totals.
+- `Auth and access flow`
+  How platform admins, tenant admins, assigned users, and unassigned users are routed differently through the app.
+
 ## Data Model
 
 Core tables:
