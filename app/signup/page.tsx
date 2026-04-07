@@ -5,6 +5,7 @@ import { initialAuthActionState } from '@/app/auth/action-state'
 import { useActionState } from 'react'
 import { PendingLink } from '@/components/ui/pending-link'
 import { RaceStartLights } from '@/components/ui/race-start-lights'
+import { AuthResendConfirmationForm } from '@/components/ui/auth-resend-confirmation-form'
 
 export default function SignupPage() {
   const [state, formAction, pending] = useActionState(signup, initialAuthActionState)
@@ -15,7 +16,7 @@ export default function SignupPage() {
         <div className="bg-card border border-white/10 p-8 rounded-3xl shadow-2xl text-center">
           <h1 className="text-3xl font-black italic tracking-tighter mb-4 text-green-500">Check your email</h1>
           <p className="text-lg text-slate-300 mb-4">
-            We&apos;ve sent a confirmation link to your inbox.
+            {state.message}
           </p>
           <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl text-blue-300 text-sm mb-6 text-left">
             <p className="font-bold mb-1 flex items-center">
@@ -25,6 +26,14 @@ export default function SignupPage() {
             <br/><br/>
             The email will be from <span className="font-bold text-white">Supabase</span>.
           </div>
+          {state.email && (
+            <div className="mb-6 rounded-2xl border border-white/10 bg-black/20 p-4 text-left">
+              <p className="mb-3 text-sm text-slate-300">
+                Didn&apos;t get it yet? Send another confirmation email.
+              </p>
+              <AuthResendConfirmationForm email={state.email} />
+            </div>
+          )}
           <p className="text-slate-400 text-sm">
             Once confirmed, you can <PendingLink href="/login" className="inline-flex items-center gap-1 text-red-500 hover:text-red-400 font-bold hover:underline transition-colors">sign in here</PendingLink>.
           </p>
@@ -112,6 +121,16 @@ function SignupForm({
           {error}
         </p>
       )}
+
+      <p className="text-center text-sm text-slate-400">
+        Already have an account?{' '}
+        <PendingLink
+          href="/login"
+          className="inline-flex items-center gap-1 font-bold text-red-500 transition-colors hover:text-red-400 hover:underline"
+        >
+          Sign in
+        </PendingLink>
+      </p>
     </form>
   )
 }

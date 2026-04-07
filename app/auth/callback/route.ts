@@ -27,5 +27,10 @@ export async function GET(request: Request) {
   }
 
   // return the user to an error page with instructions
-  return NextResponse.redirect(`${requestUrl.origin}/login?error=Auth Code Error`)
+  const errorUrl = new URL('/login', requestUrl.origin)
+  errorUrl.searchParams.set(
+    'error',
+    'That link could not be verified. Try the latest email we sent you.'
+  )
+  return NextResponse.redirect(errorUrl)
 }
