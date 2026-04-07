@@ -12,7 +12,7 @@ function SubmitButton({ pending }: { pending: boolean }) {
       disabled={pending}
       className="w-full rounded-xl bg-red-600 px-4 py-3 font-bold text-white transition-colors hover:bg-red-500 disabled:cursor-not-allowed disabled:bg-slate-700 disabled:text-slate-300"
     >
-      {pending ? 'Creating Tenant...' : 'Create Tenant'}
+      {pending ? 'Creating group...' : 'Create group'}
     </button>
   )
 }
@@ -34,7 +34,7 @@ export function CreateTenantForm() {
   return (
     <form ref={formRef} action={formAction} className="space-y-4">
       <div>
-        <label className="mb-1 block text-sm font-medium text-slate-400">Tenant Name</label>
+        <label className="mb-1 block text-sm font-medium text-slate-400">Group name</label>
         <input
           name="name"
           required
@@ -51,6 +51,9 @@ export function CreateTenantForm() {
           className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-base"
         />
       </div>
+      <p className="text-sm text-slate-400">
+        Slugs are internal and keep links clean. People will mostly see the group name.
+      </p>
       <SubmitButton pending={pending} />
       {state.message && (
         <div

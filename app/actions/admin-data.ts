@@ -128,7 +128,7 @@ export async function createTenant(
     if (!name || !slug) {
       return {
         status: 'error',
-        message: 'Tenant name and slug are required.',
+        message: 'Group name and slug are required.',
       }
     }
 
@@ -145,7 +145,7 @@ export async function createTenant(
 
     return {
       status: 'success',
-      message: 'Tenant created successfully.',
+      message: 'Group created successfully.',
     }
   } catch (error) {
     return {
@@ -161,7 +161,7 @@ function getAccessSaveMessage(role: 'user' | 'admin', adminScope: AdminScope | n
   }
 
   if (role === 'admin' && adminScope === 'tenant') {
-    return 'Tenant admin access saved.'
+    return 'Group admin access saved.'
   }
 
   if (tenantId) {
@@ -213,7 +213,7 @@ export async function updateProfileAccess(
       if (!tenant) {
         return {
           status: 'error',
-          message: 'Selected tenant was not found.',
+          message: 'Selected group was not found.',
         }
       }
     }
@@ -252,7 +252,7 @@ export async function updateProfileAccess(
       if (nextAdminScope === 'tenant' && !tenantId) {
         return {
           status: 'error',
-          message: 'Tenant admins must be assigned to a tenant.',
+          message: 'Group admins must be assigned to a group.',
         }
       }
     }
@@ -263,7 +263,7 @@ export async function updateProfileAccess(
     ) {
       return {
         status: 'error',
-        message: 'You can update your own tenant membership here, but not your own role or admin scope.',
+        message: 'You can update your own group here, but not your own role or scope.',
       }
     }
 
