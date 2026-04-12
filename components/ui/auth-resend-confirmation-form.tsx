@@ -7,9 +7,11 @@ import { useActionState } from 'react'
 
 export function AuthResendConfirmationForm({
   email,
+  next,
   compact = false,
 }: {
   email?: string
+  next?: string
   compact?: boolean
 }) {
   const [state, formAction, pending] = useActionState(
@@ -20,6 +22,7 @@ export function AuthResendConfirmationForm({
   return (
     <form action={formAction} className="space-y-3">
       <input type="hidden" name="email" value={email ?? ''} />
+      <input type="hidden" name="next" value={next ?? ''} />
 
       <button
         type="submit"

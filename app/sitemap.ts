@@ -40,6 +40,24 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       changeFrequency: 'monthly',
       priority: 0.4,
     },
+    {
+      url: getAbsoluteUrl('/privacy'),
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.3,
+    },
+    {
+      url: getAbsoluteUrl('/terms'),
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.3,
+    },
+    {
+      url: getAbsoluteUrl('/contact'),
+      lastModified: new Date(),
+      changeFrequency: 'monthly',
+      priority: 0.3,
+    },
     ...((races || []) as SitemapRace[]).map((race) => ({
       url: getAbsoluteUrl(`/race/${race.id}`),
       lastModified: new Date(race.race_start_at),

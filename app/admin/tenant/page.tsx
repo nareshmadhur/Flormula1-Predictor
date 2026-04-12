@@ -17,6 +17,7 @@ import { getProfileDisplayName } from '@/utils/profile-name'
 import { sortCompetitionStandings } from '@/utils/competition'
 import { TenantContextBanner } from '@/components/ui/tenant-context-banner'
 import { PendingLink } from '@/components/ui/pending-link'
+import { GroupInvitePanel } from './group-invite-panel'
 
 export const revalidate = 0
 
@@ -59,6 +60,16 @@ type LeaderboardEntry = {
 type PredictionEntry = {
   user_id: string
   race_id: string
+}
+
+type GroupInviteRecord = {
+  id: string
+  expires_at: string
+  max_uses: number
+  accepted_count: number
+  revoked_at?: string | null
+  last_accepted_at?: string | null
+  created_at: string
 }
 
 function getRaceStatusCopy(status: RaceStatus) {
@@ -209,6 +220,18 @@ export default async function TenantAdminPage() {
           .in('user_id', memberIds)
       : { data: [] as LeaderboardEntry[] }
 
+  const inviteQuery = await supabase
+    .from('group_invites')
+    .select('id, expires_at, max_uses, accepted_count, revoked_at, last_accepted_at, created_at')
+    .eq('tenant_id', access.tenantId)
+    .order('created_at', { ascending: false })
+    .limit(12)
+
+  const inviteSetupMessage = inviteQuery.error
+    ? 'Invite links need the latest database update before they can be used.'
+    : null
+  const groupInvites = inviteQuery.error ? [] : ((inviteQuery.data || []) as GroupInviteRecord[])
+
   const leaderboard = sortCompetitionStandings((leaderboardRows || []) as LeaderboardEntry[])
   const leaderboardByUserId = new Map(leaderboard.map((entry) => [entry.user_id, entry]))
   const nextRacePredictionUserIds = new Set(
@@ -270,13 +293,22 @@ export default async function TenantAdminPage() {
           </div>
         </div>
 
-        <PendingLink
-          href="/leaderboard?view=tenant"
-          className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
-        >
-          Open Tenant Leaderboard
-          <ArrowRight className="h-4 w-4" />
-        </PendingLink>
+        <div className="flex flex-col gap-3 sm:flex-row">
+          <a
+            href="#group-invites"
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-all hover:bg-red-500"
+          >
+            Create Invite
+            <ArrowRight className="h-4 w-4" />
+          </a>
+          <PendingLink
+            href="/leaderboard?view=tenant"
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
+          >
+            Open Group Standings
+            <ArrowRight className="h-4 w-4" />
+          </PendingLink>
+        </div>
       </div>
 
       <div className="grid gap-4 md:grid-cols-4">
@@ -313,6 +345,12 @@ export default async function TenantAdminPage() {
           <p className="mt-2 text-sm text-slate-400">Closed weekends across the season with no submitted entry.</p>
         </div>
       </div>
+
+      <GroupInvitePanel
+        groupName={typedTenant?.name || 'your group'}
+        invites={groupInvites}
+        setupMessage={inviteSetupMessage}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[1.05fr,0.95fr]">
         <section className="rounded-3xl border border-white/10 bg-card p-6 shadow-2xl md:p-8">

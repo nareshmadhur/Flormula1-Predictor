@@ -31,7 +31,6 @@ export default async function Navbar() {
   const primaryLinks = [
     { href: '/leaderboard', label: 'Leaderboard' },
     { href: '/season', label: 'Season' },
-    { href: '/about', label: 'About' },
   ]
 
   if (user) {

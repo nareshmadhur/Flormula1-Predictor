@@ -3,6 +3,7 @@ import { Inter } from 'next/font/google'
 import { Suspense } from 'react'
 import './globals.css'
 import Navbar from '@/components/ui/navbar'
+import { SiteFooter } from '@/components/ui/site-footer'
 import { getSiteUrl } from '@/utils/site'
 
 const inter = Inter({ subsets: ['latin'] })
@@ -49,6 +50,7 @@ export default function RootLayout({
         <main className="flex-1 max-w-5xl w-full mx-auto p-4 sm:p-6 lg:p-8">
           {children}
         </main>
+        <SiteFooter />
       </body>
     </html>
   )

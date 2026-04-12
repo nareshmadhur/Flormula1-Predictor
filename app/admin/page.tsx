@@ -143,12 +143,12 @@ export default async function AdminDashboardPage() {
 
             {access.tenantId && (
               <PendingLink
-                href="/admin/tenant"
+                href="/admin/tenant#group-invites"
                 className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-5 shadow-xl transition-colors hover:bg-white/[0.02]"
               >
                 <div className="min-w-0">
-                  <h2 className="break-words text-lg font-bold leading-tight text-white">Group workspace</h2>
-                  <p className="mt-1 break-words text-sm text-slate-400">Check the competition from your group’s view.</p>
+                  <h2 className="break-words text-lg font-bold leading-tight text-white">Invite members</h2>
+                  <p className="mt-1 break-words text-sm text-slate-400">Create share links for your group.</p>
                 </div>
                 <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
               </PendingLink>

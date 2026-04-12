@@ -23,6 +23,7 @@ Extend the product beyond the authenticated core through discoverability, canoni
 - public `/season` hub now connects home, race hubs, and the leaderboard into a complete logged-out season journey
 - OpenF1-backed schedule import review is now in `/admin/schedule`, with full-session sync into the shared race calendar
 - `/about` now documents the maintainer and user-facing external dependencies, including OpenF1
+- commercialization planning now lives in the [Commercialization Master Plan](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/commercialization-master-plan.md>)
 - next execution slice is reminder and follow-up loops
 
 ## Scope
@@ -64,3 +65,13 @@ Extend the product beyond the authenticated core through discoverability, canoni
 ## Status
 
 In progress
+
+## Commercialization Dependency
+
+Before public paid launch, complete at least:
+
+- brand/IP review and unofficial disclaimer
+- invite/join group flow
+- reminder preferences
+- privacy and terms pages
+- payment entitlements if charging organizers

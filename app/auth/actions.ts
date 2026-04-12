@@ -1,10 +1,10 @@
 'use server'
 
 import { createClient } from '@/utils/supabase/server'
-import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { AuthActionState } from '@/app/auth/action-state'
+import { getRequestOrigin, getSafeNextPath } from '@/utils/request-url'
 
 function normalizeEmail(value: FormDataEntryValue | null) {
   return String(value ?? '').trim().toLowerCase()
@@ -37,11 +37,6 @@ function mapAuthError(message: string) {
   return message || 'Could not complete that request.'
 }
 
-async function getRequestOrigin() {
-  const headersList = await headers()
-  return headersList.get('origin') || 'http://localhost:3000'
-}
-
 export async function login(
   _prevState: AuthActionState,
   formData: FormData
@@ -50,6 +45,7 @@ export async function login(
 
   const email = normalizeEmail(formData.get('email'))
   const password = String(formData.get('password') ?? '')
+  const next = getSafeNextPath(formData.get('next'))
 
   if (!email || !password) {
     return { error: 'Enter your email and password.', email }
@@ -66,7 +62,7 @@ export async function login(
   }
 
   revalidatePath('/', 'layout')
-  redirect('/predictions')
+  redirect(next)
 }
 
 export async function signup(
@@ -77,6 +73,7 @@ export async function signup(
   const email = normalizeEmail(formData.get('email'))
   const password = String(formData.get('password') ?? '')
   const displayName = getString(formData.get('display_name'))
+  const next = getSafeNextPath(formData.get('next'))
 
   if (!displayName || !email || !password) {
     return { error: 'Fill in your name, email, and password.', email }
@@ -88,7 +85,7 @@ export async function signup(
     email,
     password,
     options: {
-      emailRedirectTo: `${origin}/auth/callback`,
+      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
       data: {
         display_name: displayName,
       },
@@ -102,7 +99,7 @@ export async function signup(
 
   if (data.session || data.user?.email_confirmed_at) {
     revalidatePath('/', 'layout')
-    redirect('/predictions')
+    redirect(next)
   }
 
   const alreadyExists =
@@ -123,6 +120,7 @@ export async function resendConfirmation(
 ): Promise<AuthActionState> {
   const supabase = await createClient()
   const email = normalizeEmail(formData.get('email'))
+  const next = getSafeNextPath(formData.get('next'))
 
   if (!email) {
     return { error: 'Enter your email first.' }
@@ -133,7 +131,7 @@ export async function resendConfirmation(
     type: 'signup',
     email,
     options: {
-      emailRedirectTo: `${origin}/auth/callback`,
+      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
     },
   })
 

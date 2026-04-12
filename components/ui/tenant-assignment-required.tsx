@@ -19,14 +19,14 @@ export function TenantAssignmentRequired({ isAdmin = false }: TenantAssignmentRe
         <div className="text-sm font-bold uppercase tracking-widest text-slate-400">While you wait</div>
         <div className="mt-3 grid gap-3 text-sm text-slate-300">
           <div className="rounded-xl border border-white/5 bg-white/5 px-4 py-3">
-            Browse the public leaderboard and season story without tenant access.
+            Browse the public leaderboard and season story while your group access is being set up.
           </div>
           <div className="rounded-xl border border-white/5 bg-white/5 px-4 py-3">
             Set the display name you want other predictors to see on the leaderboard.
           </div>
           {isAdmin && (
             <div className="rounded-xl border border-white/5 bg-white/5 px-4 py-3">
-              Because this is an admin account, you can also finish group setup yourself.
+              Because your account can manage groups, you can also finish setup yourself.
             </div>
           )}
         </div>

@@ -2,12 +2,18 @@
 
 import { signup } from '@/app/auth/actions'
 import { initialAuthActionState } from '@/app/auth/action-state'
-import { useActionState } from 'react'
+import { use, useActionState } from 'react'
 import { PendingLink } from '@/components/ui/pending-link'
 import { RaceStartLights } from '@/components/ui/race-start-lights'
 import { AuthResendConfirmationForm } from '@/components/ui/auth-resend-confirmation-form'
 
-export default function SignupPage() {
+export default function SignupPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ next?: string }>
+}) {
+  const params = use(searchParams)
+  const next = getClientNextPath(params.next)
   const [state, formAction, pending] = useActionState(signup, initialAuthActionState)
 
   if (state.message) {
@@ -24,18 +30,18 @@ export default function SignupPage() {
             </p>
             Please check your <strong>Spam</strong> or <strong>Junk</strong> folder if you don&apos;t see it. 
             <br/><br/>
-            The email will be from <span className="font-bold text-white">Supabase</span>.
+            Search for <span className="font-bold text-white">Confirm your signup</span> if it lands elsewhere.
           </div>
           {state.email && (
             <div className="mb-6 rounded-2xl border border-white/10 bg-black/20 p-4 text-left">
               <p className="mb-3 text-sm text-slate-300">
                 Didn&apos;t get it yet? Send another confirmation email.
               </p>
-              <AuthResendConfirmationForm email={state.email} />
+              <AuthResendConfirmationForm email={state.email} next={next} />
             </div>
           )}
           <p className="text-slate-400 text-sm">
-            Once confirmed, you can <PendingLink href="/login" className="inline-flex items-center gap-1 text-red-500 hover:text-red-400 font-bold hover:underline transition-colors">sign in here</PendingLink>.
+            Once confirmed, you can <PendingLink href={next ? `/login?next=${encodeURIComponent(next)}` : '/login'} className="inline-flex items-center gap-1 text-red-500 hover:text-red-400 font-bold hover:underline transition-colors">sign in here</PendingLink>.
           </p>
         </div>
       </div>
@@ -48,23 +54,32 @@ export default function SignupPage() {
         <h1 className="text-3xl font-black italic tracking-tighter mb-2 text-center">Join the grid</h1>
         <p className="mb-6 text-center text-sm text-slate-400">Create your account, confirm your email, and get ready for the next lock.</p>
         
-        <SignupForm formAction={formAction} pending={pending} error={state.error} />
+        <SignupForm formAction={formAction} pending={pending} error={state.error} next={next} />
       </div>
     </div>
   )
+}
+
+function getClientNextPath(value?: string) {
+  if (!value || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return ''
+  return value
 }
 
 function SignupForm({
   error,
   formAction,
   pending,
+  next,
 }: {
   error?: string
   formAction: (formData: FormData) => void
   pending: boolean
+  next?: string
 }) {
   return (
     <form className="flex-1 flex flex-col w-full justify-center gap-4 text-foreground" action={formAction}>
+      <input type="hidden" name="next" value={next ?? ''} />
+
       <div className="space-y-2">
         <label className="text-sm font-medium text-slate-300" htmlFor="display_name">
           Display Name
@@ -125,7 +140,7 @@ function SignupForm({
       <p className="text-center text-sm text-slate-400">
         Already have an account?{' '}
         <PendingLink
-          href="/login"
+          href={next ? `/login?next=${encodeURIComponent(next)}` : '/login'}
           className="inline-flex items-center gap-1 font-bold text-red-500 transition-colors hover:text-red-400 hover:underline"
         >
           Sign in

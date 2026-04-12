@@ -21,7 +21,7 @@ export default async function SignupPage({
             </p>
             Please check your <strong>Spam</strong> or <strong>Junk</strong> folder if you don't see it. 
             <br/><br/>
-            The email will be from <span className="font-bold text-white">Supabase</span>.
+            Search for <span className="font-bold text-white">Confirm your signup</span> if it lands elsewhere.
           </div>
           <p className="text-slate-400 text-sm">
             Once confirmed, you can <a href="/login" className="text-red-500 hover:text-red-400 font-bold hover:underline transition-colors">sign in here</a>.

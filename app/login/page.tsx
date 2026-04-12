@@ -10,9 +10,10 @@ import { AuthResendConfirmationForm } from '@/components/ui/auth-resend-confirma
 export default function LoginPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; message?: string }>
+  searchParams: Promise<{ error?: string; message?: string; next?: string }>
 }) {
   const params = use(searchParams)
+  const next = getClientNextPath(params.next)
 
   return (
     <div className="flex-1 flex flex-col w-full px-8 sm:max-w-md justify-center gap-2 mx-auto animate-in fade-in duration-500 mt-20">
@@ -20,18 +21,25 @@ export default function LoginPage({
         <h1 className="text-3xl font-black italic tracking-tighter mb-2 text-center">Welcome back</h1>
         <p className="mb-6 text-center text-sm text-slate-400">Jump back into your standings and next race picks.</p>
         
-        <LoginForm initialError={params.error} initialMessage={params.message} />
+        <LoginForm initialError={params.error} initialMessage={params.message} next={next} />
       </div>
     </div>
   )
 }
 
+function getClientNextPath(value?: string) {
+  if (!value || !value.startsWith('/') || value.startsWith('//') || value.includes('\\')) return ''
+  return value
+}
+
 function LoginForm({
   initialError,
   initialMessage,
+  next,
 }: {
   initialError?: string
   initialMessage?: string
+  next?: string
 }) {
   const [state, formAction, pending] = useActionState(login, initialAuthActionState)
   const error = state.error || initialError
@@ -40,6 +48,8 @@ function LoginForm({
 
   return (
     <form className="flex-1 flex flex-col w-full justify-center gap-4 text-foreground" action={formAction}>
+      <input type="hidden" name="next" value={next ?? ''} />
+
       {!pending && initialMessage && (
         <p className="rounded-xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-center text-emerald-300">
           {initialMessage}
@@ -105,14 +115,14 @@ function LoginForm({
           <p className="mb-3 text-sm text-slate-300">
             Still waiting on the confirmation email? Send it again.
           </p>
-          <AuthResendConfirmationForm email={email} />
+          <AuthResendConfirmationForm email={email} next={next} />
         </div>
       )}
 
       <p className="text-center text-sm text-slate-400">
         New here?{' '}
         <PendingLink
-          href="/signup"
+          href={next ? `/signup?next=${encodeURIComponent(next)}` : '/signup'}
           className="inline-flex items-center gap-1 font-bold text-red-500 transition-colors hover:text-red-400 hover:underline"
         >
           Create an account

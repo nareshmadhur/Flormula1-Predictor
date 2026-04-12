@@ -1,4 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
+import { getSafeNextPath } from '@/utils/request-url'
 import { NextResponse } from 'next/server'
 
 export async function GET(request: Request) {
@@ -7,7 +8,7 @@ export async function GET(request: Request) {
   // https://supabase.com/docs/guides/auth/server-side/nextjs
   const requestUrl = new URL(request.url)
   const code = requestUrl.searchParams.get('code')
-  const next = requestUrl.searchParams.get('next') ?? '/predictions'
+  const next = getSafeNextPath(requestUrl.searchParams.get('next'))
 
   if (code) {
     const supabase = await createClient()
