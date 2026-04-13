@@ -337,8 +337,21 @@ In Supabase Auth URL Configuration:
 
 Keep these redirect URLs allowlisted:
 - `https://www.flormula1.nl/auth/callback`
+- `https://www.flormula1.nl/auth/confirm`
 - `https://flormula1.nl/auth/callback`
+- `https://flormula1.nl/auth/confirm`
 - `http://localhost:3000/auth/callback` for local testing
+- `http://localhost:3000/auth/confirm` for local testing
+
+For the Supabase reset-password email template, prefer the app's token-confirm route:
+
+```html
+<a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password">
+  Reset password
+</a>
+```
+
+If Supabase emails open as `https://<project>.supabase.co/www.flormula1.nl?...`, the Auth Site URL or email template is malformed. The reset-password email link should not be `{{ .SiteURL }}` by itself and should not be a hand-written `www.flormula1.nl` link.
 
 ### Seed Data
 

@@ -4,9 +4,14 @@ import { forgotPassword } from '@/app/auth/actions'
 import { initialAuthActionState } from '@/app/auth/action-state'
 import { PendingLink } from '@/components/ui/pending-link'
 import { RaceStartLights } from '@/components/ui/race-start-lights'
-import { useActionState } from 'react'
+import { use, useActionState } from 'react'
 
-export default function ForgotPasswordPage() {
+export default function ForgotPasswordPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ error?: string }>
+}) {
+  const params = use(searchParams)
   const [state, formAction, pending] = useActionState(
     forgotPassword,
     initialAuthActionState
@@ -37,6 +42,8 @@ export default function ForgotPasswordPage() {
       </div>
     )
   }
+
+  const error = state.error || params.error
 
   return (
     <div className="mx-auto mt-20 flex w-full max-w-md flex-1 flex-col justify-center gap-2 px-8 animate-in fade-in duration-500">
@@ -79,9 +86,9 @@ export default function ForgotPasswordPage() {
             {pending ? 'Sending reset link...' : 'Send reset link'}
           </button>
 
-          {!pending && state.error && (
+          {!pending && error && (
             <p className="rounded-xl border border-red-500/20 bg-red-500/10 p-4 text-center text-red-400">
-              {state.error}
+              {error}
             </p>
           )}
 
