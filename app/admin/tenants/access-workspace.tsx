@@ -1,13 +1,14 @@
 'use client'
 
 import { useState } from 'react'
-import { AlertTriangle, Building2, Shield, UserCheck, Users } from 'lucide-react'
+import { AlertTriangle, Building2, FlaskConical, Shield, UserCheck, Users } from 'lucide-react'
 import { ManageAccessForm } from './manage-access-form'
 
 type Tenant = {
   id: string
   name: string
   slug: string
+  is_test?: boolean | null
 }
 
 type Profile = {
@@ -17,14 +18,16 @@ type Profile = {
   role: 'user' | 'admin'
   admin_scope?: 'platform' | 'tenant' | null
   tenant_id?: string | null
+  is_test?: boolean | null
 }
 
-type AccessFilter = 'needs-assignment' | 'members' | 'group-admins' | 'platform-admins' | 'all'
+type AccessFilter = 'needs-assignment' | 'members' | 'group-admins' | 'platform-admins' | 'test' | 'all'
 
 type AccessWorkspaceProps = {
   profiles: Profile[]
   tenants: Tenant[]
   currentUserId: string
+  testModeAvailable: boolean
 }
 
 function getProfileName(profile: Profile) {
@@ -50,6 +53,7 @@ function matchesFilter(profile: Profile, filter: AccessFilter) {
   if (filter === 'members') return profile.role === 'user' && !!profile.tenant_id
   if (filter === 'group-admins') return profile.role === 'admin' && profile.admin_scope === 'tenant'
   if (filter === 'platform-admins') return profile.role === 'admin' && profile.admin_scope === 'platform'
+  if (filter === 'test') return Boolean(profile.is_test)
   return true
 }
 
@@ -57,7 +61,11 @@ export function AccessWorkspace({
   profiles,
   tenants,
   currentUserId,
+  testModeAvailable,
 }: AccessWorkspaceProps) {
+  const testGroupIds = new Set(tenants.filter((tenant) => tenant.is_test).map((tenant) => tenant.id))
+  const isProfileInTestMode = (profile: Profile) =>
+    Boolean(profile.is_test || (profile.tenant_id && testGroupIds.has(profile.tenant_id)))
   const needsAssignmentCount = profiles.filter((profile) => profile.role === 'user' && !profile.tenant_id).length
   const memberCount = profiles.filter((profile) => profile.role === 'user' && !!profile.tenant_id).length
   const groupAdminCount = profiles.filter(
@@ -66,6 +74,7 @@ export function AccessWorkspace({
   const platformAdminCount = profiles.filter(
     (profile) => profile.role === 'admin' && profile.admin_scope === 'platform'
   ).length
+  const testProfileCount = profiles.filter(isProfileInTestMode).length
 
   const groupStats = tenants
     .map((tenant) => {
@@ -92,7 +101,7 @@ export function AccessWorkspace({
 
   const normalizedQuery = query.trim().toLowerCase()
   const filteredProfiles = profiles
-    .filter((profile) => matchesFilter(profile, activeFilter))
+    .filter((profile) => (activeFilter === 'test' ? isProfileInTestMode(profile) : matchesFilter(profile, activeFilter)))
     .filter((profile) => (selectedGroupId ? profile.tenant_id === selectedGroupId : true))
     .filter((profile) => {
       if (!normalizedQuery) return true
@@ -143,6 +152,17 @@ export function AccessWorkspace({
     },
   ]
 
+  if (testModeAvailable) {
+    filterCards.push({
+      id: 'test',
+      label: 'Test mode',
+      count: testProfileCount,
+      tone: 'border-amber-500/20 bg-amber-500/10 text-amber-200',
+      icon: FlaskConical,
+      helper: 'People excluded by their account or group test flag.',
+    })
+  }
+
   const activeGroup = selectedGroupId
     ? groupStats.find((group) => group.id === selectedGroupId) ?? null
     : null
@@ -154,6 +174,11 @@ export function AccessWorkspace({
         <p className="max-w-3xl text-sm text-slate-400">
           Start with people who still need a group, then move through admins and existing groups from one place.
         </p>
+        {!testModeAvailable && (
+          <p className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+            Test mode needs the latest database update before groups or people can be marked as test.
+          </p>
+        )}
       </div>
 
       <div className="grid gap-4 xl:grid-cols-[1.05fr,1.35fr]">
@@ -234,6 +259,11 @@ export function AccessWorkspace({
                         <div className="mt-1 text-xs uppercase tracking-wider text-slate-500">
                           {group.slug}
                         </div>
+                        {group.is_test && (
+                          <div className="mt-2 inline-flex rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-amber-200">
+                            Test
+                          </div>
+                        )}
                       </div>
                       <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-black/20 text-slate-300">
                         <Building2 className="h-5 w-5" />
@@ -351,6 +381,7 @@ export function AccessWorkspace({
                   profile={entry}
                   tenants={tenants}
                   currentUserId={currentUserId}
+                  testModeAvailable={testModeAvailable}
                   expanded={openProfileId === entry.id}
                   onToggle={() =>
                     setOpenProfileId((current) => (current === entry.id ? null : entry.id))

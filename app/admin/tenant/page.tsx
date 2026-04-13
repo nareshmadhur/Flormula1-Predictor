@@ -17,6 +17,8 @@ import { getProfileDisplayName } from '@/utils/profile-name'
 import { sortCompetitionStandings } from '@/utils/competition'
 import { TenantContextBanner } from '@/components/ui/tenant-context-banner'
 import { PendingLink } from '@/components/ui/pending-link'
+import { getInvitePath } from '@/utils/group-invites'
+import { getAbsoluteUrl } from '@/utils/site'
 import { GroupInvitePanel } from './group-invite-panel'
 
 export const revalidate = 0
@@ -25,6 +27,7 @@ type TenantRecord = {
   id: string
   name: string
   slug: string
+  is_test?: boolean | null
 }
 
 type TenantMember = {
@@ -34,6 +37,7 @@ type TenantMember = {
   role: 'user' | 'admin'
   admin_scope?: 'platform' | 'tenant' | null
   tenant_id?: string | null
+  is_test?: boolean | null
 }
 
 type RaceRecord = {
@@ -64,6 +68,8 @@ type PredictionEntry = {
 
 type GroupInviteRecord = {
   id: string
+  invite_url?: string | null
+  share_token?: string | null
   expires_at: string
   max_uses: number
   accepted_count: number
@@ -147,17 +153,33 @@ export default async function TenantAdminPage() {
 
   const currentSeason = await getCurrentSeason(supabase)
 
-  const { data: tenant } = await supabase
+  const tenantWithTest = await supabase
     .from('tenants')
-    .select('id, name, slug')
+    .select('id, name, slug, is_test')
     .eq('id', access.tenantId)
     .maybeSingle()
 
-  const { data: members } = await supabase
+  const tenantResult = tenantWithTest.error?.message?.includes('is_test')
+    ? await supabase
+        .from('tenants')
+        .select('id, name, slug')
+        .eq('id', access.tenantId)
+        .maybeSingle()
+    : tenantWithTest
+
+  const membersWithTest = await supabase
     .from('profiles')
-    .select('id, display_name, email, role, admin_scope, tenant_id')
+    .select('id, display_name, email, role, admin_scope, tenant_id, is_test')
     .eq('tenant_id', access.tenantId)
     .order('display_name')
+
+  const membersResult = membersWithTest.error?.message?.includes('is_test')
+    ? await supabase
+        .from('profiles')
+        .select('id, display_name, email, role, admin_scope, tenant_id')
+        .eq('tenant_id', access.tenantId)
+        .order('display_name')
+    : membersWithTest
 
   const { data: races } = await supabase
     .from('races')
@@ -166,8 +188,11 @@ export default async function TenantAdminPage() {
     .neq('status', 'cancelled')
     .order('race_start_at', { ascending: true })
 
-  const typedTenant = tenant as TenantRecord | null
-  const typedMembers = (members || []) as TenantMember[]
+  const typedTenant = (tenantResult.data as TenantRecord | null) ?? null
+  const typedMembers = ((membersResult.data || []) as TenantMember[]).map((member) => ({
+    ...member,
+    is_test: member.is_test ?? false,
+  }))
   const typedRaces = (races || []) as RaceRecord[]
   const memberIds = typedMembers.map((member) => member.id)
 
@@ -220,17 +245,34 @@ export default async function TenantAdminPage() {
           .in('user_id', memberIds)
       : { data: [] as LeaderboardEntry[] }
 
-  const inviteQuery = await supabase
+  const inviteQueryWithToken = await supabase
     .from('group_invites')
-    .select('id, expires_at, max_uses, accepted_count, revoked_at, last_accepted_at, created_at')
+    .select('id, share_token, expires_at, max_uses, accepted_count, revoked_at, last_accepted_at, created_at')
     .eq('tenant_id', access.tenantId)
     .order('created_at', { ascending: false })
-    .limit(12)
+
+  const inviteQuery =
+    inviteQueryWithToken.error?.message?.includes('share_token')
+      ? await supabase
+          .from('group_invites')
+          .select('id, expires_at, max_uses, accepted_count, revoked_at, last_accepted_at, created_at')
+          .eq('tenant_id', access.tenantId)
+          .order('created_at', { ascending: false })
+      : inviteQueryWithToken
 
   const inviteSetupMessage = inviteQuery.error
     ? 'Invite links need the latest database update before they can be used.'
     : null
-  const groupInvites = inviteQuery.error ? [] : ((inviteQuery.data || []) as GroupInviteRecord[])
+  const inviteMigrationNotice =
+    !inviteQuery.error && inviteQueryWithToken.error?.message?.includes('share_token')
+      ? 'Run the latest database update before creating or re-copying invite links from this screen.'
+      : null
+  const groupInvites = inviteQuery.error
+    ? []
+    : ((inviteQuery.data || []) as GroupInviteRecord[]).map((invite) => ({
+        ...invite,
+        invite_url: invite.share_token ? getAbsoluteUrl(getInvitePath(invite.share_token)) : null,
+      }))
 
   const leaderboard = sortCompetitionStandings((leaderboardRows || []) as LeaderboardEntry[])
   const leaderboardByUserId = new Map(leaderboard.map((entry) => [entry.user_id, entry]))
@@ -281,6 +323,11 @@ export default async function TenantAdminPage() {
           </div>
           <div className="flex flex-wrap items-center gap-3">
             <TenantContextBanner tenantName={typedTenant?.name || null} label="Operating in" />
+            {typedTenant?.is_test && (
+              <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm font-bold uppercase tracking-wider text-amber-200">
+                Test group
+              </div>
+            )}
             {access.isPlatformAdmin ? (
               <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200">
                 Platform admin mode stays active while you inspect tenant competition health.
@@ -350,6 +397,7 @@ export default async function TenantAdminPage() {
         groupName={typedTenant?.name || 'your group'}
         invites={groupInvites}
         setupMessage={inviteSetupMessage}
+        migrationNotice={inviteMigrationNotice}
       />
 
       <div className="grid gap-6 lg:grid-cols-[1.05fr,0.95fr]">
@@ -376,6 +424,11 @@ export default async function TenantAdminPage() {
                       <div>
                         <div className="font-semibold text-slate-100">
                           {getProfileDisplayName(member?.display_name, member?.email)}
+                          {member?.is_test && (
+                            <span className="ml-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
+                              Test
+                            </span>
+                          )}
                         </div>
                         <div className="text-sm text-slate-400">
                           {entry.exact_hits} exact hits · {entry.races_scored} scored races
@@ -467,6 +520,11 @@ export default async function TenantAdminPage() {
                     <td className="p-4">
                       <div className="font-semibold text-slate-100">
                         {getProfileDisplayName(member.display_name, member.email)}
+                        {member.is_test && (
+                          <span className="ml-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
+                            Test
+                          </span>
+                        )}
                       </div>
                       <div className="text-sm text-slate-500">{member.email}</div>
                     </td>

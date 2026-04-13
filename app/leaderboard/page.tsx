@@ -13,6 +13,7 @@ import {
   type PodiumSlotBreakdown,
   type PodiumSlotOutcome,
 } from '@/utils/leaderboard-breakdown'
+import { isTestModeProfile } from '@/utils/test-mode'
 
 export const revalidate = 0
 
@@ -32,11 +33,15 @@ type LeaderboardEntry = {
         display_name?: string | null
         email?: string | null
         tenant_id?: string | null
+        is_test?: boolean | null
+        tenants?: { is_test?: boolean | null } | Array<{ is_test?: boolean | null }> | null
       }
     | Array<{
         display_name?: string | null
         email?: string | null
         tenant_id?: string | null
+        is_test?: boolean | null
+        tenants?: { is_test?: boolean | null } | Array<{ is_test?: boolean | null }> | null
       }>
     | null
 }
@@ -166,19 +171,27 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
         ? 'tenant'
         : defaultView
 
-  const { data: leaderboard, error } = await supabase
+  const leaderboardWithTestMode = await supabase
     .from('leaderboard_cache')
-    .select('user_id, total_points, exact_hits, races_scored, profiles(display_name, email, tenant_id)')
+    .select('user_id, total_points, exact_hits, races_scored, profiles(display_name, email, tenant_id, is_test, tenants(is_test))')
     .eq('season', currentSeason)
 
-  if (error) {
-    console.error('Error fetching leaderboard:', error)
+  const leaderboardResult = leaderboardWithTestMode.error?.message?.includes('is_test')
+    ? await supabase
+        .from('leaderboard_cache')
+        .select('user_id, total_points, exact_hits, races_scored, profiles(display_name, email, tenant_id)')
+        .eq('season', currentSeason)
+    : leaderboardWithTestMode
+  const testModeFilterAvailable = !leaderboardWithTestMode.error
+
+  if (leaderboardResult.error) {
+    console.error('Error fetching leaderboard:', leaderboardResult.error)
   }
 
-  const visibleLeaderboard = ((leaderboard || []) as LeaderboardEntry[]).filter((entry) => {
+  const visibleLeaderboard = ((leaderboardResult.data || []) as LeaderboardEntry[]).filter((entry) => {
     const profile = getLeaderboardProfile(entry)
 
-    if (activeView !== 'tenant') return true
+    if (activeView !== 'tenant') return testModeFilterAvailable ? !isTestModeProfile(profile) : true
     return profile?.tenant_id === groupContext.tenantId
   })
 

@@ -25,12 +25,14 @@ This increment does not directly create revenue, but it is a gate before chargin
 - source/data credits
 - support/contact path
 - brand-name review checkpoint
+- test mode isolation for safe onboarding and invite testing
 
 ## Current Progress
 
 - footer disclaimer and trust links added
 - `/privacy`, `/terms`, and `/contact` pages added as draft trust surfaces
 - sitemap coverage added for trust pages
+- test group/user flags added so validation data can stay out of public/global standings
 
 ## User Journey Impact
 
@@ -45,6 +47,7 @@ This increment does not directly create revenue, but it is a gate before chargin
 - Add unofficial disclaimer.
 - Document OpenF1 and data-source dependencies.
 - Prepare deployment/domain checklist for `flormula1.nl`.
+- Add a lightweight test-mode foundation before broader invite testing.
 
 ## Out Of Scope
 
@@ -59,16 +62,21 @@ This increment does not directly create revenue, but it is a gate before chargin
 - footer/navigation links
 - site URL/domain environment configuration
 - metadata updates for `flormula1.nl`
+- `is_test` flags for groups and profiles
+- admin test-mode toggles
+- public/global leaderboard filtering for test data
 
 ## Data Model Impact
 
-None expected.
+- `tenants.is_test`
+- `profiles.is_test`
 
 ## Test Plan
 
 - Verify footer links are visible on public pages.
 - Verify metadata and canonical URLs use the configured commercial domain.
 - Verify disclaimers are present before paid launch.
+- Verify test groups/accounts are hidden from public/global standings but still work inside their own group.
 
 ## Dependencies
 

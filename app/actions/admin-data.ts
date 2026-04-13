@@ -109,6 +109,47 @@ export async function toggleDriverActive(driverId: string, currentActive: boolea
   revalidatePath('/admin/data')
 }
 
+export async function toggleTenantTestMode(tenantId: string, currentIsTest: boolean) {
+  const { supabase } = await assertPlatformAdmin()
+  const { error } = await supabase
+    .from('tenants')
+    .update({ is_test: !currentIsTest })
+    .eq('id', tenantId)
+
+  if (error) throw new Error('Failed to update group test mode: ' + error.message)
+
+  revalidatePath('/admin')
+  revalidatePath('/admin/tenants')
+  revalidatePath('/admin/tenant')
+  revalidatePath('/')
+  revalidatePath('/leaderboard')
+  revalidatePath('/season')
+}
+
+export async function toggleProfileTestMode(profileId: string, currentIsTest: boolean) {
+  const { supabase, access } = await assertPlatformAdmin()
+
+  if (profileId === access.userId) {
+    throw new Error('Use another platform admin account if you need to mark your own account as test.')
+  }
+
+  const { error } = await supabase
+    .from('profiles')
+    .update({ is_test: !currentIsTest })
+    .eq('id', profileId)
+
+  if (error) throw new Error('Failed to update user test mode: ' + error.message)
+
+  revalidatePath('/admin')
+  revalidatePath('/admin/tenants')
+  revalidatePath('/admin/tenant')
+  revalidatePath('/')
+  revalidatePath('/leaderboard')
+  revalidatePath('/season')
+  revalidatePath('/predictions')
+  revalidatePath('/me/history')
+}
+
 export async function deleteDriver(driverId: string) {
   const { supabase } = await assertPlatformAdmin()
   const { error } = await supabase.from('drivers').delete().eq('id', driverId)

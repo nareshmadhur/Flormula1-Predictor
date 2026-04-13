@@ -5,11 +5,13 @@ import { Building2, ChevronLeft } from 'lucide-react'
 import { getAdminAccessContext, resolveAdminScope, type AdminScope, type AdminProfileRow } from '@/utils/admin-access'
 import { CreateTenantForm } from './create-tenant-form'
 import { AccessWorkspace } from './access-workspace'
+import { TestModeToggleButton } from './test-mode-toggle-button'
 
 type Tenant = {
   id: string
   name: string
   slug: string
+  is_test?: boolean | null
 }
 
 type Profile = {
@@ -19,6 +21,7 @@ type Profile = {
   role: 'user' | 'admin'
   admin_scope?: AdminScope | null
   tenant_id?: string | null
+  is_test?: boolean | null
 }
 
 export const revalidate = 0
@@ -33,19 +36,29 @@ export default async function AdminTenantsPage() {
     return <div className="p-20 text-center text-red-500 font-bold">Platform admin access required.</div>
   }
 
-  const { data: tenants } = await supabase
+  const tenantsWithTestMode = await supabase
     .from('tenants')
-    .select('*')
+    .select('id, name, slug, is_test')
     .order('name')
+
+  const tenantsResult = tenantsWithTestMode.error?.message?.includes('is_test')
+    ? await supabase
+        .from('tenants')
+        .select('id, name, slug')
+        .order('name')
+    : tenantsWithTestMode
 
   const profilesWithScope = await supabase
     .from('profiles')
-    .select('id, display_name, email, role, tenant_id, admin_scope')
+    .select('id, display_name, email, role, tenant_id, admin_scope, is_test')
     .order('display_name')
 
   let rawProfiles: Profile[] = []
 
-  if (profilesWithScope.error && profilesWithScope.error.message?.includes('admin_scope')) {
+  if (
+    profilesWithScope.error &&
+    (profilesWithScope.error.message?.includes('admin_scope') || profilesWithScope.error.message?.includes('is_test'))
+  ) {
     const legacyProfiles = await supabase
       .from('profiles')
       .select('id, display_name, email, role, tenant_id')
@@ -56,11 +69,16 @@ export default async function AdminTenantsPage() {
     rawProfiles = (profilesWithScope.data || []) as Profile[]
   }
 
-  const typedTenants = (tenants || []) as Tenant[]
+  const typedTenants = ((tenantsResult.data || []) as Tenant[]).map((tenant) => ({
+    ...tenant,
+    is_test: tenant.is_test ?? false,
+  }))
   const typedProfiles = rawProfiles.map((profile) => ({
     ...profile,
     admin_scope: resolveAdminScope(profile as AdminProfileRow),
+    is_test: profile.is_test ?? false,
   }))
+  const testModeAvailable = !tenantsWithTestMode.error && !profilesWithScope.error
   const memberCountByTenant = new Map<string, number>()
   const adminCountByTenant = new Map<string, number>()
 
@@ -93,6 +111,7 @@ export default async function AdminTenantsPage() {
         profiles={typedProfiles}
         tenants={typedTenants}
         currentUserId={access.userId}
+        testModeAvailable={testModeAvailable}
       />
 
       <div className="grid gap-6 xl:grid-cols-[0.9fr,1.1fr]">
@@ -121,6 +140,11 @@ export default async function AdminTenantsPage() {
                     <div className="min-w-0">
                       <div className="font-semibold text-white">{tenant.name}</div>
                       <div className="mt-1 text-sm text-slate-400">{tenant.slug}</div>
+                      {tenant.is_test && (
+                        <div className="mt-2 inline-flex rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-amber-200">
+                          Test group
+                        </div>
+                      )}
                     </div>
                     <div className="flex flex-wrap gap-2 text-sm">
                       <span className="rounded-full bg-white/6 px-3 py-1.5 text-slate-200">
@@ -133,6 +157,9 @@ export default async function AdminTenantsPage() {
                         <span className="rounded-full bg-amber-500/10 px-3 py-1.5 text-amber-300">
                           No admin yet
                         </span>
+                      )}
+                      {testModeAvailable && (
+                        <TestModeToggleButton id={tenant.id} target="group" active={Boolean(tenant.is_test)} />
                       )}
                     </div>
                   </div>

@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { AlertTriangle, CheckCircle2, LockKeyhole, Trophy, Users } from 'lucide-react'
 import { createClient } from '@/utils/supabase/server'
-import { getInvitePath, hashInviteToken } from '@/utils/group-invites'
+import { getInviteClaimPath, hashInviteToken } from '@/utils/group-invites'
 import { PendingLink } from '@/components/ui/pending-link'
 import { JoinInviteForm } from './join-invite-form'
 
@@ -14,6 +14,7 @@ export const metadata: Metadata = {
 
 type PageProps = {
   params: Promise<{ token: string }>
+  searchParams: Promise<{ error?: string | string[] | undefined }>
 }
 
 type InvitePreview = {
@@ -42,11 +43,13 @@ function getStatusCopy(status?: InvitePreview['status']) {
 }
 
 function getNextAuthPath(basePath: '/login' | '/signup', token: string) {
-  return `${basePath}?next=${encodeURIComponent(getInvitePath(token))}`
+  return `${basePath}?next=${encodeURIComponent(getInviteClaimPath(token))}`
 }
 
-export default async function JoinGroupPage({ params }: PageProps) {
+export default async function JoinGroupPage({ params, searchParams }: PageProps) {
   const { token } = await params
+  const query = await searchParams
+  const claimError = Array.isArray(query.error) ? query.error[0] : query.error
   const cleanToken = String(token ?? '').trim()
   const supabase = await createClient()
   const inviteHash = cleanToken ? hashInviteToken(cleanToken) : ''
@@ -115,6 +118,12 @@ export default async function JoinGroupPage({ params }: PageProps) {
         </div>
 
         <div className="p-6 sm:p-8">
+          {claimError && (
+            <div className="mb-5 rounded-2xl border border-red-500/20 bg-red-500/10 p-4 text-sm leading-6 text-red-200">
+              {claimError}
+            </div>
+          )}
+
           {inviteSetupUnavailable ? (
             <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5 text-amber-100">
               Invites are not ready yet. Ask support to finish group invite setup.
@@ -153,7 +162,7 @@ export default async function JoinGroupPage({ params }: PageProps) {
                 <div className="rounded-2xl border border-white/5 bg-black/25 p-4">
                   <CheckCircle2 className="h-5 w-5 text-red-300" />
                   <div className="mt-3 text-sm font-bold text-white">Instant access</div>
-                  <p className="mt-1 text-xs leading-5 text-slate-400">Join after email confirmation.</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">Auto-join after email confirmation.</p>
                 </div>
               </div>
 

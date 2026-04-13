@@ -22,7 +22,9 @@ FLO-RMULA 1 is a Formula 1 prediction pool built with Next.js and Supabase. User
 ### Admin Experience
 - In-app admin navigation for platform admins and tenant admins
 - Tenant and account access management in `/admin/tenants`
+- Test Mode flags for groups and accounts so invite/onboarding tests can be isolated from public standings
 - Tenant operations workspace in `/admin/tenant`
+- Group invite links that can be copied again from the tenant workspace after the latest invite migration
 - Race calendar management
 - OpenF1-backed schedule sync review in `/admin/schedule`
 - Bonus question management per race
@@ -60,6 +62,7 @@ In practical terms:
 - tenant membership only affects competition context and leaderboard slicing
 - missing public display names fall back to a sanitized email-derived predictor name instead of `Anonymous`
 - app-visible profiles are treated as confirmed users only; pending email confirmations should not appear in admin account lists
+- groups or accounts marked as test are excluded from public/global standings by default
 - scored leaderboard transparency can be shown publicly because scored predictions and scored user race scores are readable after results are published
 
 Detailed execution tracking lives in [docs/roadmap/README.md](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/README.md>).
@@ -80,16 +83,25 @@ Detailed execution tracking lives in [docs/roadmap/README.md](</Users/nareshmadh
 1. Sign in as a platform admin.
 2. Open `Admin` from the main navigation.
 3. Open `/admin/tenants` to create tenants and set each account's role, admin scope, and tenant assignment.
-4. Create or update races for the season.
-5. Add bonus questions and official answers.
-6. Save official podium results.
-7. Calculate scores and refresh the leaderboard.
+4. Mark test groups/accounts in `/admin/tenants` when validating signup, invites, or scoring flows.
+5. Create or update races for the season.
+6. Add bonus questions and official answers.
+7. Save official podium results.
+8. Calculate scores and refresh the leaderboard.
+
+### Test Mode
+- Mark a group as `Test` to keep everyone in that group out of public/global standings.
+- Mark an individual account as `Test` to exclude only that account from public/global standings.
+- Test users can still use their own group leaderboard, predictions, and history.
+- Platform admins can manage test flags from `/admin/tenants`.
+- Keep a reusable test group and a few reusable test accounts instead of deleting Supabase Auth users after each flow.
 
 ### Tenant Admin
 1. Sign in as a tenant admin.
 2. Open `Admin` from the main navigation.
 3. Land in `/admin/tenant` to inspect tenant roster health, leaderboard state, and race-entry coverage.
-4. Use the tenant leaderboard and season history to spot missed weekends and competition momentum.
+4. Create and copy invite links from the group invite panel when bringing people into the group.
+5. Use the tenant leaderboard and season history to spot missed weekends and competition momentum.
 
 ## Technical Overview
 
@@ -309,7 +321,24 @@ Create `.env.local`:
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
+NEXT_PUBLIC_SITE_URL=https://www.flormula1.nl
 ```
+
+`NEXT_PUBLIC_SITE_URL` is the canonical public domain used for shareable links, auth email callbacks, metadata, robots, and sitemap URLs.
+
+Set it in:
+- `.env.local` for local development. Use `http://localhost:3000` if you want auth email links to return to your local app.
+- your deployment provider environment variables for production
+
+In Supabase Auth URL Configuration:
+- Set `Site URL` to `https://www.flormula1.nl` or `https://flormula1.nl`, including `https://`.
+- Do not set it to `www.flormula1.nl` without the protocol. Supabase treats that as a path on the Supabase project domain.
+- Keep the app's `NEXT_PUBLIC_SITE_URL` aligned with the chosen canonical Site URL.
+
+Keep these redirect URLs allowlisted:
+- `https://www.flormula1.nl/auth/callback`
+- `https://flormula1.nl/auth/callback`
+- `http://localhost:3000/auth/callback` for local testing
 
 ### Seed Data
 

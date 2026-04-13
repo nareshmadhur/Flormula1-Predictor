@@ -11,3 +11,7 @@ export function hashInviteToken(token: string) {
 export function getInvitePath(token: string) {
   return `/join/${encodeURIComponent(token)}`
 }
+
+export function getInviteClaimPath(token: string) {
+  return `/join/${encodeURIComponent(token)}/claim`
+}

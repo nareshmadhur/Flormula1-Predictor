@@ -22,12 +22,14 @@ This is the key feature that makes self-serve group growth possible.
 - invite landing page
 - join-after-login/signup flow
 - invite management in group admin workspace
+- copyable active invite links for admins
 - invite expiry and usage limits
 
 ## User Journey Impact
 
 - Organizer creates invite.
 - Organizer shares invite link.
+- Organizer can return later and copy active invite links created after the copyable-link migration.
 - Member opens link, signs up, confirms email, and lands in the group.
 - Existing member can accept an invite after login.
 
@@ -66,6 +68,7 @@ Potential fields:
 - `id`
 - `tenant_id`
 - `token_hash`
+- `share_token`
 - `created_by`
 - `expires_at`
 - `max_uses`
@@ -81,6 +84,8 @@ Potential fields:
 - Platform admin can still manually adjust group membership.
 - Tenant/group admin cannot invite into another group.
 - Invite links can be created and revoked from the group admin workspace.
+- Active copyable invite links can be copied again from the group admin workspace.
+- Legacy active links created before `0015_group_invite_share_tokens.sql` show a create-copyable-link recovery path.
 - A user already in the target group sees a safe “already joined” state.
 
 ## Dependencies
@@ -92,4 +97,4 @@ Potential fields:
 
 In progress.
 
-Implementation started with migration `0013_group_invites.sql`, group invite admin UI, `/join/[token]`, and auth continuation through `next`.
+Implementation started with migration `0013_group_invites.sql`, group invite admin UI, `/join/[token]`, and auth continuation through `next`. Migration `0015_group_invite_share_tokens.sql` makes new active invite links re-copyable from the admin workspace while keeping legacy hash-only links valid.

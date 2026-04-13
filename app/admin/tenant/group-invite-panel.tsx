@@ -3,7 +3,7 @@
 import { useActionState, useMemo, useState } from 'react'
 import { format, formatDistanceToNowStrict } from 'date-fns'
 import { Copy, Link2, ShieldOff, Users } from 'lucide-react'
-import { createGroupInvite, revokeGroupInvite } from '@/app/actions/group-invites'
+import { createCopyableGroupInvite, createGroupInvite, revokeGroupInvite } from '@/app/actions/group-invites'
 import { FormActionButton } from '@/components/ui/form-action-button'
 import {
   initialGroupInviteActionState,
@@ -12,6 +12,7 @@ import {
 
 type GroupInvite = {
   id: string
+  invite_url?: string | null
   expires_at: string
   max_uses: number
   accepted_count: number
@@ -24,6 +25,7 @@ type GroupInvitePanelProps = {
   groupName: string
   invites: GroupInvite[]
   setupMessage?: string | null
+  migrationNotice?: string | null
 }
 
 function getInviteStatus(invite: GroupInvite) {
@@ -54,6 +56,27 @@ function getInviteStatus(invite: GroupInvite) {
   }
 }
 
+function CopyInviteButton({ inviteUrl, className }: { inviteUrl: string; className?: string }) {
+  const [copied, setCopied] = useState(false)
+
+  const copyInvite = async () => {
+    await navigator.clipboard.writeText(inviteUrl)
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1600)
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={copyInvite}
+      className={`inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/8 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-white/12 ${className || ''}`.trim()}
+    >
+      <Copy className="h-4 w-4" />
+      {copied ? 'Copied' : 'Copy'}
+    </button>
+  )
+}
+
 function RevokeInviteForm({ inviteId }: { inviteId: string }) {
   const [state, formAction] = useActionState<GroupInviteActionState, FormData>(
     revokeGroupInvite,
@@ -78,24 +101,55 @@ function RevokeInviteForm({ inviteId }: { inviteId: string }) {
   )
 }
 
-export function GroupInvitePanel({ groupName, invites, setupMessage }: GroupInvitePanelProps) {
+function CreateCopyableInviteForm({ inviteId }: { inviteId: string }) {
+  const [state, formAction] = useActionState<GroupInviteActionState, FormData>(
+    createCopyableGroupInvite,
+    initialGroupInviteActionState
+  )
+
+  return (
+    <form action={formAction} className="mt-3 space-y-3">
+      <input type="hidden" name="invite_id" value={inviteId} />
+      <FormActionButton
+        idleLabel="Create Copyable Link"
+        pendingLabel="Creating..."
+        tone="amber"
+        className="py-2 text-sm"
+      />
+      {state.message && (
+        <p
+          className={`rounded-xl border px-3 py-2 text-xs leading-5 ${
+            state.status === 'success'
+              ? 'border-green-500/20 bg-green-500/10 text-green-200'
+              : 'border-red-500/20 bg-red-500/10 text-red-300'
+          }`}
+        >
+          {state.message}
+        </p>
+      )}
+      {state.inviteUrl && (
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            value={state.inviteUrl}
+            readOnly
+            className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-200"
+          />
+          <CopyInviteButton inviteUrl={state.inviteUrl} />
+        </div>
+      )}
+    </form>
+  )
+}
+
+export function GroupInvitePanel({ groupName, invites, setupMessage, migrationNotice }: GroupInvitePanelProps) {
   const [state, formAction] = useActionState<GroupInviteActionState, FormData>(
     createGroupInvite,
     initialGroupInviteActionState
   )
-  const [copied, setCopied] = useState(false)
   const activeInviteCount = useMemo(
     () => invites.filter((invite) => getInviteStatus(invite).label === 'Active').length,
     [invites]
   )
-
-  const copyInvite = async () => {
-    if (!state.inviteUrl) return
-
-    await navigator.clipboard.writeText(state.inviteUrl)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1600)
-  }
 
   return (
     <section id="group-invites" className="scroll-mt-28 rounded-3xl border border-white/10 bg-card p-6 shadow-2xl md:p-8">
@@ -124,6 +178,12 @@ export function GroupInvitePanel({ groupName, invites, setupMessage }: GroupInvi
           </div>
         </div>
       </div>
+
+      {migrationNotice && (
+        <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm leading-6 text-amber-100">
+          {migrationNotice}
+        </div>
+      )}
 
       {setupMessage ? (
         <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-5 text-sm leading-6 text-amber-200">
@@ -191,18 +251,8 @@ export function GroupInvitePanel({ groupName, invites, setupMessage }: GroupInvi
                     readOnly
                     className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-200"
                   />
-                  <button
-                    type="button"
-                    onClick={copyInvite}
-                    className="inline-flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/8 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-white/12"
-                  >
-                    <Copy className="h-4 w-4" />
-                    {copied ? 'Copied' : 'Copy'}
-                  </button>
+                  <CopyInviteButton inviteUrl={state.inviteUrl} />
                 </div>
-                <p className="mt-2 text-xs leading-5 text-slate-500">
-                  For safety, this full link is only shown now. Create a fresh link if you need another copy later.
-                </p>
               </div>
             )}
           </div>
@@ -239,6 +289,32 @@ export function GroupInvitePanel({ groupName, invites, setupMessage }: GroupInvi
                             ? ` · Last joined ${formatDistanceToNowStrict(new Date(invite.last_accepted_at), { addSuffix: true })}`
                             : ''}
                         </div>
+                        {canRevoke && invite.invite_url && (
+                          <div className="mt-4 rounded-2xl border border-white/10 bg-white/5 p-3">
+                            <div className="mb-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                              Share link
+                            </div>
+                            <div className="flex flex-col gap-2 sm:flex-row">
+                              <input
+                                value={invite.invite_url}
+                                readOnly
+                                className="min-w-0 flex-1 rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm text-slate-200"
+                              />
+                              <CopyInviteButton inviteUrl={invite.invite_url} />
+                            </div>
+                          </div>
+                        )}
+                        {canRevoke && !invite.invite_url && (
+                          <div className="mt-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-3">
+                            <div className="text-xs font-bold uppercase tracking-wider text-amber-200">
+                              Older active link
+                            </div>
+                            <p className="mt-1 text-xs leading-5 text-amber-100/80">
+                              It still works if someone already has it. Create a copyable link if you need to share again.
+                            </p>
+                            <CreateCopyableInviteForm inviteId={invite.id} />
+                          </div>
+                        )}
                       </div>
 
                       {canRevoke ? (

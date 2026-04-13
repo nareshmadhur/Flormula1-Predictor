@@ -2,6 +2,7 @@ import { cache } from 'react'
 import { sortCompetitionStandings } from '@/utils/competition'
 import { getEffectiveRaceStatus, type RaceStatus } from '@/utils/race-status'
 import { createPublicClient } from '@/utils/supabase/public'
+import { isTestModeProfile } from '@/utils/test-mode'
 
 export type PublicSeasonRace = {
   id: string
@@ -27,12 +28,24 @@ export type PublicSeasonLeaderboardEntry = {
     | {
         display_name?: string | null
         email?: string | null
+        is_test?: boolean | null
+        tenants?: { is_test?: boolean | null } | Array<{ is_test?: boolean | null }> | null
       }
     | Array<{
         display_name?: string | null
         email?: string | null
+        is_test?: boolean | null
+        tenants?: { is_test?: boolean | null } | Array<{ is_test?: boolean | null }> | null
       }>
     | null
+}
+
+function getLeaderboardProfile(entry: PublicSeasonLeaderboardEntry) {
+  if (Array.isArray(entry.profiles)) {
+    return entry.profiles[0] || null
+  }
+
+  return entry.profiles || null
 }
 
 export type PublicSeasonRaceSummary = PublicSeasonRace & {
@@ -57,7 +70,7 @@ export const getPublicSeasonData = cache(async () => {
       .order('race_start_at', { ascending: true }),
     supabase
       .from('leaderboard_cache')
-      .select('user_id, total_points, exact_hits, races_scored, profiles(display_name, email)')
+      .select('user_id, total_points, exact_hits, races_scored, profiles(display_name, email, is_test, tenants(is_test))')
       .eq('season', currentSeason),
   ])
 
@@ -66,7 +79,19 @@ export const getPublicSeasonData = cache(async () => {
     effectiveStatus: getEffectiveRaceStatus(race),
   }))
 
-  const leaderboard = sortCompetitionStandings((leaderboardResponse.data || []) as PublicSeasonLeaderboardEntry[])
+  const legacyLeaderboardResponse = leaderboardResponse.error?.message?.includes('is_test')
+    ? await supabase
+        .from('leaderboard_cache')
+        .select('user_id, total_points, exact_hits, races_scored, profiles(display_name, email)')
+        .eq('season', currentSeason)
+    : null
+  const testModeFilterAvailable = !leaderboardResponse.error
+  const leaderboardRows = (legacyLeaderboardResponse?.data || leaderboardResponse.data || []) as PublicSeasonLeaderboardEntry[]
+  const leaderboard = sortCompetitionStandings(
+    leaderboardRows.filter((entry) =>
+      testModeFilterAvailable ? !isTestModeProfile(getLeaderboardProfile(entry)) : true
+    )
+  )
   const nextRace = races.find((race) => race.effectiveStatus === 'upcoming') || null
   const pendingPublication = races.filter(
     (race) => race.effectiveStatus === 'locked' || race.effectiveStatus === 'completed'

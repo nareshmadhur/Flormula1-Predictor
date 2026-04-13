@@ -6,11 +6,13 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import { updateProfileAccess } from '@/app/actions/admin-data'
 import { getProfileDisplayName } from '@/utils/profile-name'
 import { initialTenantAdminActionState } from './action-state'
+import { TestModeToggleButton } from './test-mode-toggle-button'
 
 type Tenant = {
   id: string
   name: string
   slug: string
+  is_test?: boolean | null
 }
 
 type Profile = {
@@ -20,12 +22,14 @@ type Profile = {
   role: 'user' | 'admin'
   admin_scope?: 'platform' | 'tenant' | null
   tenant_id?: string | null
+  is_test?: boolean | null
 }
 
 type ManageAccessFormProps = {
   profile: Profile
   tenants: Tenant[]
   currentUserId: string
+  testModeAvailable: boolean
   expanded: boolean
   onToggle: () => void
 }
@@ -94,6 +98,7 @@ export function ManageAccessForm({
   profile,
   tenants,
   currentUserId,
+  testModeAvailable,
   expanded,
   onToggle,
 }: ManageAccessFormProps) {
@@ -129,6 +134,11 @@ export function ManageAccessForm({
           <div className="min-w-0">
             <div className="truncate font-semibold text-white">
               {getProfileDisplayName(profile.display_name, profile.email, 'Unnamed user')}
+              {profile.is_test && (
+                <span className="ml-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
+                  Test
+                </span>
+              )}
             </div>
             <div className="break-all text-xs text-slate-400 sm:text-sm">
               {profile.email || 'No email'}
@@ -142,8 +152,18 @@ export function ManageAccessForm({
           </div>
 
           <div>
-            <div className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-semibold sm:px-3 sm:py-1.5 sm:text-xs ${rowStatus.tone}`}>
-              {rowStatus.label}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className={`inline-flex w-fit rounded-full px-2.5 py-1 text-[11px] font-semibold sm:px-3 sm:py-1.5 sm:text-xs ${rowStatus.tone}`}>
+                {rowStatus.label}
+              </div>
+              {testModeAvailable && (
+                <TestModeToggleButton
+                  id={profile.id}
+                  target="person"
+                  active={Boolean(profile.is_test)}
+                  disabled={currentUserId === profile.id}
+                />
+              )}
             </div>
           </div>
 

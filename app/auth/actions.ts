@@ -4,7 +4,7 @@ import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { AuthActionState } from '@/app/auth/action-state'
-import { getRequestOrigin, getSafeNextPath } from '@/utils/request-url'
+import { getAuthCallbackUrl, getSafeNextPath } from '@/utils/request-url'
 
 function normalizeEmail(value: FormDataEntryValue | null) {
   return String(value ?? '').trim().toLowerCase()
@@ -79,13 +79,11 @@ export async function signup(
     return { error: 'Fill in your name, email, and password.', email }
   }
 
-  const origin = await getRequestOrigin()
-
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
     options: {
-      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
+      emailRedirectTo: getAuthCallbackUrl(next),
       data: {
         display_name: displayName,
       },
@@ -126,12 +124,11 @@ export async function resendConfirmation(
     return { error: 'Enter your email first.' }
   }
 
-  const origin = await getRequestOrigin()
   const { error } = await supabase.auth.resend({
     type: 'signup',
     email,
     options: {
-      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(next)}`,
+      emailRedirectTo: getAuthCallbackUrl(next),
     },
   })
 
@@ -161,9 +158,8 @@ export async function forgotPassword(
     return { error: 'Enter your email first.' }
   }
 
-  const origin = await getRequestOrigin()
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${origin}/auth/callback?next=/reset-password`,
+    redirectTo: getAuthCallbackUrl('/reset-password'),
   })
 
   if (error) {
