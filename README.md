@@ -343,13 +343,33 @@ Keep these redirect URLs allowlisted:
 - `http://localhost:3000/auth/callback` for local testing
 - `http://localhost:3000/auth/confirm` for local testing
 
-For the Supabase reset-password email template, prefer the app's token-confirm route:
+The repo keeps Supabase Auth email templates in `supabase/templates/`, wired through `supabase/config.toml`.
+
+Action emails use the app's token-confirm route instead of Supabase's default callback URL:
 
 ```html
 <a href="{{ .SiteURL }}/auth/confirm?token_hash={{ .TokenHash }}&type=recovery&next=/reset-password">
   Reset password
 </a>
 ```
+
+Template coverage mirrors Supabase's official template and notification keys:
+- `confirmation.html`: confirm account after signup
+- `invite.html`: accept an admin-created invite
+- `magic_link.html`: passwordless sign-in
+- `email_change.html`: confirm a new email address
+- `recovery.html`: reset password
+- `reauthentication.html`: one-time security code
+- `password_changed.html`, `email_changed.html`, `phone_changed.html`, `identity_linked.html`, `identity_unlinked.html`, `mfa_factor_enrolled.html`, `mfa_factor_unenrolled.html`: security notifications
+
+For hosted Supabase, confirm these Auth settings in the dashboard:
+- Email confirmations should be enabled for production signups.
+- `Site URL` must include the protocol, for example `https://www.flormula1.nl`.
+- Redirect URLs must include `/auth/confirm` for each production and local host you test with.
+- The email templates in the dashboard should match the files in `supabase/templates/` unless you apply them through Supabase config tooling.
+- Supabase's managed email sender is restrictive, so the templates use a branded visual shell with short authentication-focused copy.
+- If a specific template reports blocked keywords, first remove generic support wording, visible fallback URLs, or extra marketing-style copy from that template.
+- Use custom SMTP before adding richer lifecycle emails, extra links, or broader marketing-style messaging.
 
 If Supabase emails open as `https://<project>.supabase.co/www.flormula1.nl?...`, the Auth Site URL or email template is malformed. The reset-password email link should not be `{{ .SiteURL }}` by itself and should not be a hand-written `www.flormula1.nl` link.
 
