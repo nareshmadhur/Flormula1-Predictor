@@ -44,7 +44,7 @@ function getStatusDescription(status: RaceStatus) {
 
 function getMetadataDescription(raceName: string, status: RaceStatus) {
   if (status === 'upcoming') {
-    return `Follow the ${raceName} schedule, prediction deadline, and bonus questions before the grid locks.`
+    return `Follow the ${raceName} schedule, pick deadline, and bonus questions before the grid locks.`
   }
 
   if (status === 'scored') {

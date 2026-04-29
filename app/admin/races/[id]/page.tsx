@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { AlertCircle, Plus, CheckCircle, Calculator, Settings, Users } from 'lucide-react'
+import { AlertCircle, Plus, CheckCircle, Calculator, Settings, Users, CalendarSync, ExternalLink } from 'lucide-react'
 import { revalidatePath } from 'next/cache'
 import DeleteRaceButton from './delete-button'
 import CancelRaceButton from './cancel-button'
@@ -12,15 +12,24 @@ import { getAdminAccessContext } from '@/utils/admin-access'
 import { getProfileDisplayName } from '@/utils/profile-name'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { getAdminRaceStatusBadgeClasses, getAdminRaceStatusLabel } from '@/utils/admin-race-status'
-import { fetchOpenF1PodiumSuggestion } from '@/utils/openf1'
-import { ADMIN_TIME_LABEL, formatAmsterdamInputValue } from '@/utils/amsterdam-time'
+import {
+  buildOpenF1ScheduleReview,
+  fetchOpenF1PodiumSuggestion,
+  fetchOpenF1SeasonSchedule,
+  type ExistingRaceForImport,
+  type OpenF1CircuitLookup,
+  type OpenF1ScheduleReviewRow,
+} from '@/utils/openf1'
+import { ADMIN_TIME_LABEL, formatAmsterdamDateTime, formatAmsterdamInputValue } from '@/utils/amsterdam-time'
 import { FormActionButton } from '@/components/ui/form-action-button'
 import { PageBackLink } from '@/components/ui/page-back-link'
+import { OpenF1RaceSyncForm } from './openf1-race-sync-form'
 
 export const revalidate = 0
 
 type RaceRecord = {
   id: string
+  season: number
   round: number
   race_name: string
   status: 'upcoming' | 'locked' | 'completed' | 'scored' | 'cancelled'
@@ -45,6 +54,8 @@ type DriverRecord = {
 type CircuitRecord = {
   id: string
   name: string
+  city?: string | null
+  country?: string | null
   emoji?: string | null
 }
 
@@ -146,6 +157,10 @@ async function saveResults(formData: FormData) {
   await supabase.from('races').update({ status: 'completed' }).eq('id', raceId)
 
   revalidatePath(`/admin/races/${raceId}`)
+  revalidatePath('/admin/results')
+  revalidatePath('/season')
+  revalidatePath(`/race/${raceId}`)
+  revalidatePath(`/race/${raceId}/predict`)
 }
 
 export async function proxyPrediction(formData: FormData) {
@@ -209,6 +224,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
   const typedProfiles = (profiles || []) as ProfileRecord[]
   const effectiveStatus = getEffectiveRaceStatus(typedRace)
   let suggestedPodium = null
+  let openF1Review: OpenF1ScheduleReviewRow | null = null
 
   if (typedRace.external_race_key) {
     try {
@@ -216,6 +232,37 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
     } catch (error) {
       console.error('Failed to load OpenF1 podium suggestion', error)
     }
+
+    try {
+      const importedRaces = await fetchOpenF1SeasonSchedule(typedRace.season)
+      const importedRace = importedRaces.find(
+        (entry) => String(entry.meetingKey) === String(typedRace.external_race_key)
+      )
+
+      if (importedRace) {
+        openF1Review =
+          buildOpenF1ScheduleReview(
+            [importedRace],
+            [typedRace as ExistingRaceForImport],
+            typedCircuits as OpenF1CircuitLookup[]
+          )[0] || null
+      }
+    } catch (error) {
+      console.error('Failed to load OpenF1 schedule preview', error)
+    }
+  }
+
+  function formatReviewValue(label: string, value: string | null) {
+    if (!value) return 'Not set'
+
+    if (label === 'Circuit') {
+      const circuit = typedCircuits.find((entry) => entry.id === value)
+      return circuit ? `${circuit.name}${circuit.emoji ? ` ${circuit.emoji}` : ''}` : value
+    }
+
+    if (label === 'Source key') return value
+
+    return formatAmsterdamDateTime(value) || value
   }
 
   const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true })
@@ -250,6 +297,114 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
       <div className="grid md:grid-cols-2 gap-8">
         
         <div className="space-y-6">
+          <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div>
+                <h2 className="text-xl font-bold mb-2 flex items-center">
+                  <CalendarSync className="w-5 h-5 mr-2 text-red-500" />
+                  OpenF1 Sync
+                </h2>
+                <p className="text-sm text-slate-400">
+                  Refresh weekend timings, race naming, and circuit match from OpenF1. Official results stay
+                  manual, and the podium form below is prefilled whenever OpenF1 already has classified results.
+                </p>
+              </div>
+
+              {openF1Review?.imported.sourceUrl && (
+                <a
+                  href={openF1Review.imported.sourceUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition-colors hover:bg-white/10"
+                >
+                  Source
+                  <ExternalLink className="ml-2 h-4 w-4" />
+                </a>
+              )}
+            </div>
+
+            {openF1Review ? (
+              <>
+                <div className="mt-4 flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.18em]">
+                  <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-slate-300">
+                    Meeting key {openF1Review.imported.meetingKey}
+                  </span>
+                  <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-slate-300">
+                    {openF1Review.circuitMatch
+                      ? `Circuit match: ${openF1Review.circuitMatch.name}`
+                      : 'Circuit match needs review'}
+                  </span>
+                  <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-slate-300">
+                    Race {formatAmsterdamDateTime(openF1Review.imported.raceStartAt) || 'Not set'}
+                  </span>
+                </div>
+
+                {openF1Review.fieldChanges.length > 0 ? (
+                  <div className="mt-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+                    <div className="text-sm font-bold text-amber-100">Source changes ready to apply</div>
+                    <div className="mt-3 grid gap-3">
+                      {openF1Review.fieldChanges.map((change) => (
+                        <div
+                          key={`${change.label}:${change.current}:${change.imported}`}
+                          className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm"
+                        >
+                          <div className="font-semibold text-white">{change.label}</div>
+                          <div className="mt-1 grid gap-1 text-slate-300 sm:grid-cols-2">
+                            <div>
+                              <span className="text-slate-500">Current</span>
+                              <div>{formatReviewValue(change.label, change.current)}</div>
+                            </div>
+                            <div>
+                              <span className="text-slate-500">OpenF1</span>
+                              <div>{formatReviewValue(change.label, change.imported)}</div>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mt-4 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-4 text-sm text-emerald-100">
+                    This weekend is already aligned with the latest OpenF1 schedule snapshot.
+                  </div>
+                )}
+
+                <div className="mt-4 grid gap-2 sm:grid-cols-2">
+                  {[
+                    ['FP1', openF1Review.imported.fp1At],
+                    ['FP2', openF1Review.imported.fp2At],
+                    ['FP3', openF1Review.imported.fp3At],
+                    ['Qualifying', openF1Review.imported.qualiAt],
+                    ['Sprint Qualifying', openF1Review.imported.sprintQualiAt],
+                    ['Sprint', openF1Review.imported.sprintAt],
+                  ].map(([label, value]) =>
+                    value ? (
+                      <div key={label} className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-300">
+                        <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">{label}</div>
+                        <div className="mt-1 font-medium text-white">{formatAmsterdamDateTime(value) || value}</div>
+                      </div>
+                    ) : null
+                  )}
+                </div>
+
+                <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-300">
+                  If OpenF1 has classified race results, the official results form below is already prefilled with
+                  the source podium suggestion. Saving still stays manual so you can review before publishing.
+                </div>
+
+                <div className="mt-4">
+                  <OpenF1RaceSyncForm raceId={typedRace.id} disabled={!typedRace.external_race_key} />
+                </div>
+              </>
+            ) : (
+              <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-sm text-slate-300">
+                {typedRace.external_race_key
+                  ? 'OpenF1 did not return a current preview for this weekend just now. Try again from season sync if the upstream event changed.'
+                  : 'This weekend does not have an OpenF1 source key yet. Run season sync first, then come back here for race-level refreshes.'}
+              </div>
+            )}
+          </div>
+
           {/* Edit Details */}
           <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl">
              <h2 className="text-xl font-bold mb-4 flex items-center"><Settings className="w-5 h-5 mr-2 text-red-500" /> Edit Race Details</h2>
@@ -385,6 +540,10 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
 
           <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl">
              <h2 className="text-xl font-bold mb-4 flex items-center"><CheckCircle className="w-5 h-5 mr-2 text-red-500" /> Official Results</h2>
+             <p className="mb-4 text-sm text-slate-400">
+               Save the published podium and any bonus answers here. When OpenF1 has classified results, matching
+               drivers are suggested automatically before you save.
+             </p>
              
              <OfficialResultsForm
                raceId={typedRace.id}

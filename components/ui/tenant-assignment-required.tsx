@@ -11,7 +11,7 @@ export function TenantAssignmentRequired({ isAdmin = false }: TenantAssignmentRe
         <div className="text-sm font-bold uppercase tracking-[0.3em] text-amber-300">Group Needed</div>
         <h1 className="text-3xl font-black italic tracking-tighter text-white">JOIN A GROUP TO PLAY</h1>
         <p className="text-slate-300">
-          Predictions, history, and private standings open once this account has been added to a group.
+          Picks, history, and private standings open once this account has been added to a group.
         </p>
       </div>
 
@@ -22,7 +22,7 @@ export function TenantAssignmentRequired({ isAdmin = false }: TenantAssignmentRe
             Browse the public leaderboard and season story while your group access is being set up.
           </div>
           <div className="rounded-xl border border-white/5 bg-white/5 px-4 py-3">
-            Set the display name you want other predictors to see on the leaderboard.
+            Set the display name you want other players to see on the leaderboard.
           </div>
           {isAdmin && (
             <div className="rounded-xl border border-white/5 bg-white/5 px-4 py-3">

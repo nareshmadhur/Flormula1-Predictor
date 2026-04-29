@@ -3,7 +3,7 @@ import { getAbsoluteUrl } from '@/utils/site'
 
 export const metadata: Metadata = {
   title: 'Privacy',
-  description: 'Privacy information for Flormula1 users and group organizers.',
+  description: 'Privacy information for Flormula1 users and group organizers of a free Formula 1 fan scoreboard.',
   alternates: {
     canonical: getAbsoluteUrl('/privacy'),
   },
@@ -18,7 +18,7 @@ export default function PrivacyPage() {
         </div>
         <h1 className="text-4xl font-black italic tracking-tighter text-white">Privacy</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
-          A plain-language overview of how Flormula1 uses data to run private prediction groups.
+          A plain-language overview of how Flormula1 uses data to run private fan scoreboards and season standings.
         </p>
       </div>
 
@@ -27,14 +27,14 @@ export default function PrivacyPage() {
           <h2 className="text-lg font-bold text-white">Data we use</h2>
           <p className="mt-2 text-sm leading-6 text-slate-300">
             Account email, display name, group membership, prediction entries, scoring history, and basic
-            account activity needed to run the game.
+            account activity needed to run the app.
           </p>
         </div>
         <div className="rounded-2xl border border-white/10 bg-card p-5">
           <h2 className="text-lg font-bold text-white">Why we use it</h2>
           <p className="mt-2 text-sm leading-6 text-slate-300">
             To sign you in, place you in the right group, save your picks, calculate standings, and keep
-            the game fair for everyone playing.
+            the scoreboard fair for everyone playing.
           </p>
         </div>
         <div className="rounded-2xl border border-white/10 bg-card p-5">

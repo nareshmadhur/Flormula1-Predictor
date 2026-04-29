@@ -5,6 +5,14 @@ import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { rebuildLeaderboardForSeason } from '@/utils/leaderboard'
 import { assertPlatformAdmin } from '@/utils/admin-access'
 import { parseAmsterdamInputToIso } from '@/utils/amsterdam-time'
+import {
+  buildOpenF1ScheduleReview,
+  fetchOpenF1SeasonSchedule,
+  type ExistingRaceForImport,
+  type OpenF1CircuitLookup,
+} from '@/utils/openf1'
+import type { ScheduleImportActionState } from '@/app/admin/schedule/action-state'
+import type { ManualResultsActionState } from '@/app/admin/results-action-state'
 
 type NewRacePayload = {
   season: number
@@ -28,6 +36,21 @@ function stripSourceMetadata<T extends Record<string, unknown>>(payload: T) {
   delete clone.schedule_source_url
   delete clone.schedule_synced_at
   return clone
+}
+
+async function updateRaceWithSourceFallback(
+  supabase: Awaited<ReturnType<typeof assertPlatformAdmin>>['supabase'],
+  raceId: string,
+  payload: Record<string, unknown>
+) {
+  const attempt = await supabase.from('races').update(payload).eq('id', raceId)
+  if (!attempt.error) return attempt
+
+  if (attempt.error.code === 'PGRST204' && attempt.error.message?.includes('schedule_source')) {
+    return supabase.from('races').update(stripSourceMetadata(payload)).eq('id', raceId)
+  }
+
+  return attempt
 }
 
 function getPredictionLockAt(fp1AtIso: string | null, raceStartAtIso: string) {
@@ -162,12 +185,7 @@ export async function updateRace(formData: FormData) {
     schedule_synced_at: null,
   }
 
-  let { error } = await supabase.from('races').update(payload).eq('id', raceId)
-
-  if (error && error.code === 'PGRST204' && error.message?.includes('schedule_source')) {
-    const retry = await supabase.from('races').update(stripSourceMetadata(payload)).eq('id', raceId)
-    error = retry.error
-  }
+  const { error } = await updateRaceWithSourceFallback(supabase, raceId, payload)
 
   if (error) throw new Error('Failed to update race')
 
@@ -178,6 +196,280 @@ export async function updateRace(formData: FormData) {
   revalidatePath('/predictions')
   revalidatePath(`/race/${raceId}`)
   revalidatePath(`/race/${raceId}/predict`)
+}
+
+export async function saveBatchOfficialResults(
+  _previousState: ManualResultsActionState,
+  formData: FormData
+): Promise<ManualResultsActionState> {
+  const selectedRaceIds = Array.from(
+    new Set(
+      formData
+        .getAll('selected_race_ids')
+        .map((value) => String(value).trim())
+        .filter(Boolean)
+    )
+  )
+
+  if (selectedRaceIds.length === 0) {
+    return {
+      status: 'error',
+      message: 'Pick at least one race before saving.',
+    }
+  }
+
+  try {
+    const { supabase, access } = await assertPlatformAdmin()
+    const [{ data: races }, { data: bonusQuestions }] = await Promise.all([
+      supabase.from('races').select('id, race_name, season').in('id', selectedRaceIds),
+      supabase.from('bonus_questions').select('id, race_id').in('race_id', selectedRaceIds),
+    ])
+
+    const raceById = new Map((races || []).map((race) => [race.id, race]))
+    const bonusQuestionIdsByRace = new Map<string, string[]>()
+
+    for (const question of bonusQuestions || []) {
+      const current = bonusQuestionIdsByRace.get(question.race_id) || []
+      current.push(question.id)
+      bonusQuestionIdsByRace.set(question.race_id, current)
+    }
+
+    let savedCount = 0
+    const skippedRaceLabels: string[] = []
+
+    for (const raceId of selectedRaceIds) {
+      const race = raceById.get(raceId)
+      const raceLabel = race?.race_name || 'this race'
+
+      const p1 = String(formData.get(`race:${raceId}:p1_driver_id`) || '').trim()
+      const p2 = String(formData.get(`race:${raceId}:p2_driver_id`) || '').trim()
+      const p3 = String(formData.get(`race:${raceId}:p3_driver_id`) || '').trim()
+
+      if (!p1 || !p2 || !p3 || p1 === p2 || p1 === p3 || p2 === p3) {
+        skippedRaceLabels.push(raceLabel)
+        continue
+      }
+
+      const raceQuestionIds = bonusQuestionIdsByRace.get(raceId) || []
+      const bonusInserts: Array<{
+        race_id: string
+        bonus_question_id: string
+        correct_bonus_option_id: string
+      }> = []
+
+      let missingBonusAnswer = false
+      for (const questionId of raceQuestionIds) {
+        const optionId = String(formData.get(`race:${raceId}:bonus:${questionId}`) || '').trim()
+
+        if (!optionId) {
+          missingBonusAnswer = true
+          break
+        }
+
+        bonusInserts.push({
+          race_id: raceId,
+          bonus_question_id: questionId,
+          correct_bonus_option_id: optionId,
+        })
+      }
+
+      if (missingBonusAnswer) {
+        skippedRaceLabels.push(raceLabel)
+        continue
+      }
+
+      const { error: resultsError } = await supabase.from('race_results').upsert(
+        {
+          race_id: raceId,
+          p1_driver_id: p1,
+          p2_driver_id: p2,
+          p3_driver_id: p3,
+          entered_by: access.userId,
+        },
+        { onConflict: 'race_id' }
+      )
+
+      if (resultsError) {
+        return {
+          status: 'error',
+          message: `Could not save results for ${raceLabel}.`,
+        }
+      }
+
+      const { error: deleteBonusError } = await supabase
+        .from('race_bonus_answers')
+        .delete()
+        .eq('race_id', raceId)
+
+      if (deleteBonusError) {
+        return {
+          status: 'error',
+          message: `Could not clear bonus answers for ${raceLabel}.`,
+        }
+      }
+
+      if (bonusInserts.length > 0) {
+        const { error: bonusError } = await supabase.from('race_bonus_answers').insert(bonusInserts)
+
+        if (bonusError) {
+          return {
+            status: 'error',
+            message: `Could not save bonus answers for ${raceLabel}.`,
+          }
+        }
+      }
+
+      const { error: statusError } = await supabase
+        .from('races')
+        .update({ status: 'completed' })
+        .eq('id', raceId)
+
+      if (statusError) {
+        return {
+          status: 'error',
+          message: `Could not update the status for ${raceLabel}.`,
+        }
+      }
+
+      savedCount += 1
+    }
+
+    if (savedCount === 0) {
+      return {
+        status: 'error',
+        message: 'Nothing was saved. Finish all podium fields and any bonus answers for the races you selected.',
+      }
+    }
+
+    revalidatePath('/admin')
+    revalidatePath('/season')
+    revalidatePath('/leaderboard')
+    revalidatePath('/predictions')
+
+    for (const raceId of selectedRaceIds) {
+      revalidatePath(`/admin/races/${raceId}`)
+      revalidatePath(`/race/${raceId}`)
+      revalidatePath(`/race/${raceId}/predict`)
+    }
+
+    return {
+      status: 'success',
+      message:
+        skippedRaceLabels.length > 0
+          ? `Saved ${savedCount} race result${savedCount === 1 ? '' : 's'}. Skipped ${skippedRaceLabels.length} incomplete card${skippedRaceLabels.length === 1 ? '' : 's'}.`
+          : `Saved ${savedCount} race result${savedCount === 1 ? '' : 's'}.`,
+    }
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Could not save the selected race results.',
+    }
+  }
+}
+
+export async function syncRaceFromOpenF1(
+  _previousState: ScheduleImportActionState,
+  formData: FormData
+): Promise<ScheduleImportActionState> {
+  const raceId = String(formData.get('race_id') || '').trim()
+
+  if (!raceId) {
+    return {
+      status: 'error',
+      message: 'Missing race ID.',
+    }
+  }
+
+  try {
+    const { supabase } = await assertPlatformAdmin()
+    const [{ data: race }, { data: circuits }] = await Promise.all([
+      supabase
+        .from('races')
+        .select(
+          'id, season, round, race_name, circuit_id, status, race_start_at, prediction_lock_at, fp1_at, fp2_at, fp3_at, quali_at, sprint_at, sprint_quali_at, external_race_key'
+        )
+        .eq('id', raceId)
+        .single(),
+      supabase.from('circuits').select('id, name, city, country, emoji').order('name'),
+    ])
+
+    if (!race) {
+      return {
+        status: 'error',
+        message: 'Race not found.',
+      }
+    }
+
+    if (!race.external_race_key) {
+      return {
+        status: 'error',
+        message: 'This race does not have an OpenF1 source key yet. Use season sync first.',
+      }
+    }
+
+    const importedRaces = await fetchOpenF1SeasonSchedule(race.season)
+    const importedRace = importedRaces.find(
+      (entry) => String(entry.meetingKey) === String(race.external_race_key)
+    )
+
+    if (!importedRace) {
+      return {
+        status: 'error',
+        message: 'OpenF1 did not return a matching weekend for this race.',
+      }
+    }
+
+    const reviewRow = buildOpenF1ScheduleReview(
+      [importedRace],
+      [race as ExistingRaceForImport],
+      (circuits || []) as OpenF1CircuitLookup[]
+    )[0]
+
+    const payload = {
+      race_name: importedRace.raceName,
+      circuit_id: reviewRow.circuitMatch?.id || race.circuit_id,
+      race_start_at: importedRace.raceStartAt,
+      prediction_lock_at: importedRace.predictionLockAt,
+      fp1_at: importedRace.fp1At,
+      fp2_at: importedRace.fp2At,
+      fp3_at: importedRace.fp3At,
+      quali_at: importedRace.qualiAt,
+      sprint_at: importedRace.sprintAt,
+      sprint_quali_at: importedRace.sprintQualiAt,
+      external_race_key: String(importedRace.meetingKey),
+      schedule_source: 'openf1',
+      schedule_source_url: importedRace.sourceUrl,
+      schedule_synced_at: new Date().toISOString(),
+    }
+
+    const { error } = await updateRaceWithSourceFallback(supabase, raceId, payload)
+    if (error) {
+      return {
+        status: 'error',
+        message: `Could not sync ${race.race_name} from OpenF1.`,
+      }
+    }
+
+    revalidatePath('/admin')
+    revalidatePath('/admin/schedule')
+    revalidatePath(`/admin/races/${raceId}`)
+    revalidatePath('/season')
+    revalidatePath(`/race/${raceId}`)
+    revalidatePath(`/race/${raceId}/predict`)
+
+    return {
+      status: 'success',
+      message:
+        reviewRow.fieldChanges.length > 0
+          ? `Applied ${reviewRow.fieldChanges.length} OpenF1 change${reviewRow.fieldChanges.length === 1 ? '' : 's'} to ${race.race_name}.`
+          : `${race.race_name} was already aligned with OpenF1.`,
+    }
+  } catch (error) {
+    return {
+      status: 'error',
+      message: error instanceof Error ? error.message : 'Could not sync this race from OpenF1.',
+    }
+  }
 }
 
 export async function deleteBonusQuestion(formData: FormData) {

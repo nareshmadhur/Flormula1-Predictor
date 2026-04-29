@@ -7,25 +7,70 @@ import { SiteFooter } from '@/components/ui/site-footer'
 import { getSiteUrl } from '@/utils/site'
 
 const inter = Inter({ subsets: ['latin'] })
+const siteUrl = getSiteUrl()
+const structuredData = {
+  '@context': 'https://schema.org',
+  '@type': 'SoftwareApplication',
+  name: 'FLORMULA1',
+  applicationCategory: 'SportsApplication',
+  operatingSystem: 'Web',
+  isAccessibleForFree: true,
+  description:
+    'Free Formula 1 fan scoreboard for private groups. No betting, no wagers, just podium picks, results, and season standings.',
+  offers: {
+    '@type': 'Offer',
+    price: '0',
+    priceCurrency: 'EUR',
+  },
+  publisher: {
+    '@type': 'Person',
+    name: 'Naresh Madhur',
+    url: 'https://nareshmadhur.com',
+  },
+  url: siteUrl,
+}
 
 export const metadata: Metadata = {
-  metadataBase: new URL(getSiteUrl()),
+  metadataBase: new URL(siteUrl),
+  applicationName: 'FLORMULA1',
   title: {
-    default: 'FLORMULA1 Predictor',
-    template: '%s | FLORMULA1 Predictor',
+    default: 'FLORMULA1',
+    template: '%s | FLORMULA1',
   },
-  description: 'Predict F1 podiums, follow official race results, and climb your season leaderboard.',
+  description:
+    'Free Formula 1 fan scoreboard for private groups. No betting, no wagers, just podium picks, results, and season standings.',
+  keywords: [
+    'Formula 1',
+    'F1',
+    'sports scoreboard',
+    'private groups',
+    'season standings',
+    'podium picks',
+    'free sports app',
+    'not betting',
+  ],
+  category: 'sports',
+  alternates: {
+    canonical: '/',
+  },
   openGraph: {
-    title: 'FLORMULA1 Predictor',
-    description: 'Predict F1 podiums, follow official race results, and climb your season leaderboard.',
-    siteName: 'FLORMULA1 Predictor',
+    title: 'FLORMULA1',
+    description:
+      'Free Formula 1 fan scoreboard for private groups. No betting, no wagers, just podium picks, results, and season standings.',
+    siteName: 'FLORMULA1',
     type: 'website',
     url: '/',
   },
   twitter: {
     card: 'summary_large_image',
-    title: 'FLORMULA1 Predictor',
-    description: 'Predict F1 podiums, follow official race results, and climb your season leaderboard.',
+    title: 'FLORMULA1',
+    description:
+      'Free Formula 1 fan scoreboard for private groups. No betting, no wagers, just podium picks, results, and season standings.',
+  },
+  other: {
+    classification: 'Sports',
+    rating: 'General',
+    subject: 'Formula 1 fan scoreboard and season standings',
   },
 }
 
@@ -44,6 +89,10 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`${inter.className} bg-slate-950 text-slate-50 min-h-screen flex flex-col`}>
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData) }}
+        />
         <Suspense fallback={<NavbarFallback />}>
           <Navbar />
         </Suspense>

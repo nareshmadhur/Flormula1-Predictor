@@ -34,7 +34,7 @@ export default function TermsPage() {
           <h2 className="text-lg font-bold text-white">Not a betting platform</h2>
           <p className="mt-2 text-sm leading-6 text-slate-300">
             Flormula1 is built for friendly private prediction groups. It does not run betting, wagering,
-            or prize-pool contests.
+            entry-fee contests, or prize-pool contests.
           </p>
         </div>
         <div className="rounded-2xl border border-white/10 bg-card p-5">

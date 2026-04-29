@@ -5,7 +5,7 @@ import { getAbsoluteUrl } from '@/utils/site'
 
 export const metadata: Metadata = {
   title: 'About',
-  description: 'About Flormula1, the race-weekend prediction game for private groups.',
+  description: 'About Flormula1, the free Formula 1 fan scoreboard for private groups. No betting or cash play.',
   alternates: {
     canonical: getAbsoluteUrl('/about'),
   },
@@ -50,9 +50,12 @@ export default function AboutPage() {
           <HeartHandshake className="h-3.5 w-3.5 text-red-400" />
           About Flormula1
         </div>
-        <h1 className="text-4xl font-black italic tracking-tighter text-white">A friendly prediction game for race weekends</h1>
+        <h1 className="text-4xl font-black italic tracking-tighter text-white">A friendly fan scoreboard for race weekends</h1>
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
-          Pick the podium before FP1, follow the official result, and climb the standings with your group.
+          Pick the podium before FP1, follow the official result, and track season standings with your group.
+        </p>
+        <p className="mt-3 max-w-3xl text-xs font-medium uppercase tracking-[0.22em] text-slate-500">
+          Free to play. No betting, no wagers, no cash prizes.
         </p>
         <div className="mt-5 grid gap-3 md:grid-cols-3">
           <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
@@ -67,8 +70,8 @@ export default function AboutPage() {
           </div>
           <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
             <div className="text-2xl">👥</div>
-            <div className="mt-2 font-bold text-white">Compete</div>
-            <p className="mt-1 text-sm text-slate-400">Run friendly groups across a season.</p>
+            <div className="mt-2 font-bold text-white">Share</div>
+            <p className="mt-1 text-sm text-slate-400">Run friendly private groups across a season.</p>
           </div>
         </div>
 
@@ -103,7 +106,7 @@ export default function AboutPage() {
               <span className="rounded-full bg-white/6 px-3 py-1.5 text-slate-200">📷 Photography</span>
             </div>
             <p className="mt-4 text-sm leading-6 text-slate-300">
-              Naresh builds Flormula1 around sport, analytics, creativity, and friendly competition.
+              Naresh builds Flormula1 around sport, analytics, creativity, and friendly group rivalry.
             </p>
 
             <div className="mt-5 flex flex-wrap gap-2">
@@ -170,7 +173,7 @@ export default function AboutPage() {
               <div className="rounded-xl bg-white/5 px-4 py-3">🗓️ One shared race calendar powers every group.</div>
               <div className="rounded-xl bg-white/5 px-4 py-3">🔄 Race-weekend timing stays aligned with the season.</div>
               <div className="rounded-xl bg-white/5 px-4 py-3">✅ Results are checked before points are published.</div>
-              <div className="rounded-xl bg-white/5 px-4 py-3">🏆 Groups compete on top of the same race source.</div>
+              <div className="rounded-xl bg-white/5 px-4 py-3">🏆 Groups compare results on top of the same race source.</div>
             </div>
           </div>
 
@@ -192,7 +195,7 @@ export default function AboutPage() {
               <h2 className="text-xl font-black tracking-tight text-white">Want a private group?</h2>
             </div>
             <p className="mt-3 text-sm leading-6 text-slate-300">
-              Email support and we will help set up a friendly prediction group for your office, family, or friends.
+              Email support and we will help set up a free private scoreboard for your office, family, or friends.
             </p>
             <a
               href="mailto:nareshmadhur@gmail.com?subject=Flormula1%20group%20setup"

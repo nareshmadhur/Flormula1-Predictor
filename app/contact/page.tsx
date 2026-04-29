@@ -21,6 +21,9 @@ export default function ContactPage() {
         <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
           Email Naresh for group setup, account questions, race-data corrections, or partnership conversations.
         </p>
+        <p className="mt-2 text-xs font-medium uppercase tracking-[0.22em] text-slate-500">
+          Flormula1 is free to use and does not run betting or cash contests.
+        </p>
 
         <div className="mt-6 flex flex-wrap gap-3">
           <a
@@ -46,7 +49,7 @@ export default function ContactPage() {
         <div className="rounded-2xl border border-white/10 bg-card p-5">
           <h2 className="text-lg font-bold text-white">Group setup</h2>
           <p className="mt-2 text-sm leading-6 text-slate-300">
-            Questions about creating a group, inviting people, or getting everyone into the right pool.
+            Questions about creating a group, inviting people, or getting everyone into the right group.
           </p>
         </div>
         <div className="rounded-2xl border border-white/10 bg-card p-5">

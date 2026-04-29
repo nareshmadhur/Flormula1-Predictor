@@ -29,8 +29,8 @@ export function SiteFooter() {
         </div>
 
         <p className="max-w-4xl text-xs leading-5 text-slate-500">
-          Flormula1 is an independent prediction game and is not affiliated with Formula 1, FIA, teams, or
-          race organizers. Race names are used for context only.
+          Flormula1 is a free Formula 1 fan scoreboard for private groups. It does not run betting, wagering,
+          entry-fee contests, or cash prizes, and it is not affiliated with Formula 1, FIA, teams, or race organizers.
         </p>
       </div>
     </footer>

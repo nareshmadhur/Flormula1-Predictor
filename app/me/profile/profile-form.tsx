@@ -39,7 +39,7 @@ export function ProfileForm({ defaultDisplayName, email }: ProfileFormProps) {
             maxLength={40}
             required
             className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-base text-white outline-none transition-all focus:border-red-500 focus:ring-1 focus:ring-red-500"
-            placeholder="Your public predictor name"
+            placeholder="Your public display name"
           />
           <p className="text-sm text-slate-500">
             This is the name shown on leaderboards, race recaps, and admin views.

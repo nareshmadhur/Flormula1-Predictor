@@ -398,7 +398,7 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
           style={{ gridTemplateColumns: summaryGridTemplate }}
         >
           <div>Rank</div>
-          <div className="min-w-0">Predictor</div>
+          <div className="min-w-0">Player</div>
           <div className="text-right">Points</div>
           <div className="text-right">Exact</div>
           <div className="text-right">Races</div>

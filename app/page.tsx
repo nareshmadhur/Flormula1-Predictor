@@ -154,6 +154,9 @@ export default async function HomePage() {
               ) : null
             }
           />
+          <div className="text-xs font-medium uppercase tracking-[0.22em] text-slate-500">
+            Free fan scoreboard. No betting, no wagers, no cash prizes.
+          </div>
 
           <div className="rounded-3xl border border-white/10 bg-black/35 p-5 shadow-xl">
             <div className="mb-4 flex items-center justify-between gap-3">

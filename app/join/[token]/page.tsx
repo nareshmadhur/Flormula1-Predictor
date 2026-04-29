@@ -9,7 +9,7 @@ export const revalidate = 0
 
 export const metadata: Metadata = {
   title: 'Join Group',
-  description: 'Join a Flormula1 prediction group from an invite link.',
+  description: 'Join a Flormula1 private group from an invite link.',
 }
 
 type PageProps = {
@@ -157,7 +157,7 @@ export default async function JoinGroupPage({ params, searchParams }: PageProps)
                 <div className="rounded-2xl border border-white/5 bg-black/25 p-4">
                   <LockKeyhole className="h-5 w-5 text-red-300" />
                   <div className="mt-3 text-sm font-bold text-white">Signed-in picks</div>
-                  <p className="mt-1 text-xs leading-5 text-slate-400">Save predictions to your account.</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">Save your race picks to your account.</p>
                 </div>
                 <div className="rounded-2xl border border-white/5 bg-black/25 p-4">
                   <CheckCircle2 className="h-5 w-5 text-red-300" />

@@ -87,7 +87,7 @@ function SignupForm({
         <input
           className="w-full rounded-xl px-4 py-3 bg-black/40 border border-white/10 focus:border-red-500 focus:ring-1 focus:ring-red-500 outline-none transition-all text-base touch-target"
           name="display_name"
-          placeholder="Your public predictor name"
+          placeholder="Your public display name"
           required
         />
       </div>
