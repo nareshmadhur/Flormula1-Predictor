@@ -24,6 +24,7 @@ import { ADMIN_TIME_LABEL, formatAmsterdamDateTime, formatAmsterdamInputValue } 
 import { FormActionButton } from '@/components/ui/form-action-button'
 import { PageBackLink } from '@/components/ui/page-back-link'
 import { OpenF1RaceSyncForm } from './openf1-race-sync-form'
+import { PendingLink } from '@/components/ui/pending-link'
 
 export const revalidate = 0
 
@@ -225,6 +226,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
   const effectiveStatus = getEffectiveRaceStatus(typedRace)
   let suggestedPodium = null
   let openF1Review: OpenF1ScheduleReviewRow | null = null
+  const bonusQuestionCount = typedBonusQuestions.length
 
   if (typedRace.external_race_key) {
     try {
@@ -297,16 +299,40 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
       <div className="grid md:grid-cols-2 gap-8">
         
         <div className="space-y-6">
+          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-5 shadow-xl">
+            <div className="text-xs font-bold uppercase tracking-[0.22em] text-red-100">Recommended flow</div>
+            <div className="mt-3 grid gap-3 lg:grid-cols-3">
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">1. Auto sync</div>
+                <div className="mt-2 font-semibold text-white">Use OpenF1 first</div>
+                <div className="mt-1 text-slate-400">Pull timing, race name, and circuit match from the source.</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">2. Publish result</div>
+                <div className="mt-2 font-semibold text-white">
+                  Save podium{bonusQuestionCount > 0 ? ` + ${bonusQuestionCount} bonus answer${bonusQuestionCount === 1 ? '' : 's'}` : ''}
+                </div>
+                <div className="mt-1 text-slate-400">Review the prefilled podium, then save the official outcome.</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">3. Fallback only</div>
+                <div className="mt-2 font-semibold text-white">Edit manually if needed</div>
+                <div className="mt-1 text-slate-400">Use manual weekend edits only when the source is missing or wrong.</div>
+              </div>
+            </div>
+          </div>
+
           <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <h2 className="text-xl font-bold mb-2 flex items-center">
                   <CalendarSync className="w-5 h-5 mr-2 text-red-500" />
-                  OpenF1 Sync
+                  Auto Sync from OpenF1
                 </h2>
                 <p className="text-sm text-slate-400">
-                  Refresh weekend timings, race naming, and circuit match from OpenF1. Official results stay
-                  manual, and the podium form below is prefilled whenever OpenF1 already has classified results.
+                  Start here. OpenF1 is the primary source for weekend timing, race naming, and circuit matching.
+                  Official results still stay manual, but the podium form below is prefilled whenever OpenF1
+                  already has classified results.
                 </p>
               </div>
 
@@ -393,21 +419,64 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
                 </div>
 
                 <div className="mt-4">
-                  <OpenF1RaceSyncForm raceId={typedRace.id} disabled={!typedRace.external_race_key} />
+                  <OpenF1RaceSyncForm
+                    raceId={typedRace.id}
+                    disabled={!typedRace.external_race_key}
+                    hasChanges={openF1Review.fieldChanges.length > 0}
+                  />
                 </div>
               </>
             ) : (
-              <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-sm text-slate-300">
-                {typedRace.external_race_key
-                  ? 'OpenF1 did not return a current preview for this weekend just now. Try again from season sync if the upstream event changed.'
-                  : 'This weekend does not have an OpenF1 source key yet. Run season sync first, then come back here for race-level refreshes.'}
+              <div className="mt-4 space-y-4 rounded-2xl border border-white/10 bg-black/20 px-4 py-4 text-sm text-slate-300">
+                {typedRace.external_race_key ? (
+                  <>
+                    <div className="font-semibold text-white">No matching OpenF1 weekend was found for this saved source key right now.</div>
+                    <div>
+                      This usually means the upstream meeting key changed, the race was linked to the wrong
+                      weekend, or OpenF1 has not published the current schedule snapshot yet.
+                    </div>
+                    <div className="flex flex-wrap gap-3">
+                      <PendingLink
+                        href="/admin/schedule"
+                        className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition-colors hover:bg-white/10"
+                      >
+                        Open season sync
+                      </PendingLink>
+                      <a
+                        href="#manual-schedule"
+                        className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition-colors hover:bg-white/10"
+                      >
+                        Go to manual fallback
+                      </a>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="font-semibold text-white">This weekend does not have an OpenF1 source key yet.</div>
+                    <div>Run season sync first so the app can link this weekend to the source, then come back here for one-click refreshes.</div>
+                    <div className="flex flex-wrap gap-3">
+                      <PendingLink
+                        href="/admin/schedule"
+                        className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition-colors hover:bg-white/10"
+                      >
+                        Open season sync
+                      </PendingLink>
+                      <a
+                        href="#manual-schedule"
+                        className="inline-flex items-center rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-100 transition-colors hover:bg-white/10"
+                      >
+                        Use manual fallback
+                      </a>
+                    </div>
+                  </>
+                )}
               </div>
             )}
           </div>
 
           {/* Edit Details */}
-          <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl">
-             <h2 className="text-xl font-bold mb-4 flex items-center"><Settings className="w-5 h-5 mr-2 text-red-500" /> Edit Race Details</h2>
+          <div id="manual-schedule" className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl scroll-mt-24">
+             <h2 className="text-xl font-bold mb-4 flex items-center"><Settings className="w-5 h-5 mr-2 text-red-500" /> Manual Schedule Fallback</h2>
              <form action={updateRace} className="space-y-4">
                <input type="hidden" name="race_id" value={typedRace.id} />
                <div>
@@ -452,7 +521,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
                     <input name="sprint_at" type="datetime-local" defaultValue={formatAmsterdamInputValue(typedRace.sprint_at)} className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm text-white dark:[color-scheme:dark]" />
                   </div>
                </div>
-               <p className="mt-2 text-xs text-slate-500">Predictions lock automatically at FP1 - 5m. Manual edits here override imported schedule data.</p>
+               <p className="mt-2 text-xs text-slate-500">Use this only when OpenF1 is missing, outdated, or linked incorrectly. Predictions lock automatically at FP1 - 5m, and manual edits override imported schedule data.</p>
                <FormActionButton idleLabel="Update details" pendingLabel="Saving details..." tone="primary" className="mt-4" />
              </form>
           </div>
@@ -539,10 +608,9 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
           </div>
 
           <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl">
-             <h2 className="text-xl font-bold mb-4 flex items-center"><CheckCircle className="w-5 h-5 mr-2 text-red-500" /> Official Results</h2>
+             <h2 className="text-xl font-bold mb-4 flex items-center"><CheckCircle className="w-5 h-5 mr-2 text-red-500" /> Official Results{bonusQuestionCount > 0 ? ' & Bonus Answers' : ''}</h2>
              <p className="mb-4 text-sm text-slate-400">
-               Save the published podium and any bonus answers here. When OpenF1 has classified results, matching
-               drivers are suggested automatically before you save.
+               Save the published podium here{bonusQuestionCount > 0 ? ` and set ${bonusQuestionCount} bonus answer${bonusQuestionCount === 1 ? '' : 's'} in the same card` : ''}. When OpenF1 has classified results, matching drivers are suggested automatically before you save.
              </p>
              
              <OfficialResultsForm

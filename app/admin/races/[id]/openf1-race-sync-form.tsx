@@ -12,11 +12,13 @@ import { FormActionButton } from '@/components/ui/form-action-button'
 type OpenF1RaceSyncFormProps = {
   raceId: string
   disabled?: boolean
+  hasChanges?: boolean
 }
 
 export function OpenF1RaceSyncForm({
   raceId,
   disabled = false,
+  hasChanges = false,
 }: OpenF1RaceSyncFormProps) {
   const router = useRouter()
   const [state, formAction] = useActionState<ScheduleImportActionState, FormData>(
@@ -46,7 +48,7 @@ export function OpenF1RaceSyncForm({
       )}
 
       <FormActionButton
-        idleLabel="Sync schedule from OpenF1"
+        idleLabel={hasChanges ? 'Apply OpenF1 update' : 'Recheck OpenF1'}
         pendingLabel="Syncing schedule..."
         tone="secondary"
         disabled={disabled}
