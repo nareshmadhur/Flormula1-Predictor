@@ -5,6 +5,7 @@ import { assertPlatformAdmin } from '@/utils/admin-access'
 import {
   buildOpenF1ScheduleReview,
   fetchOpenF1SeasonSchedule,
+  getOpenF1ErrorMessage,
   type ExistingRaceForImport,
   type OpenF1CircuitLookup,
 } from '@/utils/openf1'
@@ -177,7 +178,7 @@ export async function applyOpenF1ScheduleImport(
   } catch (error) {
     return {
       status: 'error',
-      message: error instanceof Error ? error.message : 'Schedule import failed.',
+      message: getOpenF1ErrorMessage(error),
     }
   }
 }
@@ -246,7 +247,7 @@ export async function createCircuitFromOpenF1Import(
   } catch (error) {
     return {
       status: 'error',
-      message: error instanceof Error ? error.message : 'Could not create the circuit.',
+      message: getOpenF1ErrorMessage(error),
     }
   }
 }
@@ -342,7 +343,7 @@ export async function createAllMissingCircuitsFromOpenF1Import(
   } catch (error) {
     return {
       status: 'error',
-      message: error instanceof Error ? error.message : 'Could not create missing circuits.',
+      message: getOpenF1ErrorMessage(error),
     }
   }
 }

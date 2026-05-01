@@ -7,6 +7,7 @@ import { getCurrentSeason } from '@/utils/season'
 import {
   buildOpenF1ScheduleReview,
   fetchOpenF1SeasonSchedule,
+  getOpenF1ErrorMessage,
   type ExistingRaceForImport,
   type OpenF1CircuitLookup,
   type OpenF1ImportedRace,
@@ -261,7 +262,7 @@ export default async function AdminSchedulePage({ searchParams }: PageProps) {
       (circuits || []) as OpenF1CircuitLookup[]
     )
   } catch (error) {
-    fetchError = error instanceof Error ? error.message : 'Could not load OpenF1 preview.'
+    fetchError = getOpenF1ErrorMessage(error)
   }
 
   const readyUpdates = reviewRows.filter((row) => row.action === 'update').length

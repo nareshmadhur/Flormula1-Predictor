@@ -8,6 +8,7 @@ import { parseAmsterdamInputToIso } from '@/utils/amsterdam-time'
 import {
   buildOpenF1ScheduleReview,
   fetchOpenF1SeasonSchedule,
+  getOpenF1ErrorMessage,
   type ExistingRaceForImport,
   type OpenF1CircuitLookup,
 } from '@/utils/openf1'
@@ -467,7 +468,7 @@ export async function syncRaceFromOpenF1(
   } catch (error) {
     return {
       status: 'error',
-      message: error instanceof Error ? error.message : 'Could not sync this race from OpenF1.',
+      message: getOpenF1ErrorMessage(error),
     }
   }
 }

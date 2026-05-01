@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { Settings, ChevronRight, ClipboardCheck, CalendarSync, Database, Flag, PlusCircle, Users } from 'lucide-react'
+import { Settings, ChevronRight, ClipboardCheck, CalendarSync, Database, Flag, PlusCircle, Users, UserCheck } from 'lucide-react'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { getAdminRaceStatusClasses, getAdminRaceStatusLabel } from '@/utils/admin-race-status'
 import { CreateRaceForm } from '@/components/ui/create-race-form'
@@ -64,7 +64,7 @@ export default async function AdminDashboardPage() {
       <SectionHeader
         eyebrow="Admin"
         title="Control room"
-        description="Run race weekends, sync schedules, publish official results, and manage access without digging through long lists first."
+        description="Review OpenF1 updates, publish official results, and watch group submission health without digging through long lists first."
         aside={<Settings className="h-8 w-8 text-red-500" />}
       />
 
@@ -109,6 +109,25 @@ export default async function AdminDashboardPage() {
             <ChevronRight className="h-5 w-5 shrink-0 text-red-100/70 transition-colors group-hover:text-white" />
           </PendingLink>
 
+          {access.tenantId && (
+            <PendingLink
+              href="/admin/tenant"
+              className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5 shadow-xl transition-colors hover:bg-emerald-500/14"
+            >
+              <div className="min-w-0">
+                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-100">
+                  <UserCheck className="h-3.5 w-3.5" />
+                  Group coverage
+                </div>
+                <h2 className="break-words text-lg font-bold leading-tight text-white">Prediction submissions</h2>
+                <p className="mt-1 break-words text-sm text-emerald-100/80">
+                  See how many people in your group have entered and who still needs a nudge.
+                </p>
+              </div>
+              <ChevronRight className="h-5 w-5 shrink-0 text-emerald-100/70 transition-colors group-hover:text-white" />
+            </PendingLink>
+          )}
+
           <PendingLink
             href="/admin/schedule"
             className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-5 shadow-xl transition-colors hover:bg-white/[0.02]"
@@ -133,8 +152,8 @@ export default async function AdminDashboardPage() {
                 <Database className="h-3.5 w-3.5 text-red-400" />
                 Reference data
               </div>
-              <h2 className="break-words text-lg font-bold leading-tight text-white">Drivers, teams, circuits</h2>
-              <p className="mt-1 break-words text-sm text-slate-400">Keep the grid and track list in shape for imports.</p>
+              <h2 className="break-words text-lg font-bold leading-tight text-white">Source matching data</h2>
+              <p className="mt-1 break-words text-sm text-slate-400">Keep drivers and circuits aligned so OpenF1 imports map cleanly.</p>
             </div>
             <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
           </PendingLink>
@@ -173,15 +192,15 @@ export default async function AdminDashboardPage() {
 
           <PendingLink
             href="#create-race"
-            className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-5 shadow-xl transition-colors hover:bg-white/[0.02]"
+            className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-amber-500/10 bg-card p-5 shadow-xl transition-colors hover:bg-white/[0.02]"
           >
             <div className="min-w-0">
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
-                <PlusCircle className="h-3.5 w-3.5 text-red-400" />
-                Create
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-amber-100">
+                <PlusCircle className="h-3.5 w-3.5 text-amber-300" />
+                Manual fallback
               </div>
-              <h2 className="break-words text-lg font-bold leading-tight text-white">Add a race weekend</h2>
-              <p className="mt-1 break-words text-sm text-slate-400">Create a manual weekend when the schedule needs one.</p>
+              <h2 className="break-words text-lg font-bold leading-tight text-white">Add a race manually</h2>
+              <p className="mt-1 break-words text-sm text-slate-400">Use only when OpenF1 is missing a weekend or circuit mapping cannot be resolved.</p>
             </div>
             <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
           </PendingLink>
@@ -228,7 +247,11 @@ export default async function AdminDashboardPage() {
       </div>
 
       <div id="create-race" className="space-y-6 scroll-mt-24">
-        <SectionHeader eyebrow="Create" title="Add race weekend" />
+        <SectionHeader
+          eyebrow="Manual fallback"
+          title="Add race weekend"
+          description="OpenF1 schedule sync should be the normal path. Create a weekend here only when the source cannot provide it yet."
+        />
         <CreateRaceForm circuits={circuits || []} />
       </div>
     </div>

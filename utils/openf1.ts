@@ -1,4 +1,14 @@
 const OPEN_F1_API_BASE = 'https://api.openf1.org/v1'
+const OPEN_F1_SCHEDULE_REVALIDATE_SECONDS = 300
+const OPEN_F1_PODIUM_REVALIDATE_SECONDS = 120
+
+type OpenF1CacheEntry = {
+  data: unknown
+  expiresAt: number
+  staleUntil: number
+}
+
+const openF1MemoryCache = new Map<string, OpenF1CacheEntry>()
 
 type OpenF1Meeting = {
   meeting_key: number
@@ -113,6 +123,47 @@ export type OpenF1SuggestedPodium = {
   } | null
 }
 
+export class OpenF1RequestError extends Error {
+  status: number
+  retryAfterMs: number | null
+
+  constructor(message: string, status: number, retryAfterMs: number | null = null) {
+    super(message)
+    this.name = 'OpenF1RequestError'
+    this.status = status
+    this.retryAfterMs = retryAfterMs
+  }
+}
+
+export function isOpenF1RateLimitError(error: unknown): error is OpenF1RequestError {
+  return error instanceof OpenF1RequestError && error.status === 429
+}
+
+function formatRetryAfterLabel(retryAfterMs: number | null) {
+  if (!retryAfterMs || retryAfterMs <= 0) return null
+
+  const seconds = Math.ceil(retryAfterMs / 1000)
+  if (seconds < 60) return `${seconds}s`
+
+  const minutes = Math.ceil(seconds / 60)
+  return `${minutes}m`
+}
+
+export function getOpenF1ErrorMessage(error: unknown) {
+  if (isOpenF1RateLimitError(error)) {
+    const retryAfterLabel = formatRetryAfterLabel(error.retryAfterMs)
+    return retryAfterLabel
+      ? `OpenF1 is temporarily rate-limiting requests. Try again in about ${retryAfterLabel}.`
+      : 'OpenF1 is temporarily rate-limiting requests. Try again shortly.'
+  }
+
+  if (error instanceof OpenF1RequestError) {
+    return error.message
+  }
+
+  return error instanceof Error ? error.message : 'Could not load data from OpenF1.'
+}
+
 function normalizeText(value: string | null | undefined) {
   return (value || '')
     .normalize('NFD')
@@ -160,19 +211,107 @@ function getSessionStart(
   return sessions.find((session) => session.session_name === sessionName)?.date_start || null
 }
 
-async function fetchOpenF1Json<T>(url: string) {
-  const response = await fetch(url, {
-    cache: 'no-store',
+function getOpenF1CacheEntry<T>(cacheKey: string) {
+  const entry = openF1MemoryCache.get(cacheKey)
+  return entry ? (entry as OpenF1CacheEntry & { data: T }) : null
+}
+
+function setOpenF1CacheEntry<T>(cacheKey: string, data: T, revalidateSeconds: number) {
+  const now = Date.now()
+  openF1MemoryCache.set(cacheKey, {
+    data,
+    expiresAt: now + revalidateSeconds * 1000,
+    staleUntil: now + Math.max(revalidateSeconds * 6, 1800) * 1000,
+  })
+}
+
+function parseRetryAfterMs(value: string | null) {
+  if (!value) return null
+
+  const seconds = Number(value)
+  if (Number.isFinite(seconds)) {
+    return Math.max(0, seconds * 1000)
+  }
+
+  const dateMs = Date.parse(value)
+  if (Number.isNaN(dateMs)) return null
+
+  return Math.max(0, dateMs - Date.now())
+}
+
+function getOpenF1Tags(tags: string[] = []) {
+  return ['openf1', ...tags]
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function fetchOpenF1Json<T>(
+  url: string,
+  options?: {
+    cacheKey?: string
+    revalidateSeconds?: number
+    tags?: string[]
+  }
+) {
+  const cacheKey = options?.cacheKey || url
+  const revalidateSeconds = options?.revalidateSeconds ?? OPEN_F1_SCHEDULE_REVALIDATE_SECONDS
+  const tags = getOpenF1Tags(options?.tags)
+  const cachedEntry = getOpenF1CacheEntry<T>(cacheKey)
+
+  if (cachedEntry && cachedEntry.expiresAt > Date.now()) {
+    return cachedEntry.data
+  }
+
+  let response = await fetch(url, {
+    cache: 'force-cache',
+    next: {
+      revalidate: revalidateSeconds,
+      tags,
+    },
     headers: {
       Accept: 'application/json',
     },
   })
 
-  if (!response.ok) {
-    throw new Error(`OpenF1 request failed with ${response.status}`)
+  if (response.status === 429) {
+    const retryAfterMs = parseRetryAfterMs(response.headers.get('retry-after'))
+
+    if (!cachedEntry && retryAfterMs && retryAfterMs > 0 && retryAfterMs <= 1500) {
+      await sleep(retryAfterMs)
+      response = await fetch(url, {
+        cache: 'force-cache',
+        next: {
+          revalidate: revalidateSeconds,
+          tags,
+        },
+        headers: {
+          Accept: 'application/json',
+        },
+      })
+    }
+
+    if (response.status === 429) {
+      if (cachedEntry && cachedEntry.staleUntil > Date.now()) {
+        return cachedEntry.data
+      }
+
+      throw new OpenF1RequestError(
+        'OpenF1 is temporarily rate-limiting requests.',
+        429,
+        retryAfterMs
+      )
+    }
   }
 
-  return (await response.json()) as T
+  if (!response.ok) {
+    throw new OpenF1RequestError(`OpenF1 request failed with ${response.status}`, response.status)
+  }
+
+  const data = (await response.json()) as T
+  setOpenF1CacheEntry(cacheKey, data, revalidateSeconds)
+  return data
 }
 
 export async function fetchOpenF1SeasonSchedule(season: number) {
@@ -180,8 +319,16 @@ export async function fetchOpenF1SeasonSchedule(season: number) {
   const sessionsUrl = `${OPEN_F1_API_BASE}/sessions?year=${season}`
 
   const [meetings, sessions] = await Promise.all([
-    fetchOpenF1Json<OpenF1Meeting[]>(meetingsUrl),
-    fetchOpenF1Json<OpenF1Session[]>(sessionsUrl),
+    fetchOpenF1Json<OpenF1Meeting[]>(meetingsUrl, {
+      cacheKey: `openf1:season:${season}:meetings`,
+      revalidateSeconds: OPEN_F1_SCHEDULE_REVALIDATE_SECONDS,
+      tags: [`openf1:season:${season}`],
+    }),
+    fetchOpenF1Json<OpenF1Session[]>(sessionsUrl, {
+      cacheKey: `openf1:season:${season}:sessions`,
+      revalidateSeconds: OPEN_F1_SCHEDULE_REVALIDATE_SECONDS,
+      tags: [`openf1:season:${season}`],
+    }),
   ])
 
   const sessionsByMeeting = new Map<number, OpenF1Session[]>()
@@ -400,17 +547,32 @@ export async function fetchOpenF1PodiumSuggestion(
   if (!meetingKey) return null
 
   const raceSessions = await fetchOpenF1Json<OpenF1Session[]>(
-    `${OPEN_F1_API_BASE}/sessions?meeting_key=${meetingKey}&session_name=Race`
+    `${OPEN_F1_API_BASE}/sessions?meeting_key=${meetingKey}&session_name=Race`,
+    {
+      cacheKey: `openf1:meeting:${meetingKey}:race-session`,
+      revalidateSeconds: OPEN_F1_PODIUM_REVALIDATE_SECONDS,
+      tags: [`openf1:meeting:${meetingKey}`],
+    }
   )
   const raceSession = raceSessions[0]
   if (!raceSession?.session_key) return null
 
   const [results, drivers] = await Promise.all([
     fetchOpenF1Json<OpenF1SessionResult[]>(
-      `${OPEN_F1_API_BASE}/session_result?session_key=${raceSession.session_key}&position<=3`
+      `${OPEN_F1_API_BASE}/session_result?session_key=${raceSession.session_key}&position<=3`,
+      {
+        cacheKey: `openf1:session:${raceSession.session_key}:results-top3`,
+        revalidateSeconds: OPEN_F1_PODIUM_REVALIDATE_SECONDS,
+        tags: [`openf1:meeting:${meetingKey}`, `openf1:session:${raceSession.session_key}`],
+      }
     ),
     fetchOpenF1Json<OpenF1Driver[]>(
-      `${OPEN_F1_API_BASE}/drivers?session_key=${raceSession.session_key}`
+      `${OPEN_F1_API_BASE}/drivers?session_key=${raceSession.session_key}`,
+      {
+        cacheKey: `openf1:session:${raceSession.session_key}:drivers`,
+        revalidateSeconds: OPEN_F1_PODIUM_REVALIDATE_SECONDS,
+        tags: [`openf1:meeting:${meetingKey}`, `openf1:session:${raceSession.session_key}`],
+      }
     ),
   ])
 

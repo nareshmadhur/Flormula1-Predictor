@@ -310,14 +310,14 @@ export default async function TenantAdminPage() {
         <div className="space-y-3">
           <Link href={access.isPlatformAdmin ? '/admin' : '/leaderboard?view=tenant'} className="inline-flex items-center text-sm font-medium text-slate-400 hover:text-white">
             <ChevronLeft className="mr-1 h-4 w-4" />
-            {access.isPlatformAdmin ? 'Back to Race Control' : 'Back to Tenant Leaderboard'}
+            {access.isPlatformAdmin ? 'Back to Race Control' : 'Back to Group Leaderboard'}
           </Link>
           <div className="flex items-center gap-3">
             <Building2 className="h-8 w-8 text-red-500" />
             <div>
-              <h1 className="text-3xl font-black italic tracking-tighter text-red-500">TENANT OPERATIONS</h1>
+              <h1 className="text-3xl font-black italic tracking-tighter text-red-500">GROUP OPERATIONS</h1>
               <p className="text-slate-400">
-                Run the member-facing side of {typedTenant?.name || 'your tenant'} without touching shared race control.
+                Track submissions, roster health, and standings for {typedTenant?.name || 'your group'} without touching shared race control.
               </p>
             </div>
           </div>
@@ -330,11 +330,11 @@ export default async function TenantAdminPage() {
             )}
             {access.isPlatformAdmin ? (
               <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200">
-                Platform admin mode stays active while you inspect tenant competition health.
+                Platform admin mode stays active while you inspect group competition health.
               </div>
             ) : (
               <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200">
-                Tenant admin mode is scoped to this roster, its standings, and weekend participation.
+                Group admin mode is scoped to this roster, its standings, and weekend participation.
               </div>
             )}
           </div>
@@ -362,27 +362,27 @@ export default async function TenantAdminPage() {
         <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
           <div className="text-sm font-bold uppercase tracking-wider text-slate-500">Members</div>
           <div className="mt-3 text-4xl font-black italic text-white">{typedMembers.length}</div>
-          <p className="mt-2 text-sm text-slate-400">People currently competing in this tenant.</p>
+          <p className="mt-2 text-sm text-slate-400">People currently competing in this group.</p>
         </div>
         <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
-          <div className="text-sm font-bold uppercase tracking-wider text-slate-500">Tenant Admins</div>
+          <div className="text-sm font-bold uppercase tracking-wider text-slate-500">Group Admins</div>
           <div className="mt-3 text-4xl font-black italic text-white">{tenantAdminCount}</div>
           <p className="mt-2 text-sm text-slate-400">
             {platformAdminCount > 0
               ? `${platformAdminCount} platform admin(s) also compete here.`
-              : 'No platform admins are attached to this tenant.'}
+              : 'No platform admins are attached to this group.'}
           </p>
         </div>
         <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
           <div className="text-sm font-bold uppercase tracking-wider text-slate-500">
-            {featuredRace ? 'Featured Race Coverage' : 'Season Coverage'}
+            {featuredRace ? 'Group Predictions Submitted' : 'Season Submissions'}
           </div>
           <div className="mt-3 text-4xl font-black italic text-white">
             {featuredRace ? `${nextRaceCoverage}/${typedMembers.length}` : '0/0'}
           </div>
           <p className="mt-2 text-sm text-slate-400">
             {featuredRace
-              ? `${featuredRace.race_name} · ${getRaceStatusCopy(getEffectiveRaceStatus(featuredRace))}`
+              ? `${featuredRace.race_name} entries saved from this group. ${getRaceStatusCopy(getEffectiveRaceStatus(featuredRace))}`
               : 'No race is currently active for this tenant.'}
           </p>
         </div>
@@ -403,12 +403,12 @@ export default async function TenantAdminPage() {
       <div className="grid gap-6 lg:grid-cols-[1.05fr,0.95fr]">
         <section className="rounded-3xl border border-white/10 bg-card p-6 shadow-2xl md:p-8">
           <h2 className="mb-6 flex items-center border-b border-white/5 pb-4 text-2xl font-black italic tracking-tighter">
-            <Trophy className="mr-2 h-6 w-6 text-red-500" /> TENANT LEADERBOARD SNAPSHOT
+            <Trophy className="mr-2 h-6 w-6 text-red-500" /> GROUP LEADERBOARD SNAPSHOT
           </h2>
 
           {leaderboard.length === 0 ? (
             <div className="rounded-2xl border border-white/5 bg-black/30 p-5 text-slate-400">
-              No scored results yet for this tenant.
+              No scored results yet for this group.
             </div>
           ) : (
             <div className="space-y-3">
@@ -448,7 +448,7 @@ export default async function TenantAdminPage() {
 
         <section className="rounded-3xl border border-white/10 bg-card p-6 shadow-2xl md:p-8">
           <h2 className="mb-6 flex items-center border-b border-white/5 pb-4 text-2xl font-black italic tracking-tighter">
-            <ShieldCheck className="mr-2 h-6 w-6 text-red-500" /> TENANT HEALTH
+            <ShieldCheck className="mr-2 h-6 w-6 text-red-500" /> GROUP HEALTH
           </h2>
 
           <div className="space-y-4">
@@ -482,7 +482,7 @@ export default async function TenantAdminPage() {
             )}
 
             <div className="rounded-2xl border border-white/5 bg-black/30 p-5">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-500">What Tenant Admins Watch</div>
+              <div className="text-xs font-bold uppercase tracking-wider text-slate-500">What Group Admins Watch</div>
               <ul className="mt-3 space-y-2 text-sm text-slate-300">
                 <li>Roster health and who still needs to enter the next race.</li>
                 <li>Missed weekends so the competition stays active.</li>
@@ -495,12 +495,12 @@ export default async function TenantAdminPage() {
 
       <section className="rounded-3xl border border-white/10 bg-card p-6 shadow-2xl md:p-8">
         <h2 className="mb-6 flex items-center border-b border-white/5 pb-4 text-2xl font-black italic tracking-tighter">
-          <Users className="mr-2 h-6 w-6 text-red-500" /> TENANT ROSTER
+          <Users className="mr-2 h-6 w-6 text-red-500" /> GROUP ROSTER
         </h2>
 
         {roster.length === 0 ? (
           <div className="rounded-2xl border border-white/5 bg-black/30 p-5 text-slate-400">
-            No members are assigned to this tenant yet.
+            No members are assigned to this group yet.
           </div>
         ) : (
           <div className="overflow-x-auto">

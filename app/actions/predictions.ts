@@ -2,8 +2,12 @@
 
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
-import { isPast } from 'date-fns'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
+
+type SubmittedBonusAnswer = {
+  question_id: string
+  option_id: string
+}
 
 export async function submitPrediction(formData: FormData) {
   const supabase = await createClient()
@@ -66,7 +70,7 @@ export async function submitPrediction(formData: FormData) {
   // Handle Bonus answers
   if (bonusAnswersRaw) {
     try {
-      const parsedAnswers = JSON.parse(bonusAnswersRaw)
+      const parsedAnswers = JSON.parse(bonusAnswersRaw) as SubmittedBonusAnswer[]
       if (parsedAnswers && parsedAnswers.length > 0) {
         // Delete old bonus answers for this prediction to avoid orphans or duplicates
         await supabase
@@ -75,7 +79,7 @@ export async function submitPrediction(formData: FormData) {
           .eq('prediction_id', prediction.id)
 
         // Insert new answers
-        const bulkInserts = parsedAnswers.map((a: any) => ({
+        const bulkInserts = parsedAnswers.map((a) => ({
           prediction_id: prediction.id,
           bonus_question_id: a.question_id,
           bonus_option_id: a.option_id

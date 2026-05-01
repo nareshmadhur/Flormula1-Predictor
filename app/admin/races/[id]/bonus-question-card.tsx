@@ -4,7 +4,19 @@ import { useState } from 'react'
 import { Edit3, Trash2 } from 'lucide-react'
 import { deleteBonusQuestion, updateBonusQuestion } from '@/app/actions/admin'
 
-export default function BonusQuestionCard({ question, raceId }: { question: any, raceId: string }) {
+type BonusOption = {
+  id: string
+  label?: string | null
+}
+
+type BonusQuestion = {
+  id: string
+  question_text: string
+  points: number
+  bonus_options?: BonusOption[]
+}
+
+export default function BonusQuestionCard({ question, raceId }: { question: BonusQuestion, raceId: string }) {
   const [isEditing, setIsEditing] = useState(false)
 
   const handleDelete = async () => {
@@ -75,7 +87,7 @@ export default function BonusQuestionCard({ question, raceId }: { question: any,
         </div>
       </div>
       <ul className="mt-2 space-y-1 text-sm text-slate-400 list-disc list-inside">
-        {question.bonus_options?.map((o: any) => (
+        {question.bonus_options?.map((o) => (
           <li key={o.id}>{o.label}</li>
         ))}
       </ul>
