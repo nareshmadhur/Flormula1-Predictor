@@ -28,17 +28,19 @@ export default async function Navbar() {
     isAdmin = adminAccess?.isAdmin ?? false
   }
 
-  const primaryLinks = [
-    { href: '/leaderboard', label: 'Leaderboard' },
-    { href: '/season', label: 'Season' },
-  ]
+  const primaryLinks = user
+    ? [
+        { href: '/predictions', label: 'My Race' },
+        { href: '/leaderboard', label: 'Standings' },
+        { href: '/season', label: 'Season' },
+        { href: '/me/history', label: 'History' },
+      ]
+    : [
+        { href: '/leaderboard', label: 'Standings' },
+        { href: '/season', label: 'Season' },
+      ]
 
   if (user) {
-    primaryLinks.push(
-      { href: '/predictions', label: 'My Season' },
-      { href: '/me/history', label: 'History' }
-    )
-
     if (isAdmin) {
       primaryLinks.push({ href: '/admin', label: 'Admin' })
     }

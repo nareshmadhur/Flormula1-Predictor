@@ -286,6 +286,13 @@ export default async function TenantAdminPage() {
     (member) => member.role === 'admin' && member.admin_scope === 'platform'
   ).length
   const nextRaceCoverage = featuredRace ? nextRacePredictionUserIds.size : 0
+  const missingFeaturedRaceMembers = featuredRace
+    ? typedMembers.filter((member) => !nextRacePredictionUserIds.has(member.id))
+    : []
+  const coveragePercent =
+    featuredRace && typedMembers.length > 0
+      ? Math.round((nextRaceCoverage / typedMembers.length) * 100)
+      : 0
   const missedEntriesCount =
     settledRaceIds.length > 0
       ? settledRaceIds.length * typedMembers.length - ((settledPredictions || []) as PredictionEntry[]).length
@@ -357,6 +364,56 @@ export default async function TenantAdminPage() {
           </PendingLink>
         </div>
       </div>
+
+      {featuredRace && (
+        <section className="grid gap-5 rounded-3xl border border-red-500/20 bg-red-500/8 p-5 shadow-2xl lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] md:p-6">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.24em] text-red-200">Next race submissions</div>
+            <h2 className="mt-2 text-3xl font-black italic tracking-tight text-white">{nextRaceCoverage}/{typedMembers.length} submitted</h2>
+            <p className="mt-2 text-sm text-red-100/80">
+              {featuredRace.race_name} is the current group participation checkpoint. {coveragePercent}% of members have an entry saved.
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <PendingLink
+                href={`/race/${featuredRace.id}/predict`}
+                className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
+              >
+                Open Race Page
+                <ArrowRight className="h-4 w-4" />
+              </PendingLink>
+              <a
+                href="#group-invites"
+                className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/25 px-5 py-3 font-bold text-red-50 transition-colors hover:bg-white/10"
+              >
+                Invite Members
+              </a>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+            <div className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Still missing</div>
+            {missingFeaturedRaceMembers.length === 0 ? (
+              <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-200">
+                Everyone has submitted for this race.
+              </div>
+            ) : (
+              <div className="mt-4 max-h-64 space-y-2 overflow-y-auto pr-1">
+                {missingFeaturedRaceMembers.slice(0, 8).map((member) => (
+                  <div key={member.id} className="rounded-xl border border-white/5 bg-black/25 px-3 py-2">
+                    <div className="font-semibold text-slate-100">{getProfileDisplayName(member.display_name, member.email)}</div>
+                    <div className="text-xs text-slate-500">{member.email}</div>
+                  </div>
+                ))}
+                {missingFeaturedRaceMembers.length > 8 && (
+                  <div className="text-sm text-slate-400">
+                    +{missingFeaturedRaceMembers.length - 8} more in the roster below.
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">

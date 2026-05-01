@@ -143,7 +143,7 @@ export default async function HomePage() {
 
           <SectionHeader
             title={standingsTitle}
-            description={!user || !currentUserRank || !currentUserEntry ? 'Lock: FP1 - 5m' : undefined}
+            description={user ? 'Your next race lives under My Race. Standings are the pulse check.' : 'Lock: FP1 - 5m'}
             aside={
               user && currentUserRank && currentUserEntry ? (
                 <div className="flex flex-wrap gap-3 text-sm font-bold uppercase tracking-widest text-slate-200">
@@ -222,17 +222,17 @@ export default async function HomePage() {
             {user ? (
               <>
                 <PendingLink
-                  href={activeView === 'group' ? '/leaderboard?view=tenant' : '/leaderboard?view=global'}
+                  href="/predictions"
                   className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-all hover:bg-red-500"
                 >
-                  Standings
+                  My Race
                   <ChevronRight className="h-5 w-5" />
                 </PendingLink>
                 <PendingLink
-                  href="/predictions"
+                  href={activeView === 'group' ? '/leaderboard?view=tenant' : '/leaderboard?view=global'}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-white transition-colors hover:bg-white/10"
                 >
-                  My season
+                  Standings
                 </PendingLink>
               </>
             ) : (

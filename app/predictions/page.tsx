@@ -137,7 +137,7 @@ function getHeroContent({
   }
 
   return {
-    eyebrow: 'My Season',
+    eyebrow: 'My Race',
     headline: 'Season Pause',
     description: 'No races are currently scheduled for this season.',
     status: 'No active weekend',
@@ -147,7 +147,7 @@ function getHeroContent({
 function getActiveSectionCopy(tab: SeasonFilterKey) {
   if (tab === 'action') {
     return {
-      title: 'Open Now',
+      title: 'Need Action',
       description: 'Race weekends you can still enter or update.',
       empty: 'No open prediction windows right now.',
     }
@@ -155,7 +155,7 @@ function getActiveSectionCopy(tab: SeasonFilterKey) {
 
   if (tab === 'waiting') {
     return {
-      title: 'Results Pending',
+      title: 'Locked In',
       description: 'Your entered races that are now waiting on results or scoring.',
       empty: 'Nothing is waiting on results right now.',
     }
@@ -163,14 +163,14 @@ function getActiveSectionCopy(tab: SeasonFilterKey) {
 
   if (tab === 'scored') {
     return {
-      title: 'Final Scores',
+      title: 'Results',
       description: 'Completed weekends with points ready to review.',
       empty: 'No races have been scored yet this season.',
     }
   }
 
   return {
-    title: 'Missed Weekends',
+    title: 'Missed',
     description: 'Closed weekends that counted without your prediction.',
     empty: 'You have not missed any race weekends this season.',
   }
@@ -433,7 +433,7 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
   const filterCards: FilterCard[] = [
     {
       key: 'action',
-      label: 'Open Now',
+      label: 'Need Action',
       hint: 'Prediction windows still live.',
       count: openRaces.length,
       href: '/predictions?tab=action',
@@ -441,7 +441,7 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
     },
     {
       key: 'waiting',
-      label: 'Results Pending',
+      label: 'Locked In',
       hint: 'Locked entries waiting on the pipeline.',
       count: waitingRaces.length,
       href: '/predictions?tab=waiting',
@@ -449,7 +449,7 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
     },
     {
       key: 'scored',
-      label: 'Final Scores',
+      label: 'Results',
       hint: 'Completed weekends with points.',
       count: scoredRaces.length,
       href: '/predictions?tab=scored',
@@ -457,7 +457,7 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
     },
     {
       key: 'missed',
-      label: 'Missed Weekends',
+      label: 'Missed',
       hint: 'Closed races without an entry.',
       count: missedRaces.length,
       href: '/predictions?tab=missed',
@@ -494,7 +494,7 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
             </div>
 
             <SectionHeader
-              eyebrow="My Season"
+              eyebrow="My Race"
               title={heroContent.headline}
               description={heroContent.description}
             />
@@ -559,8 +559,8 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
 
         <aside className="self-start rounded-3xl border border-white/10 bg-card p-5 shadow-2xl xl:sticky xl:top-24">
           <div className="space-y-2">
-            <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Views</div>
-            <h2 className="text-2xl font-black italic tracking-tight text-white">Focus now</h2>
+            <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Race queue</div>
+            <h2 className="text-2xl font-black italic tracking-tight text-white">What needs attention</h2>
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">

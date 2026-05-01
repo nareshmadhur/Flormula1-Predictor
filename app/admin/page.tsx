@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { Settings, ChevronRight, ClipboardCheck, CalendarSync, Database, Flag, PlusCircle, Users, UserCheck } from 'lucide-react'
+import { AlertCircle, Settings, ChevronRight, ClipboardCheck, CalendarSync, Database, Flag, PlusCircle, Users, UserCheck } from 'lucide-react'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { getAdminRaceStatusClasses, getAdminRaceStatusLabel } from '@/utils/admin-race-status'
 import { CreateRaceForm } from '@/components/ui/create-race-form'
@@ -54,42 +54,56 @@ export default async function AdminDashboardPage() {
   // Fetch circuits for the 'create' form
   const { data: circuits } = await supabase.from('circuits').select('*').order('name')
   const { count: tenantCount } = await supabase.from('tenants').select('*', { count: 'exact', head: true })
+  const { count: unassignedCount } = await supabase
+    .from('profiles')
+    .select('*', { count: 'exact', head: true })
+    .eq('role', 'user')
+    .is('tenant_id', null)
   const typedRaces = (races || []) as AdminRace[]
-  const openCount = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'upcoming').length
   const liveCount = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'locked').length
   const resultsCount = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'completed').length
+  const needsAttentionCount = resultsCount + liveCount + (unassignedCount || 0)
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <SectionHeader
         eyebrow="Admin"
-        title="Control room"
-        description="Review OpenF1 updates, publish official results, and watch group submission health without digging through long lists first."
+        title="Needs attention"
+        description="Start with operational blockers: results to publish, live weekends, and people who cannot play yet."
         aside={<Settings className="h-8 w-8 text-red-500" />}
       />
 
-      <div className="grid gap-4 md:grid-cols-3">
-        <div className="rounded-3xl border border-sky-500/20 bg-sky-500/10 p-5 shadow-xl">
-          <div className="text-xs font-bold uppercase tracking-[0.22em] text-sky-100">Open soon</div>
-          <div className="mt-3 text-3xl font-black italic text-white">{openCount}</div>
-          <p className="mt-2 text-sm text-sky-100/80">Weekends still open for picks and setup.</p>
+      <div className="grid gap-4 md:grid-cols-4">
+        <div className="rounded-3xl border border-white/10 bg-card p-5 shadow-xl">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-slate-400">
+            <AlertCircle className="h-4 w-4 text-red-400" />
+            Total queue
+          </div>
+          <div className="mt-3 text-3xl font-black italic text-white">{needsAttentionCount}</div>
+          <p className="mt-2 text-sm text-slate-400">Items that need an admin decision or follow-up.</p>
         </div>
 
-        <div className="rounded-3xl border border-amber-500/20 bg-amber-500/10 p-5 shadow-xl">
-          <div className="text-xs font-bold uppercase tracking-[0.22em] text-amber-100">Live weekends</div>
-          <div className="mt-3 text-3xl font-black italic text-white">{liveCount}</div>
-          <p className="mt-2 text-sm text-amber-100/80">Weekends already locked and actively running.</p>
-        </div>
-
-        <div className="rounded-3xl border border-red-500/20 bg-red-500/10 p-5 shadow-xl">
+        <PendingLink href="/admin/results" className="rounded-3xl border border-red-500/20 bg-red-500/10 p-5 shadow-xl transition-colors hover:bg-red-500/14">
           <div className="text-xs font-bold uppercase tracking-[0.22em] text-red-100">Need results</div>
           <div className="mt-3 text-3xl font-black italic text-white">{resultsCount}</div>
-          <p className="mt-2 text-sm text-red-100/80">Finished weekends waiting for official results or rescoring.</p>
-        </div>
+          <p className="mt-2 text-sm text-red-100/80">Finished weekends waiting for official results or scoring.</p>
+        </PendingLink>
+
+        <PendingLink href="/admin" className="rounded-3xl border border-amber-500/20 bg-amber-500/10 p-5 shadow-xl transition-colors hover:bg-amber-500/14">
+          <div className="text-xs font-bold uppercase tracking-[0.22em] text-amber-100">Live weekends</div>
+          <div className="mt-3 text-3xl font-black italic text-white">{liveCount}</div>
+          <p className="mt-2 text-sm text-amber-100/80">Locked races currently in motion.</p>
+        </PendingLink>
+
+        <PendingLink href="/admin/tenants" className="rounded-3xl border border-sky-500/20 bg-sky-500/10 p-5 shadow-xl transition-colors hover:bg-sky-500/14">
+          <div className="text-xs font-bold uppercase tracking-[0.22em] text-sky-100">Needs group</div>
+          <div className="mt-3 text-3xl font-black italic text-white">{unassignedCount || 0}</div>
+          <p className="mt-2 text-sm text-sky-100/80">Users who cannot play until they are assigned.</p>
+        </PendingLink>
       </div>
 
       <div className="space-y-4">
-        <SectionHeader eyebrow="Tools" title="Quick actions" />
+        <SectionHeader eyebrow="Workflows" title="Primary actions" />
 
         <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
           <PendingLink
@@ -210,7 +224,7 @@ export default async function AdminDashboardPage() {
       </div>
 
       <div className="space-y-4">
-        <SectionHeader eyebrow="Calendar" title="Race weekends" description="Open any weekend for detailed edits, OpenF1 sync, scoring, or historic entries." />
+        <SectionHeader eyebrow="Calendar" title="Race detail pages" description="Use individual race pages for inspection, exceptions, corrections, or advanced tools." />
 
         <div className="bg-card overflow-hidden rounded-2xl border border-white/5 shadow-xl">
           {(!races || races.length === 0) ? (
