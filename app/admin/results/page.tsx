@@ -146,7 +146,7 @@ export default async function AdminResultsPage() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="space-y-4">
-        <PageBackLink href="/admin" label="Back to control room" />
+        <PageBackLink href="/admin" label="Back to Admin" />
         <SectionHeader
           eyebrow="Admin"
           title="Results desk"

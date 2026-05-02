@@ -6,6 +6,8 @@ import { createClient } from '@/utils/supabase/server'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { generateInviteToken, getInvitePath, hashInviteToken } from '@/utils/group-invites'
 import { acceptInviteTokenForCurrentUser, getInviteErrorMessage } from '@/utils/group-invite-acceptance'
+import { sendGroupWelcomeEmail } from '@/utils/group-welcome-email'
+import { isTestModeProfile } from '@/utils/test-mode'
 import { getAbsoluteUrl } from '@/utils/site'
 import type { GroupInviteActionState } from '@/app/admin/tenant/invite-action-state'
 import type { JoinInviteActionState } from '@/app/join/[token]/action-state'
@@ -276,6 +278,27 @@ export async function acceptGroupInvite(
 
   const result = await acceptInviteTokenForCurrentUser(supabase, token)
   const status = result.status
+
+  if (status === 'joined') {
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('display_name, email, is_test, tenants(is_test)')
+        .eq('id', user.id)
+        .maybeSingle()
+
+      if (profile && !isTestModeProfile(profile)) {
+        await sendGroupWelcomeEmail({
+          email: profile.email,
+          displayName: profile.display_name,
+          groupName: result.tenantName || 'your group',
+          joinedVia: 'invite',
+        })
+      }
+    } catch (error) {
+      console.error('Failed to send group welcome email after invite join', error)
+    }
+  }
 
   if (status === 'joined' || status === 'already_member') {
     revalidatePath('/', 'layout')

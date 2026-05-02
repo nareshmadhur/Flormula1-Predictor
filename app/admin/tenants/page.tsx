@@ -1,11 +1,11 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
-import { Building2, ChevronLeft } from 'lucide-react'
+import { Building2 } from 'lucide-react'
 import { getAdminAccessContext, resolveAdminScope, type AdminScope, type AdminProfileRow } from '@/utils/admin-access'
 import { CreateTenantForm } from './create-tenant-form'
 import { AccessWorkspace } from './access-workspace'
 import { TestModeToggleButton } from './test-mode-toggle-button'
+import { PageBackLink } from '@/components/ui/page-back-link'
 
 type Tenant = {
   id: string
@@ -95,9 +95,7 @@ export default async function AdminTenantsPage() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex items-start justify-between gap-4">
         <div>
-          <Link href="/admin" className="mb-3 inline-flex items-center text-sm font-medium text-slate-400 hover:text-white">
-            <ChevronLeft className="mr-1 h-4 w-4" /> Back to Race Control
-          </Link>
+          <PageBackLink href="/admin" label="Back to Admin" />
           <h1 className="flex items-center text-3xl font-black italic tracking-tighter text-red-500">
             <Building2 className="mr-3 h-8 w-8" /> GROUPS & ACCESS
           </h1>

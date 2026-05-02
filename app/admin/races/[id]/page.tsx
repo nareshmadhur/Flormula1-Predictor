@@ -280,7 +280,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
     <div className="space-y-8 animate-in fade-in duration-500">
       
       <div>
-        <PageBackLink href="/admin" label="Back to race control" />
+        <PageBackLink href="/admin" label="Back to Admin" />
         <div className="flex justify-between items-start">
           <div>
             <div className="text-red-500 font-bold tracking-widest uppercase mb-1">Round {typedRace.round}</div>
@@ -322,8 +322,8 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
               </div>
               <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
                 <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">3. Fallback only</div>
-                <div className="mt-2 font-semibold text-white">Edit manually if needed</div>
-                <div className="mt-1 text-slate-400">Use manual weekend edits only when the source is missing or wrong.</div>
+                <div className="mt-2 font-semibold text-white">Manual override only</div>
+                <div className="mt-1 text-slate-400">Keep manual edits hidden unless the source is missing or wrong.</div>
               </div>
             </div>
           </div>
@@ -503,7 +503,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
           <details id="manual-schedule" className="group bg-card border border-amber-500/10 rounded-2xl p-6 shadow-xl scroll-mt-24">
              <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
                <div>
-                 <h2 className="text-xl font-bold flex items-center"><Settings className="w-5 h-5 mr-2 text-amber-300" /> Manual Schedule Fallback</h2>
+                 <h2 className="text-xl font-bold flex items-center"><Settings className="w-5 h-5 mr-2 text-amber-300" /> Manual schedule override</h2>
                  <p className="mt-2 text-sm text-slate-400">Open this only when OpenF1 is missing, outdated, or linked to the wrong weekend.</p>
                </div>
                <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-amber-100">

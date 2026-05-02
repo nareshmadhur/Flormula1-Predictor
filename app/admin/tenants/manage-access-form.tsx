@@ -39,7 +39,7 @@ function SubmitButton({ pending, disabled }: { pending: boolean; disabled: boole
     <button
       type="submit"
       disabled={disabled}
-      className="w-full whitespace-nowrap rounded-xl border border-white/10 bg-slate-800 px-3 py-2.5 font-bold text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-900 disabled:text-slate-400 sm:w-auto"
+      className="w-full rounded-xl border border-white/10 bg-slate-800 px-3 py-2.5 text-center font-bold leading-tight text-white transition-colors hover:bg-slate-700 disabled:cursor-not-allowed disabled:bg-slate-900 disabled:text-slate-400 sm:w-auto"
     >
       {pending ? 'Saving...' : 'Save Access'}
     </button>
@@ -130,9 +130,9 @@ export function ManageAccessForm({
     <form action={formAction} className="rounded-2xl border border-white/5 bg-black/25 p-3.5 sm:p-4">
       <input type="hidden" name="profile_id" value={profile.id} />
       <div className="flex flex-col gap-3">
-        <div className="grid gap-3 md:grid-cols-[minmax(0,1.5fr)_minmax(12rem,1.05fr)_minmax(10rem,0.8fr)_auto] md:items-center">
+        <div className="grid gap-3 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)_minmax(0,0.95fr)_auto] lg:items-center">
           <div className="min-w-0">
-            <div className="truncate font-semibold text-white">
+            <div className="font-semibold leading-tight text-white">
               {getProfileDisplayName(profile.display_name, profile.email, 'Unnamed user')}
               {profile.is_test && (
                 <span className="ml-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
@@ -146,7 +146,7 @@ export function ManageAccessForm({
           </div>
 
           <div>
-            <div className="inline-flex w-fit rounded-full bg-white/6 px-2.5 py-1 text-[11px] font-semibold text-slate-200 sm:px-3 sm:py-1.5 sm:text-xs">
+            <div className="inline-flex max-w-full rounded-full bg-white/6 px-2.5 py-1 text-[11px] font-semibold text-slate-200 sm:px-3 sm:py-1.5 sm:text-xs">
               {currentAccessLabel}
             </div>
           </div>
@@ -171,7 +171,7 @@ export function ManageAccessForm({
             <button
               type="button"
               onClick={onToggle}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-black/40 md:w-auto"
+              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-center text-sm font-semibold text-white transition-colors hover:bg-black/40 md:w-auto"
             >
               {actionLabel}
               {expanded ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
@@ -181,7 +181,7 @@ export function ManageAccessForm({
 
         {expanded && (
           <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
-            <div className="grid gap-3 md:grid-cols-[0.9fr,0.9fr,1.2fr,auto] md:items-end">
+            <div className="grid gap-3 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,0.85fr)_minmax(0,1.15fr)] xl:items-end">
               <div>
                 <label className="mb-1 block text-xs font-medium uppercase tracking-wide text-slate-500">
                   Role
@@ -217,7 +217,7 @@ export function ManageAccessForm({
                     className="w-full min-w-0 rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm"
                   >
                     <option value="platform">Platform</option>
-                    <option value="tenant">Tenant</option>
+                    <option value="tenant">Group</option>
                   </select>
                 ) : (
                   <div className="rounded-xl border border-dashed border-white/10 bg-black/20 px-3 py-2.5 text-sm text-slate-500">
@@ -248,10 +248,10 @@ export function ManageAccessForm({
                   ))}
                 </select>
               </div>
+            </div>
 
-              <div className="flex items-end md:justify-end">
-                <SubmitButton pending={pending} disabled={submitDisabled} />
-              </div>
+            <div className="mt-3 flex justify-stretch xl:justify-end">
+              <SubmitButton pending={pending} disabled={submitDisabled} />
             </div>
 
             <div className="mt-3 space-y-3">

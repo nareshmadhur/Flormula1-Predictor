@@ -8,6 +8,7 @@ import {
   type AdminScope,
 } from '@/utils/admin-access'
 import { getCountryEmoji } from '@/utils/country-emoji'
+import { sendGroupWelcomeEmail } from '@/utils/group-welcome-email'
 import type { TenantAdminActionState } from '@/app/admin/tenants/action-state'
 
 export async function addDriver(formData: FormData) {
@@ -233,7 +234,7 @@ export async function updateProfileAccess(
 
     const { data: profile } = await supabase
       .from('profiles')
-      .select('id, role, tenant_id, admin_scope')
+      .select('id, role, tenant_id, admin_scope, display_name, email, is_test')
       .eq('id', profileId)
       .maybeSingle()
 
@@ -244,10 +245,12 @@ export async function updateProfileAccess(
       }
     }
 
+    let selectedTenant: { id: string; name?: string | null; is_test?: boolean | null } | null = null
+
     if (tenantId) {
       const { data: tenant } = await supabase
         .from('tenants')
-        .select('id')
+        .select('id, name, is_test')
         .eq('id', tenantId)
         .maybeSingle()
 
@@ -257,6 +260,8 @@ export async function updateProfileAccess(
           message: 'Selected group was not found.',
         }
       }
+
+      selectedTenant = tenant
     }
 
     const currentRole = (profile as AdminProfileRow).role ?? null
@@ -343,6 +348,28 @@ export async function updateProfileAccess(
     revalidatePath('/leaderboard')
     revalidatePath('/predictions')
     revalidatePath('/me/history')
+
+    const previousTenantId = (profile as AdminProfileRow).tenant_id ?? null
+    const joinedVia =
+      previousTenantId && previousTenantId !== tenantId ? 'admin-moved' : 'admin-assigned'
+
+    if (
+      tenantId &&
+      previousTenantId !== tenantId &&
+      !profile.is_test &&
+      !selectedTenant?.is_test
+    ) {
+      try {
+        await sendGroupWelcomeEmail({
+          email: profile.email,
+          displayName: profile.display_name,
+          groupName: selectedTenant?.name || 'your group',
+          joinedVia,
+        })
+      } catch (error) {
+        console.error('Failed to send group welcome email after admin access update', error)
+      }
+    }
 
     return {
       status: 'success',

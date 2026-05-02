@@ -36,11 +36,11 @@ export function FormActionButton({
     <button
       type="submit"
       disabled={isDisabled}
-      className={`inline-flex w-full items-center justify-center rounded-xl px-4 py-3 font-bold transition-colors disabled:cursor-not-allowed ${toneClasses[tone]} ${className || ''}`.trim()}
+      className={`inline-flex w-full items-center justify-center rounded-xl px-4 py-3 text-center font-bold leading-tight transition-colors disabled:cursor-not-allowed ${toneClasses[tone]} ${className || ''}`.trim()}
     >
-      <span className="inline-flex items-center justify-center gap-2">
+      <span className="inline-flex min-w-0 items-center justify-center gap-2">
         {pending && <RaceStartLights className="scale-[0.55]" />}
-        <span>{pending ? pendingLabel || idleLabel : idleLabel}</span>
+        <span className="break-words">{pending ? pendingLabel || idleLabel : idleLabel}</span>
       </span>
     </button>
   )

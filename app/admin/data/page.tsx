@@ -133,18 +133,18 @@ function AdminDataPageClient() {
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       <div>
-        <PageBackLink href="/admin" label="Back to race control" />
+        <PageBackLink href="/admin" label="Back to Admin" />
         <h1 className="text-3xl font-black italic tracking-tighter flex items-center text-red-500">
-          <Database className="w-8 h-8 mr-3" /> SOURCE MATCHING DATA
+          <Database className="w-8 h-8 mr-3" /> SOURCE MAPPING
         </h1>
-        <p className="text-slate-400">Keep local drivers, teams, and circuits aligned with imported race data.</p>
+        <p className="text-slate-400">Open this only when OpenF1 cannot match a driver or circuit cleanly. Most weekends should not need manual reference work.</p>
       </div>
 
       <div className="grid md:grid-cols-3 gap-8">
         
         {/* Drivers List */}
         <div className="md:col-span-2 space-y-4">
-          <h2 className="text-xl font-bold mb-4">Driver matching</h2>
+          <h2 className="text-xl font-bold mb-4">Driver mapping</h2>
           <div className="bg-card border border-white/5 rounded-2xl shadow-xl overflow-hidden">
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse">
@@ -196,7 +196,7 @@ function AdminDataPageClient() {
       </div>
 
       <div className="space-y-4">
-        <h2 className="text-xl font-bold">Circuits</h2>
+        <h2 className="text-xl font-bold">Circuit mapping</h2>
         <div className="bg-card border border-white/5 rounded-2xl shadow-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">

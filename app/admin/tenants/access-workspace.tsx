@@ -66,21 +66,28 @@ export function AccessWorkspace({
   const testGroupIds = new Set(tenants.filter((tenant) => tenant.is_test).map((tenant) => tenant.id))
   const isProfileInTestMode = (profile: Profile) =>
     Boolean(profile.is_test || (profile.tenant_id && testGroupIds.has(profile.tenant_id)))
-  const needsAssignmentCount = profiles.filter((profile) => profile.role === 'user' && !profile.tenant_id).length
-  const memberCount = profiles.filter((profile) => profile.role === 'user' && !!profile.tenant_id).length
-  const groupAdminCount = profiles.filter(
+  const operationalProfiles = profiles.filter((profile) => !isProfileInTestMode(profile))
+  const hiddenTestProfileCount = profiles.length - operationalProfiles.length
+  const needsAssignmentCount = operationalProfiles.filter((profile) => profile.role === 'user' && !profile.tenant_id).length
+  const memberCount = operationalProfiles.filter((profile) => profile.role === 'user' && !!profile.tenant_id).length
+  const groupAdminCount = operationalProfiles.filter(
     (profile) => profile.role === 'admin' && profile.admin_scope === 'tenant'
   ).length
-  const platformAdminCount = profiles.filter(
+  const platformAdminCount = operationalProfiles.filter(
     (profile) => profile.role === 'admin' && profile.admin_scope === 'platform'
   ).length
   const testProfileCount = profiles.filter(isProfileInTestMode).length
 
   const groupStats = tenants
     .map((tenant) => {
-      const members = profiles.filter((profile) => profile.tenant_id === tenant.id && profile.role === 'user').length
-      const admins = profiles.filter(
-        (profile) => profile.tenant_id === tenant.id && profile.role === 'admin' && profile.admin_scope === 'tenant'
+      const scopedProfiles = profiles.filter(
+        (profile) =>
+          profile.tenant_id === tenant.id &&
+          (tenant.is_test ? true : !isProfileInTestMode(profile))
+      )
+      const members = scopedProfiles.filter((profile) => profile.role === 'user').length
+      const admins = scopedProfiles.filter(
+        (profile) => profile.role === 'admin' && profile.admin_scope === 'tenant'
       ).length
 
       return {
@@ -100,8 +107,8 @@ export function AccessWorkspace({
   const [openProfileId, setOpenProfileId] = useState<string | null>(null)
 
   const normalizedQuery = query.trim().toLowerCase()
-  const filteredProfiles = profiles
-    .filter((profile) => (activeFilter === 'test' ? isProfileInTestMode(profile) : matchesFilter(profile, activeFilter)))
+  const filteredProfiles = (activeFilter === 'test' ? profiles.filter(isProfileInTestMode) : operationalProfiles)
+    .filter((profile) => (activeFilter === 'test' ? true : matchesFilter(profile, activeFilter)))
     .filter((profile) => (selectedGroupId ? profile.tenant_id === selectedGroupId : true))
     .filter((profile) => {
       if (!normalizedQuery) return true
@@ -120,7 +127,7 @@ export function AccessWorkspace({
   }> = [
     {
       id: 'needs-assignment',
-      label: 'Needs assignment',
+      label: 'Needs group',
       count: needsAssignmentCount,
       tone: 'border-amber-500/20 bg-amber-500/10 text-amber-200',
       icon: AlertTriangle,
@@ -174,6 +181,11 @@ export function AccessWorkspace({
         <p className="max-w-3xl text-sm text-slate-400">
           Start with people who still need a group, then move through admins and existing groups from one place.
         </p>
+        {hiddenTestProfileCount > 0 && (
+          <p className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-300">
+            Operational views hide {hiddenTestProfileCount} test account{hiddenTestProfileCount === 1 ? '' : 's'} by default.
+          </p>
+        )}
         {!testModeAvailable && (
           <p className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
             Test mode needs the latest database update before groups or people can be marked as test.
@@ -255,7 +267,7 @@ export function AccessWorkspace({
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0">
-                        <div className="truncate font-semibold text-white">{group.name}</div>
+                        <div className="font-semibold text-white">{group.name}</div>
                         <div className="mt-1 text-xs uppercase tracking-wider text-slate-500">
                           {group.slug}
                         </div>
@@ -350,6 +362,9 @@ export function AccessWorkspace({
             <div>
               Showing <span className="font-semibold text-white">{filteredProfiles.length}</span> people
             </div>
+            {activeFilter !== 'test' && hiddenTestProfileCount > 0 && (
+              <div className="text-slate-500">Test accounts stay out of this queue.</div>
+            )}
             {activeFilter === 'needs-assignment' && filteredProfiles.length === 0 && needsAssignmentCount === 0 && (
               <div className="text-emerald-300">Everyone is already in a group.</div>
             )}

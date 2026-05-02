@@ -1,10 +1,8 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import Link from 'next/link'
 import {
   ArrowRight,
   Building2,
-  ChevronLeft,
   Crown,
   ShieldCheck,
   Trophy,
@@ -19,6 +17,7 @@ import { TenantContextBanner } from '@/components/ui/tenant-context-banner'
 import { PendingLink } from '@/components/ui/pending-link'
 import { getInvitePath } from '@/utils/group-invites'
 import { getAbsoluteUrl } from '@/utils/site'
+import { PageBackLink } from '@/components/ui/page-back-link'
 import { GroupInvitePanel } from './group-invite-panel'
 
 export const revalidate = 0
@@ -193,8 +192,12 @@ export default async function TenantAdminPage() {
     ...member,
     is_test: member.is_test ?? false,
   }))
+  const operationalMembers = typedTenant?.is_test
+    ? typedMembers
+    : typedMembers.filter((member) => !member.is_test)
+  const hiddenTestMemberCount = typedMembers.length - operationalMembers.length
   const typedRaces = (races || []) as RaceRecord[]
-  const memberIds = typedMembers.map((member) => member.id)
+  const memberIds = operationalMembers.map((member) => member.id)
 
   const openRaces = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'upcoming')
   const lockedOrCompletedRaces = typedRaces.filter((race) => {
@@ -261,11 +264,11 @@ export default async function TenantAdminPage() {
       : inviteQueryWithToken
 
   const inviteSetupMessage = inviteQuery.error
-    ? 'Invite links need the latest database update before they can be used.'
+    ? 'Invite links are not ready in this database yet. Run the latest invite update, then come back here.'
     : null
   const inviteMigrationNotice =
     !inviteQuery.error && inviteQueryWithToken.error?.message?.includes('share_token')
-      ? 'Run the latest database update before creating or re-copying invite links from this screen.'
+      ? 'Older invite links can still work, but this screen can only re-copy links after the latest invite update is applied.'
       : null
   const groupInvites = inviteQuery.error
     ? []
@@ -287,15 +290,15 @@ export default async function TenantAdminPage() {
   ).length
   const nextRaceCoverage = featuredRace ? nextRacePredictionUserIds.size : 0
   const missingFeaturedRaceMembers = featuredRace
-    ? typedMembers.filter((member) => !nextRacePredictionUserIds.has(member.id))
+    ? operationalMembers.filter((member) => !nextRacePredictionUserIds.has(member.id))
     : []
   const coveragePercent =
-    featuredRace && typedMembers.length > 0
-      ? Math.round((nextRaceCoverage / typedMembers.length) * 100)
+    featuredRace && operationalMembers.length > 0
+      ? Math.round((nextRaceCoverage / operationalMembers.length) * 100)
       : 0
   const missedEntriesCount =
     settledRaceIds.length > 0
-      ? settledRaceIds.length * typedMembers.length - ((settledPredictions || []) as PredictionEntry[]).length
+      ? settledRaceIds.length * operationalMembers.length - ((settledPredictions || []) as PredictionEntry[]).length
       : 0
 
   const roster = typedMembers.map((member) => {
@@ -315,10 +318,10 @@ export default async function TenantAdminPage() {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex items-start justify-between gap-4">
         <div className="space-y-3">
-          <Link href={access.isPlatformAdmin ? '/admin' : '/leaderboard?view=tenant'} className="inline-flex items-center text-sm font-medium text-slate-400 hover:text-white">
-            <ChevronLeft className="mr-1 h-4 w-4" />
-            {access.isPlatformAdmin ? 'Back to Race Control' : 'Back to Group Leaderboard'}
-          </Link>
+          <PageBackLink
+            href={access.isPlatformAdmin ? '/admin' : '/leaderboard?view=tenant'}
+            label={access.isPlatformAdmin ? 'Back to Admin' : 'Back to Standings'}
+          />
           <div className="flex items-center gap-3">
             <Building2 className="h-8 w-8 text-red-500" />
             <div>
@@ -345,6 +348,11 @@ export default async function TenantAdminPage() {
               </div>
             )}
           </div>
+          {hiddenTestMemberCount > 0 && !typedTenant?.is_test && (
+            <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-300">
+              Group health and submission counts exclude {hiddenTestMemberCount} test account{hiddenTestMemberCount === 1 ? '' : 's'}.
+            </div>
+          )}
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row">
@@ -352,14 +360,14 @@ export default async function TenantAdminPage() {
             href="#group-invites"
             className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-all hover:bg-red-500"
           >
-            Create Invite
+            Invite people
             <ArrowRight className="h-4 w-4" />
           </a>
           <PendingLink
             href="/leaderboard?view=tenant"
             className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
           >
-            Open Group Standings
+            Open standings
             <ArrowRight className="h-4 w-4" />
           </PendingLink>
         </div>
@@ -369,7 +377,7 @@ export default async function TenantAdminPage() {
         <section className="grid gap-5 rounded-3xl border border-red-500/20 bg-red-500/8 p-5 shadow-2xl lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] md:p-6">
           <div>
             <div className="text-xs font-bold uppercase tracking-[0.24em] text-red-200">Next race submissions</div>
-            <h2 className="mt-2 text-3xl font-black italic tracking-tight text-white">{nextRaceCoverage}/{typedMembers.length} submitted</h2>
+            <h2 className="mt-2 text-3xl font-black italic tracking-tight text-white">{nextRaceCoverage}/{operationalMembers.length} submitted</h2>
             <p className="mt-2 text-sm text-red-100/80">
               {featuredRace.race_name} is the current group participation checkpoint. {coveragePercent}% of members have an entry saved.
             </p>
@@ -418,8 +426,8 @@ export default async function TenantAdminPage() {
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
           <div className="text-sm font-bold uppercase tracking-wider text-slate-500">Members</div>
-          <div className="mt-3 text-4xl font-black italic text-white">{typedMembers.length}</div>
-          <p className="mt-2 text-sm text-slate-400">People currently competing in this group.</p>
+          <div className="mt-3 text-4xl font-black italic text-white">{operationalMembers.length}</div>
+          <p className="mt-2 text-sm text-slate-400">People currently counted in this group competition.</p>
         </div>
         <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
           <div className="text-sm font-bold uppercase tracking-wider text-slate-500">Group Admins</div>
@@ -435,7 +443,7 @@ export default async function TenantAdminPage() {
             {featuredRace ? 'Group Predictions Submitted' : 'Season Submissions'}
           </div>
           <div className="mt-3 text-4xl font-black italic text-white">
-            {featuredRace ? `${nextRaceCoverage}/${typedMembers.length}` : '0/0'}
+            {featuredRace ? `${nextRaceCoverage}/${operationalMembers.length}` : '0/0'}
           </div>
           <p className="mt-2 text-sm text-slate-400">
             {featuredRace

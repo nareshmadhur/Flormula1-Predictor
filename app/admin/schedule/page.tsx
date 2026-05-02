@@ -279,16 +279,16 @@ export default async function AdminSchedulePage({ searchParams }: PageProps) {
     <div className="space-y-8 animate-in fade-in duration-500">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
         <div>
-          <PageBackLink href="/admin" label="Back to race control" />
+          <PageBackLink href="/admin" label="Back to Admin" />
           <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-xs font-bold uppercase tracking-[0.22em] text-slate-300">
             <Radio className="h-3.5 w-3.5 text-red-400" />
             OpenF1 schedule sync
           </div>
           <h1 className="text-3xl font-black italic tracking-tighter text-red-500">
-            Import race timings
+            Season sync
           </h1>
           <p className="mt-2 max-w-3xl text-sm text-slate-400">
-            Review imported sessions first, then write timing updates into the shared race calendar.
+            OpenF1 is the primary source. Review imported sessions here, then only step in manually when a circuit or weekend needs help.
           </p>
         </div>
 
@@ -297,7 +297,7 @@ export default async function AdminSchedulePage({ searchParams }: PageProps) {
             href="/admin"
             className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-medium text-slate-100 transition-colors hover:bg-white/10"
           >
-            Race control
+            Admin
           </PendingLink>
           <PendingLink
             href="/about"
