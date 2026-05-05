@@ -12,6 +12,7 @@ import { RaceStatusPill } from '@/components/ui/race-status-pill'
 import { RaceMetaStrip } from '@/components/ui/race-meta-strip'
 import { SectionHeader } from '@/components/ui/section-header'
 import { getRaceParticipationLabel, getRaceTone } from '@/utils/race-experience'
+import { ResultRefreshForm } from './result-refresh-form'
 
 type Driver = {
   id: string
@@ -563,6 +564,18 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
                       ? 'The race is complete, but final scoring is still pending.'
                       : 'This race is no longer open for prediction.'}
                 </div>
+                {effectiveStatus === 'completed' && (
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-4">
+                    <div className="text-sm font-bold text-white">Result refresh</div>
+                    <p className="mt-1 text-sm leading-6 text-slate-400">
+                      If the official source already has the podium, you can refresh this race and update
+                      standings without waiting for a manual admin pass.
+                    </p>
+                    <div className="mt-4">
+                      <ResultRefreshForm raceId={race.id} />
+                    </div>
+                  </div>
+                )}
               </section>
             )}
           </div>

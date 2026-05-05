@@ -8,25 +8,25 @@ export function TenantAssignmentRequired({ isAdmin = false }: TenantAssignmentRe
   return (
     <div className="mx-auto max-w-2xl space-y-6 rounded-3xl border border-amber-500/20 bg-amber-500/10 p-8 text-center shadow-2xl">
       <div className="space-y-2">
-        <div className="text-sm font-bold uppercase tracking-[0.3em] text-amber-300">Group Needed</div>
-        <h1 className="text-3xl font-black italic tracking-tighter text-white">JOIN A GROUP TO PLAY</h1>
+        <div className="text-sm font-bold uppercase tracking-[0.3em] text-amber-300">Setup Needed</div>
+        <h1 className="text-3xl font-black italic tracking-tighter text-white">MAIN GROUP SETUP NEEDED</h1>
         <p className="text-slate-300">
-          Picks, history, and private standings open once this account has been added to a group.
+          New players should start in the Main Group automatically. This account needs a quick setup check before picks open.
         </p>
       </div>
 
       <div className="rounded-2xl border border-white/10 bg-black/30 p-5 text-left">
-        <div className="text-sm font-bold uppercase tracking-widest text-slate-400">While you wait</div>
+        <div className="text-sm font-bold uppercase tracking-widest text-slate-400">Until it is fixed</div>
         <div className="mt-3 grid gap-3 text-sm text-slate-300">
           <div className="rounded-xl border border-white/5 bg-white/5 px-4 py-3">
-            Browse the public leaderboard and season story while your group access is being set up.
+            Browse the public leaderboard and season story.
           </div>
           <div className="rounded-xl border border-white/5 bg-white/5 px-4 py-3">
             Set the display name you want other players to see on the leaderboard.
           </div>
           {isAdmin && (
             <div className="rounded-xl border border-white/5 bg-white/5 px-4 py-3">
-              Because your account can manage groups, you can also finish setup yourself.
+              Because your account can manage groups, you can assign this account from group setup.
             </div>
           )}
         </div>

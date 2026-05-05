@@ -100,7 +100,7 @@ export default async function AdminTenantsPage() {
             <Building2 className="mr-3 h-8 w-8" /> GROUPS & ACCESS
           </h1>
           <p className="max-w-3xl text-slate-400">
-            Assign people, keep groups healthy, and decide who runs the platform versus each group.
+            Everyone starts in Main Group. Use this page to run private groups, invites, roles, and rare setup fixes.
           </p>
         </div>
       </div>
@@ -116,7 +116,7 @@ export default async function AdminTenantsPage() {
         <section className="rounded-2xl border border-white/5 bg-card p-6 shadow-xl">
           <h2 className="mb-2 text-xl font-bold">Create group</h2>
           <p className="mb-4 text-sm text-slate-400">
-            Add a new group first, then use the access workspace above to assign people into it.
+            Add a private group, then use invite links or the access workspace above to move people into it.
           </p>
           <CreateTenantForm />
         </section>

@@ -322,13 +322,14 @@ NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
 NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 NEXT_PUBLIC_SITE_URL=https://www.flormula1.nl
-RESEND_API_KEY=your_resend_api_key
+BREVO_API_KEY=your_brevo_api_key
 GROUP_WELCOME_EMAIL_FROM="Flormula1 <hello@flormula1.nl>"
 ```
 
 `NEXT_PUBLIC_SITE_URL` is the canonical public domain used for shareable links, auth email callbacks, metadata, robots, and sitemap URLs.
 
-`RESEND_API_KEY` and `GROUP_WELCOME_EMAIL_FROM` are optional. When both are present, Flormula1 sends a welcome email after a user joins a group through an invite or a platform-admin assignment.
+`BREVO_API_KEY` and `GROUP_WELCOME_EMAIL_FROM` are optional. When both are present, Flormula1 sends a welcome email after a user joins a group through an invite or a platform-admin assignment.
+This is separate from Supabase Auth email delivery. Supabase can keep using Brevo SMTP for signup/reset emails, while app-triggered lifecycle emails use Brevo's transactional API.
 
 Set it in:
 - `.env.local` for local development. Use `http://localhost:3000` if you want auth email links to return to your local app.

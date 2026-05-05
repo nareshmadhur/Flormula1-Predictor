@@ -35,6 +35,11 @@ type ProfilePreview = {
   admin_scope?: 'platform' | 'tenant' | null
 }
 
+type CurrentGroupPreview = {
+  name?: string | null
+  slug?: string | null
+}
+
 function getStatusCopy(status?: InvitePreview['status']) {
   if (status === 'expired') return 'This invite has expired.'
   if (status === 'revoked') return 'This invite has been closed.'
@@ -69,6 +74,7 @@ export default async function JoinGroupPage({ params, searchParams }: PageProps)
 
   let profile: ProfilePreview | null = null
   let currentGroupName: string | null = null
+  let currentGroupSlug: string | null = null
 
   if (user) {
     const { data: profileRow } = await supabase
@@ -82,11 +88,13 @@ export default async function JoinGroupPage({ params, searchParams }: PageProps)
     if (profile?.tenant_id) {
       const { data: currentGroup } = await supabase
         .from('tenants')
-        .select('name')
+        .select('name, slug')
         .eq('id', profile.tenant_id)
         .maybeSingle()
 
-      currentGroupName = currentGroup?.name ?? null
+      const typedCurrentGroup = (currentGroup as CurrentGroupPreview | null) ?? null
+      currentGroupName = typedCurrentGroup?.name ?? null
+      currentGroupSlug = typedCurrentGroup?.slug ?? null
     }
   }
 
@@ -112,8 +120,8 @@ export default async function JoinGroupPage({ params, searchParams }: PageProps)
             {invite?.tenant_name ? `Join ${invite.tenant_name}` : 'Join a Flormula1 group'}
           </h1>
           <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-            Private groups let you compare picks, standings, and race-weekend bragging rights with the people
-            you actually know.
+            Everyone can play in the Main Group. Private invites move your standings view into the group you
+            actually know.
           </p>
         </div>
 
@@ -161,8 +169,8 @@ export default async function JoinGroupPage({ params, searchParams }: PageProps)
                 </div>
                 <div className="rounded-2xl border border-white/5 bg-black/25 p-4">
                   <CheckCircle2 className="h-5 w-5 text-red-300" />
-                  <div className="mt-3 text-sm font-bold text-white">Instant access</div>
-                  <p className="mt-1 text-xs leading-5 text-slate-400">Auto-join after email confirmation.</p>
+                  <div className="mt-3 text-sm font-bold text-white">Private group</div>
+                  <p className="mt-1 text-xs leading-5 text-slate-400">Move from Main Group after confirmation.</p>
                 </div>
               </div>
 
@@ -210,7 +218,8 @@ export default async function JoinGroupPage({ params, searchParams }: PageProps)
                 <div className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Ready to join</div>
                 <div className="mt-2 text-2xl font-black italic text-white">{invite.tenant_name}</div>
                 <p className="mt-2 text-sm leading-6 text-slate-400">
-                  Click once to add this account to the group and open the group standings.
+                  Click once to move this account into the private group and open its standings. Your past picks
+                  stay with your account.
                 </p>
               </div>
 
@@ -218,6 +227,7 @@ export default async function JoinGroupPage({ params, searchParams }: PageProps)
                 token={cleanToken}
                 groupName={invite.tenant_name}
                 currentGroupName={currentGroupName}
+                currentGroupSlug={currentGroupSlug}
               />
             </div>
           )}

@@ -161,7 +161,7 @@ export function GroupInvitePanel({ groupName, invites, setupMessage, migrationNo
           </div>
           <h2 className="text-2xl font-black italic tracking-tighter text-white">Share {groupName}</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-            Create a link, send it to the people you want in this group, and they can join after signing in.
+            Create a link for people who should move from Main Group into this private group after signing in.
           </p>
         </div>
 

@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { ArrowRight, ChevronRight, Timer, Trophy } from 'lucide-react'
-import { format, isPast } from 'date-fns'
+import { differenceInCalendarDays, format, isPast } from 'date-fns'
 import { getCurrentSeason } from '@/utils/season'
 import { getProfileDisplayName } from '@/utils/profile-name'
 import { PendingLink } from '@/components/ui/pending-link'
@@ -116,6 +116,11 @@ export default async function HomePage() {
     .limit(1)
 
   const latestScored = latestScoredRaces?.[0]
+  const showLatestRecapFirst = Boolean(
+    user &&
+      latestScored &&
+      differenceInCalendarDays(new Date(), new Date(latestScored.race_start_at)) <= 7
+  )
 
   const standingsTitle =
     activeView === 'group' && groupContext.tenantName
@@ -143,7 +148,13 @@ export default async function HomePage() {
 
           <SectionHeader
             title={standingsTitle}
-            description={user ? 'Your next race lives under My Race. Standings are the pulse check.' : 'Lock: FP1 - 5m'}
+            description={
+              user
+                ? showLatestRecapFirst
+                  ? 'Latest result is ready. Your next race lives under My Race.'
+                  : 'Your next race lives under My Race. Standings are the pulse check.'
+                : 'Lock: FP1 - 5m'
+            }
             aside={
               user && currentUserRank && currentUserEntry ? (
                 <div className="flex flex-wrap gap-3 text-sm font-bold uppercase tracking-widest text-slate-200">
@@ -220,21 +231,39 @@ export default async function HomePage() {
 
           <div className="flex flex-wrap gap-3">
             {user ? (
-              <>
-                <PendingLink
-                  href="/predictions"
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-all hover:bg-red-500"
-                >
-                  My Race
-                  <ChevronRight className="h-5 w-5" />
-                </PendingLink>
-                <PendingLink
-                  href={activeView === 'group' ? '/leaderboard?view=tenant' : '/leaderboard?view=global'}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-white transition-colors hover:bg-white/10"
-                >
-                  Standings
-                </PendingLink>
-              </>
+              showLatestRecapFirst && latestScored ? (
+                <>
+                  <PendingLink
+                    href={`/race/${latestScored.id}/predict`}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-all hover:bg-red-500"
+                  >
+                    Latest recap
+                    <ChevronRight className="h-5 w-5" />
+                  </PendingLink>
+                  <PendingLink
+                    href="/predictions"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-white transition-colors hover:bg-white/10"
+                  >
+                    My Race
+                  </PendingLink>
+                </>
+              ) : (
+                <>
+                  <PendingLink
+                    href="/predictions"
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-all hover:bg-red-500"
+                  >
+                    My Race
+                    <ChevronRight className="h-5 w-5" />
+                  </PendingLink>
+                  <PendingLink
+                    href={activeView === 'group' ? '/leaderboard?view=tenant' : '/leaderboard?view=global'}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-white transition-colors hover:bg-white/10"
+                  >
+                    Standings
+                  </PendingLink>
+                </>
+              )
             ) : (
               <>
                 <PendingLink
@@ -257,7 +286,7 @@ export default async function HomePage() {
       </section>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <section className="rounded-3xl border border-white/10 bg-card p-6 shadow-xl">
+        <section className={`rounded-3xl border border-white/10 bg-card p-6 shadow-xl ${showLatestRecapFirst ? 'order-2' : ''}`}>
           <SectionHeader eyebrow="Next race" title="Next race" />
 
           {nextRace ? (
@@ -311,7 +340,7 @@ export default async function HomePage() {
           )}
         </section>
 
-        <section className="rounded-3xl border border-white/10 bg-card p-6 shadow-xl">
+        <section className={`rounded-3xl border border-white/10 bg-card p-6 shadow-xl ${showLatestRecapFirst ? 'order-1' : ''}`}>
           <SectionHeader eyebrow="Latest results" title="Latest results" />
 
           {latestScored ? (
@@ -330,7 +359,7 @@ export default async function HomePage() {
 
               <div className="flex flex-wrap gap-4 pt-1">
                 <PendingLink
-                  href={`/race/${latestScored.id}`}
+                  href={user ? `/race/${latestScored.id}/predict` : `/race/${latestScored.id}`}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-bold text-white transition-colors hover:bg-white/10"
                 >
                   Recap

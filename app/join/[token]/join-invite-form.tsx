@@ -13,14 +13,16 @@ type JoinInviteFormProps = {
   token: string
   groupName: string
   currentGroupName?: string | null
+  currentGroupSlug?: string | null
 }
 
-export function JoinInviteForm({ token, groupName, currentGroupName }: JoinInviteFormProps) {
+export function JoinInviteForm({ token, groupName, currentGroupName, currentGroupSlug }: JoinInviteFormProps) {
   const [state, formAction] = useActionState<JoinInviteActionState, FormData>(
     acceptGroupInvite,
     initialJoinInviteActionState
   )
   const isSwitching = Boolean(currentGroupName && currentGroupName !== groupName)
+  const switchingFromMain = currentGroupSlug === 'main'
 
   return (
     <form action={formAction} className="space-y-4">
@@ -28,13 +30,14 @@ export function JoinInviteForm({ token, groupName, currentGroupName }: JoinInvit
 
       {isSwitching && (
         <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm leading-6 text-amber-100">
-          You are currently in {currentGroupName}. Joining {groupName} will move your group view, while your
-          past picks stay with your account.
+          {switchingFromMain
+            ? `You are currently playing in Main Group. Joining ${groupName} moves your private standings view, while your past picks stay with your account.`
+            : `You are currently in ${currentGroupName}. Joining ${groupName} will move your group view, while your past picks stay with your account.`}
         </div>
       )}
 
       <FormActionButton
-        idleLabel={isSwitching ? `Switch to ${groupName}` : `Join ${groupName}`}
+        idleLabel={switchingFromMain ? `Move to ${groupName}` : isSwitching ? `Switch to ${groupName}` : `Join ${groupName}`}
         pendingLabel="Joining..."
         className="gap-2"
       />

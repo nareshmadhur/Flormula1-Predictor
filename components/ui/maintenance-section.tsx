@@ -60,9 +60,9 @@ export function MaintenanceSection() {
 
   return (
     <div className="bg-card border border-white/5 p-6 rounded-2xl shadow-xl">
-      <h2 className="text-xl font-bold mb-1">Repair & upkeep</h2>
+      <h2 className="text-xl font-bold mb-1">Repair derived data</h2>
       <p className="mb-4 text-sm text-slate-400">
-        Refresh derived race states and rebuild standings after historic fixes.
+        Use these after schedule, result, or scoring corrections. Normal result publishing already runs scoring.
       </p>
 
       {message && (
@@ -94,7 +94,7 @@ export function MaintenanceSection() {
               <span className="min-w-0">
                 <span className="block break-words text-sm font-bold">Refresh race states</span>
                 <span className="mt-1 block break-words text-xs font-medium text-slate-300">
-                  Update which races are open, live, waiting on results, or need scoring.
+                  Checks race timing against now and updates open, live, completed, or scored state.
                 </span>
               </span>
             </span>
@@ -117,7 +117,7 @@ export function MaintenanceSection() {
               <span className="min-w-0">
                 <span className="block break-words text-sm font-bold">Repair scores & standings</span>
                 <span className="mt-1 block break-words text-xs font-medium text-red-100/80">
-                  Recalculate scored weekends and rebuild the leaderboard from the current source of truth.
+                  Finds completed or scored races that already have official results, recalculates user scores, then rebuilds affected season standings. It does not fetch or edit official results.
                 </span>
               </span>
             </span>

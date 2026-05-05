@@ -93,18 +93,27 @@ export const getPublicSeasonData = cache(async () => {
     )
   )
   const nextRace = races.find((race) => race.effectiveStatus === 'upcoming') || null
-  const pendingPublication = races.filter(
-    (race) => race.effectiveStatus === 'locked' || race.effectiveStatus === 'completed'
-  )
+  const pendingPublication = [...races]
+    .filter((race) => race.effectiveStatus === 'locked' || race.effectiveStatus === 'completed')
+    .sort((left, right) => new Date(right.race_start_at).getTime() - new Date(left.race_start_at).getTime())
   const cancelledRaces = races.filter((race) => race.effectiveStatus === 'cancelled')
   const upcomingRaces = races.filter((race) => race.effectiveStatus === 'upcoming').slice(0, 6)
   const recentResults = [...races]
     .filter((race) => race.effectiveStatus === 'scored')
     .sort((left, right) => new Date(right.race_start_at).getTime() - new Date(left.race_start_at).getTime())
     .slice(0, 6)
+  const getBoardPriority = (race: PublicSeasonRaceSummary) => {
+    if (race.effectiveStatus === 'locked' || race.effectiveStatus === 'completed') return 0
+    if (race.effectiveStatus === 'upcoming') return 1
+    if (race.effectiveStatus === 'scored') return 2
+    return 3
+  }
   const allRaces = [...races].sort((left, right) => {
-    if (right.round !== left.round) {
-      return right.round - left.round
+    const priorityDelta = getBoardPriority(left) - getBoardPriority(right)
+    if (priorityDelta !== 0) return priorityDelta
+
+    if (left.effectiveStatus === 'upcoming') {
+      return new Date(left.race_start_at).getTime() - new Date(right.race_start_at).getTime()
     }
 
     return new Date(right.race_start_at).getTime() - new Date(left.race_start_at).getTime()

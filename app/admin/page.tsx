@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { AlertCircle, Settings, ChevronRight, ClipboardCheck, CalendarSync, Database, Flag, PlusCircle, Users, UserCheck } from 'lucide-react'
+import { CalendarSync, ChevronRight, ClipboardCheck, Database, PlusCircle, Settings, Users } from 'lucide-react'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { getAdminRaceStatusClasses, getAdminRaceStatusLabel } from '@/utils/admin-race-status'
 import { CreateRaceForm } from '@/components/ui/create-race-form'
@@ -38,20 +38,18 @@ export default async function AdminDashboardPage() {
   if (!access.isPlatformAdmin) {
     return (
       <div className="flex flex-col items-center justify-center p-20 text-center">
-         <h1 className="mb-4 text-3xl font-bold text-red-500">Platform Admin Only</h1>
-         <p className="text-slate-400">Race operations are limited to platform admins.</p>
-         <PendingLink href="/" className="mt-6 text-slate-300 underline">Return home</PendingLink>
+        <h1 className="mb-4 text-3xl font-bold text-red-500">Platform Admin Only</h1>
+        <p className="text-slate-400">Race operations are limited to platform admins.</p>
+        <PendingLink href="/" className="mt-6 text-slate-300 underline">Return home</PendingLink>
       </div>
     )
   }
 
-  // Fetch all races
   const { data: races } = await supabase
     .from('races')
     .select('*, circuits(name, emoji)')
     .order('round', { ascending: true })
 
-  // Fetch circuits for the 'create' form
   const { data: circuits } = await supabase.from('circuits').select('*').order('name')
   const { count: tenantCount } = await supabase.from('tenants').select('*', { count: 'exact', head: true })
   const unassignedUsersWithTest = await supabase
@@ -68,221 +66,264 @@ export default async function AdminDashboardPage() {
         .is('tenant_id', null)
     : unassignedUsersWithTest
   const typedRaces = (races || []) as AdminRace[]
-  const liveCount = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'locked').length
-  const resultsCount = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'completed').length
+  const liveRaces = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'locked')
+  const resultRaces = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'completed')
+  const liveCount = liveRaces.length
+  const resultsCount = resultRaces.length
   const unassignedCount = unassignedUsersResult.count || 0
   const needsAttentionCount = resultsCount + liveCount + unassignedCount
+  const firstLiveRace = liveRaces[0] || null
+  const reviewRaces = [...resultRaces, ...liveRaces].sort(
+    (left, right) => new Date(right.race_start_at).getTime() - new Date(left.race_start_at).getTime()
+  )
 
   return (
-    <div className="space-y-8 animate-in fade-in duration-500">
+    <div className="space-y-7 animate-in fade-in duration-500">
       <SectionHeader
         eyebrow="Admin"
-        title="Action queue"
-        description="Start with live operational blockers: results to publish, active weekends, and people who still need a group."
+        title="Control room"
+        description="One primary queue, then the few places an admin actually needs during a race week."
         aside={<Settings className="h-8 w-8 text-red-500" />}
       />
 
-      <div className="grid gap-4 md:grid-cols-4">
-        <div className="rounded-3xl border border-white/10 bg-card p-5 shadow-xl">
-          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-slate-400">
-            <AlertCircle className="h-4 w-4 text-red-400" />
-            Total queue
-          </div>
-          <div className="mt-3 text-3xl font-black italic text-white">{needsAttentionCount}</div>
-          <p className="mt-2 text-sm text-slate-400">Items that need an admin decision or follow-up.</p>
+      <section className="rounded-3xl border border-white/10 bg-card p-4 shadow-xl sm:p-5">
+        <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+          <span>{needsAttentionCount} open item{needsAttentionCount === 1 ? '' : 's'}</span>
+          <span className="text-slate-700">/</span>
+          <span>{tenantCount || 0} groups</span>
         </div>
 
-        <PendingLink href="/admin/results" className="rounded-3xl border border-red-500/20 bg-red-500/10 p-5 shadow-xl transition-colors hover:bg-red-500/14">
-          <div className="text-xs font-bold uppercase tracking-[0.22em] text-red-100">Need results</div>
-          <div className="mt-3 text-3xl font-black italic text-white">{resultsCount}</div>
-          <p className="mt-2 text-sm text-red-100/80">Finished weekends waiting for official results or scoring.</p>
-        </PendingLink>
-
-        <PendingLink href="/admin" className="rounded-3xl border border-amber-500/20 bg-amber-500/10 p-5 shadow-xl transition-colors hover:bg-amber-500/14">
-          <div className="text-xs font-bold uppercase tracking-[0.22em] text-amber-100">Live weekends</div>
-          <div className="mt-3 text-3xl font-black italic text-white">{liveCount}</div>
-          <p className="mt-2 text-sm text-amber-100/80">Locked races currently in motion.</p>
-        </PendingLink>
-
-        <PendingLink href="/admin/tenants" className="rounded-3xl border border-sky-500/20 bg-sky-500/10 p-5 shadow-xl transition-colors hover:bg-sky-500/14">
-          <div className="text-xs font-bold uppercase tracking-[0.22em] text-sky-100">Needs group</div>
-          <div className="mt-3 text-3xl font-black italic text-white">{unassignedCount || 0}</div>
-          <p className="mt-2 text-sm text-sky-100/80">Users who cannot play until they are assigned.</p>
-        </PendingLink>
-      </div>
-
-      <div className="space-y-4">
-        <SectionHeader eyebrow="Workflows" title="Primary actions" />
-
-        <div className="grid gap-4 md:grid-cols-2 2xl:grid-cols-3">
+        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
           <PendingLink
             href="/admin/results"
-            className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-red-500/20 bg-red-500/10 p-5 shadow-xl transition-colors hover:bg-red-500/14"
+            className="group rounded-2xl border border-red-500/20 bg-red-500/10 p-5 transition-colors hover:bg-red-500/14"
           >
-            <div className="min-w-0">
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-red-100">
-                <ClipboardCheck className="h-3.5 w-3.5" />
-                Results desk
-              </div>
-              <h2 className="break-words text-lg font-bold leading-tight text-white">Save official results</h2>
-              <p className="mt-1 break-words text-sm text-red-100/80">
-                Publish multiple podiums and bonus answers in one pass.
-              </p>
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-red-100">
+              <ClipboardCheck className="h-4 w-4" />
+              Results desk
             </div>
-            <ChevronRight className="h-5 w-5 shrink-0 text-red-100/70 transition-colors group-hover:text-white" />
-          </PendingLink>
-
-          {access.tenantId && (
-            <PendingLink
-              href="/admin/tenant"
-              className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-emerald-500/20 bg-emerald-500/10 p-5 shadow-xl transition-colors hover:bg-emerald-500/14"
-            >
+            <div className="mt-4 grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end">
+              <div className="text-5xl font-black italic leading-none text-white">{resultsCount}</div>
               <div className="min-w-0">
-                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-emerald-500/20 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-emerald-100">
-                  <UserCheck className="h-3.5 w-3.5" />
-                  Group coverage
-                </div>
-                <h2 className="break-words text-lg font-bold leading-tight text-white">Prediction submissions</h2>
-                <p className="mt-1 break-words text-sm text-emerald-100/80">
-                  See how many people in your group have entered and who still needs a nudge.
+                <h2 className="text-xl font-black italic tracking-tight text-white">Finished races need results</h2>
+                <p className="mt-1 text-sm text-red-100/80">
+                  Publish podiums and bonus answers here. This is the normal path for scoring.
                 </p>
               </div>
-              <ChevronRight className="h-5 w-5 shrink-0 text-emerald-100/70 transition-colors group-hover:text-white" />
-            </PendingLink>
-          )}
+            </div>
+            <span className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white transition-colors group-hover:bg-red-500">
+              Open results
+              <ChevronRight className="h-4 w-4" />
+            </span>
+          </PendingLink>
 
+          <div className="grid gap-3">
+            <PendingLink
+              href={firstLiveRace ? `/admin/races/${firstLiveRace.id}` : '/admin/schedule'}
+              className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-amber-500/15 bg-amber-500/8 p-4 transition-colors hover:bg-amber-500/12"
+            >
+              <div className="min-w-0">
+                <div className="text-xs font-bold uppercase tracking-[0.2em] text-amber-100">Live weekends</div>
+                <div className="mt-1 text-2xl font-black italic text-white">{liveCount}</div>
+                <p className="mt-1 text-sm text-amber-100/75">Locked races currently in motion.</p>
+              </div>
+              <ChevronRight className="h-5 w-5 shrink-0 text-amber-100/70 transition-colors group-hover:text-white" />
+            </PendingLink>
+
+            <PendingLink
+              href="/admin/tenants"
+              className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-sky-500/15 bg-sky-500/8 p-4 transition-colors hover:bg-sky-500/12"
+            >
+              <div className="min-w-0">
+                <div className="text-xs font-bold uppercase tracking-[0.2em] text-sky-100">Setup gaps</div>
+                <div className="mt-1 text-2xl font-black italic text-white">{unassignedCount}</div>
+                <p className="mt-1 text-sm text-sky-100/75">
+                  Should stay at zero once Main Group defaulting is live.
+                </p>
+              </div>
+              <ChevronRight className="h-5 w-5 shrink-0 text-sky-100/70 transition-colors group-hover:text-white" />
+            </PendingLink>
+          </div>
+        </div>
+      </section>
+
+      <section className="space-y-4">
+        <SectionHeader
+          eyebrow="Routes"
+          title="Where to go next"
+          description="The remaining recurring admin jobs are grouped by intent."
+        />
+
+        <div className="grid gap-3 md:grid-cols-3">
           <PendingLink
             href="/admin/schedule"
-            className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-5 shadow-xl transition-colors hover:bg-white/[0.02]"
+            className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-4 shadow-xl transition-colors hover:bg-white/[0.02]"
           >
             <div className="min-w-0">
               <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
                 <CalendarSync className="h-3.5 w-3.5 text-red-400" />
-                Schedule sync
+                Schedule
               </div>
-              <h2 className="break-words text-lg font-bold leading-tight text-white">Season sync</h2>
-              <p className="mt-1 break-words text-sm text-slate-400">Pull OpenF1 timing changes and review any missing weekends.</p>
-            </div>
-            <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
-          </PendingLink>
-
-          <PendingLink
-            href="/admin/data"
-            className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-5 shadow-xl transition-colors hover:bg-white/[0.02]"
-          >
-            <div className="min-w-0">
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
-                <Database className="h-3.5 w-3.5 text-red-400" />
-                Reference data
-              </div>
-              <h2 className="break-words text-lg font-bold leading-tight text-white">Source mapping</h2>
-              <p className="mt-1 break-words text-sm text-slate-400">Only needed when driver or circuit names stop matching the source cleanly.</p>
+              <h2 className="text-base font-bold leading-tight text-white">Sync race timing</h2>
+              <p className="mt-1 break-words text-sm text-slate-400">Review OpenF1 timing changes and missing weekends.</p>
             </div>
             <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
           </PendingLink>
 
           <PendingLink
             href="/admin/tenants"
-            className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-5 shadow-xl transition-colors hover:bg-white/[0.02]"
+            className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-4 shadow-xl transition-colors hover:bg-white/[0.02]"
           >
             <div className="min-w-0">
               <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
                 <Users className="h-3.5 w-3.5 text-red-400" />
                 Access
               </div>
-              <h2 className="break-words text-lg font-bold leading-tight text-white">Groups & access</h2>
-              <p className="mt-1 break-words text-sm text-slate-400">{tenantCount || 0} groups and every account permission in one place.</p>
+              <h2 className="text-base font-bold leading-tight text-white">Groups & users</h2>
+              <p className="mt-1 break-words text-sm text-slate-400">Manage groups, roles, and rare setup gaps.</p>
             </div>
             <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
           </PendingLink>
 
-          {access.tenantId && (
-            <PendingLink
-              href="/admin/tenant#group-invites"
-              className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-5 shadow-xl transition-colors hover:bg-white/[0.02]"
-            >
-              <div className="min-w-0">
-                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
-                  <Flag className="h-3.5 w-3.5 text-red-400" />
-                  Invite links
-                </div>
-                <h2 className="break-words text-lg font-bold leading-tight text-white">Invite people</h2>
-                <p className="mt-1 break-words text-sm text-slate-400">Create share links for your current group.</p>
-              </div>
-              <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
-            </PendingLink>
-          )}
-        </div>
-
-        <MaintenanceSection />
-
-        <details className="group rounded-2xl border border-amber-500/10 bg-card p-5 shadow-xl">
-          <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
+          <PendingLink
+            href={access.tenantId ? '/admin/tenant' : '/admin/tenants'}
+            className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-4 shadow-xl transition-colors hover:bg-white/[0.02]"
+          >
             <div className="min-w-0">
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-amber-100">
-                <PlusCircle className="h-3.5 w-3.5 text-amber-300" />
-                Manual tools
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
+                <ClipboardCheck className="h-3.5 w-3.5 text-red-400" />
+                Group ops
               </div>
-              <h2 className="text-lg font-bold leading-tight text-white">Fallback only</h2>
-              <p className="mt-1 max-w-2xl text-sm text-slate-400">
-                Keep these hidden unless OpenF1 cannot provide a weekend or the source mapping needs manual repair.
-              </p>
+              <h2 className="text-base font-bold leading-tight text-white">Coverage & invites</h2>
+              <p className="mt-1 break-words text-sm text-slate-400">Submissions and private-group invite links.</p>
             </div>
-            <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-slate-500 transition-transform group-open:rotate-90" />
-          </summary>
+            <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
+          </PendingLink>
+        </div>
+      </section>
 
-          <div className="mt-4 grid gap-3 sm:grid-cols-2">
-            <PendingLink
-              href="#create-race"
-              className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-amber-500/15 bg-amber-500/8 p-4 transition-colors hover:bg-amber-500/12"
-            >
-              <div className="min-w-0">
-                <div className="text-sm font-bold text-white">Create race manually</div>
-                <p className="mt-1 text-sm text-slate-300">Use only when a weekend is missing from the source.</p>
-              </div>
-              <ChevronRight className="h-5 w-5 shrink-0 text-amber-200/70 transition-colors group-hover:text-white" />
-            </PendingLink>
+      {reviewRaces.length > 0 && (
+        <section className="space-y-4">
+          <SectionHeader
+            eyebrow="Current races"
+            title="Inspect active weekends"
+            description="Only races that are live or waiting for results appear here."
+          />
 
-            <PendingLink
-              href="/admin/data"
-              className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 transition-colors hover:bg-black/30"
-            >
-              <div className="min-w-0">
-                <div className="text-sm font-bold text-white">Open source mapping</div>
-                <p className="mt-1 text-sm text-slate-300">Fix circuit or driver matches only when sync review flags them.</p>
-              </div>
-              <ChevronRight className="h-5 w-5 shrink-0 text-slate-500 transition-colors group-hover:text-white" />
-            </PendingLink>
-          </div>
-        </details>
-      </div>
-
-      <div className="space-y-4">
-        <SectionHeader eyebrow="Calendar" title="Race detail pages" description="Use individual race pages for inspection, exceptions, corrections, or advanced tools." />
-
-        <div className="bg-card overflow-hidden rounded-2xl border border-white/5 shadow-xl">
-          {(!races || races.length === 0) ? (
-            <div className="p-8 text-center italic text-slate-500">No races defined.</div>
-          ) : (
-            typedRaces.map((race) => (
+          <div className="overflow-hidden rounded-2xl border border-white/5 bg-card shadow-xl">
+            {reviewRaces.map((race) => (
               <PendingLink
                 href={`/admin/races/${race.id}`}
                 key={race.id}
-                className="group grid gap-3 border-b border-white/5 p-5 transition-colors last:border-b-0 hover:bg-white/[0.02] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+                className="group grid gap-3 border-b border-white/5 p-4 transition-colors last:border-b-0 hover:bg-white/[0.02] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
               >
                 <div className="min-w-0 space-y-1">
                   <div className="text-xs font-bold uppercase tracking-widest text-red-500">
                     Round {race.round} • {race.season}
                   </div>
-                  <div className="break-words text-lg font-bold leading-tight text-white">{race.race_name}</div>
+                  <div className="break-words text-base font-bold leading-tight text-white">{race.race_name}</div>
                   <div className="break-words text-sm text-slate-400">
                     {race.circuits?.name} {race.circuits?.emoji}
                   </div>
                 </div>
 
                 <div className="flex items-center justify-between gap-3 lg:justify-end">
-                  <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-[11px] font-bold uppercase tracking-[0.18em] text-right">
-                    <span className={`${getAdminRaceStatusClasses(getEffectiveRaceStatus(race))}`}>
+                  <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-right text-[11px] font-bold uppercase tracking-[0.18em]">
+                    <span className={getAdminRaceStatusClasses(getEffectiveRaceStatus(race))}>
+                      {getAdminRaceStatusLabel(getEffectiveRaceStatus(race))}
+                    </span>
+                  </div>
+                  <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
+                </div>
+              </PendingLink>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <details className="group border-t border-white/10 pt-5">
+        <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
+          <div className="min-w-0">
+            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-amber-100">
+              <PlusCircle className="h-3.5 w-3.5 text-amber-300" />
+              Advanced
+            </div>
+            <h2 className="text-lg font-bold leading-tight text-white">Repair and fallback tools</h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-400">
+              Use these when source sync, historic corrections, or manual data fixes require admin intervention.
+            </p>
+          </div>
+          <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-slate-500 transition-transform group-open:rotate-90" />
+        </summary>
+
+        <div className="mt-5 grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          <MaintenanceSection />
+
+          <div className="space-y-4">
+            <PendingLink
+              href="/admin/data"
+              className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-5 shadow-xl transition-colors hover:bg-white/[0.02]"
+            >
+              <div className="min-w-0">
+                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
+                  <Database className="h-3.5 w-3.5 text-red-400" />
+                  Reference
+                </div>
+                <h2 className="break-words text-base font-bold leading-tight text-white">Source mapping</h2>
+                <p className="mt-1 break-words text-sm text-slate-400">
+                  Fix driver or circuit matches only when schedule or result sync flags a mismatch.
+                </p>
+              </div>
+              <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
+            </PendingLink>
+
+            <div id="create-race" className="space-y-4 scroll-mt-24">
+              <SectionHeader
+                eyebrow="Manual fallback"
+                title="Add race weekend"
+                description="OpenF1 schedule sync should be the normal path. Create a weekend here only when the source cannot provide it yet."
+              />
+              <CreateRaceForm circuits={circuits || []} />
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <details className="group border-t border-white/10 pt-5">
+        <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
+          <div className="min-w-0">
+            <div className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Calendar reference</div>
+            <h2 className="mt-1 text-lg font-bold leading-tight text-white">All race detail pages</h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-400">
+              Open the full calendar only for inspection, exceptions, corrections, or advanced tools.
+            </p>
+          </div>
+          <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-slate-500 transition-transform group-open:rotate-90" />
+        </summary>
+
+        <div className="mt-4 overflow-hidden rounded-2xl border border-white/5 bg-card shadow-xl">
+          {typedRaces.length === 0 ? (
+            <div className="p-8 text-center italic text-slate-500">No races defined.</div>
+          ) : (
+            typedRaces.map((race) => (
+              <PendingLink
+                href={`/admin/races/${race.id}`}
+                key={race.id}
+                className="group grid gap-3 border-b border-white/5 p-4 transition-colors last:border-b-0 hover:bg-white/[0.02] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+              >
+                <div className="min-w-0 space-y-1">
+                  <div className="text-xs font-bold uppercase tracking-widest text-red-500">
+                    Round {race.round} • {race.season}
+                  </div>
+                  <div className="break-words text-base font-bold leading-tight text-white">{race.race_name}</div>
+                  <div className="break-words text-sm text-slate-400">
+                    {race.circuits?.name} {race.circuits?.emoji}
+                  </div>
+                </div>
+
+                <div className="flex items-center justify-between gap-3 lg:justify-end">
+                  <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-right text-[11px] font-bold uppercase tracking-[0.18em]">
+                    <span className={getAdminRaceStatusClasses(getEffectiveRaceStatus(race))}>
                       {getAdminRaceStatusLabel(getEffectiveRaceStatus(race))}
                     </span>
                   </div>
@@ -292,16 +333,7 @@ export default async function AdminDashboardPage() {
             ))
           )}
         </div>
-      </div>
-
-      <div id="create-race" className="space-y-6 scroll-mt-24">
-        <SectionHeader
-          eyebrow="Manual fallback"
-          title="Add race weekend"
-          description="OpenF1 schedule sync should be the normal path. Create a weekend here only when the source cannot provide it yet."
-        />
-        <CreateRaceForm circuits={circuits || []} />
-      </div>
+      </details>
     </div>
   )
 }

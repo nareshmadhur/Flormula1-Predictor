@@ -63,7 +63,7 @@ function getCurrentAccessLabel(profile: Profile, tenants: Tenant[]) {
       : `Group admin${tenantName ? ` · ${tenantName}` : ''}`
   }
 
-  return tenantName ? `Member · ${tenantName}` : 'Needs assignment'
+  return tenantName ? `Member · ${tenantName}` : 'Setup gap'
 }
 
 function getRowStatus(profile: Profile, currentUserId: string) {
@@ -76,7 +76,7 @@ function getRowStatus(profile: Profile, currentUserId: string) {
 
   if (profile.role === 'user' && !profile.tenant_id) {
     return {
-      label: 'Needs assignment',
+      label: 'Setup gap',
       tone: 'bg-red-500/10 text-red-300',
     }
   }
@@ -124,7 +124,7 @@ export function ManageAccessForm({
   const submitDisabled = pending
   const rowStatus = getRowStatus(profile, currentUserId)
   const currentAccessLabel = getCurrentAccessLabel(profile, tenants)
-  const actionLabel = profile.role === 'user' && !profile.tenant_id ? 'Assign' : 'Edit'
+  const actionLabel = profile.role === 'user' && !profile.tenant_id ? 'Fix' : 'Edit'
 
   return (
     <form action={formAction} className="rounded-2xl border border-white/5 bg-black/25 p-3.5 sm:p-4">
@@ -265,7 +265,7 @@ export function ManageAccessForm({
                 </div>
               ) : selectedRole === 'user' && !selectedTenantId ? (
                 <div className="rounded-xl border border-white/5 bg-white/5 px-3 py-2.5 text-sm text-slate-300">
-                  This person can browse public standings, but picks and history stay locked until they join a group.
+                  This should be unusual now. Pick Main Group or a private group so predictions, history, and group standings unlock.
                 </div>
               ) : null}
             </div>

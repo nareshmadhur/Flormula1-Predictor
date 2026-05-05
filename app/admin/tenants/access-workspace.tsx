@@ -127,11 +127,11 @@ export function AccessWorkspace({
   }> = [
     {
       id: 'needs-assignment',
-      label: 'Needs group',
+      label: 'Setup gaps',
       count: needsAssignmentCount,
       tone: 'border-amber-500/20 bg-amber-500/10 text-amber-200',
       icon: AlertTriangle,
-      helper: 'People who still need a group before they can play.',
+      helper: 'Accounts missing Main Group or a private group. This should be rare.',
     },
     {
       id: 'members',
@@ -179,7 +179,7 @@ export function AccessWorkspace({
       <div className="flex flex-col gap-2">
         <h2 className="text-2xl font-bold">Access map</h2>
         <p className="max-w-3xl text-sm text-slate-400">
-          Start with people who still need a group, then move through admins and existing groups from one place.
+          New users start in Main Group. Use this space to fix setup gaps, manage admins, or move people into private groups.
         </p>
         {hiddenTestProfileCount > 0 && (
           <p className="rounded-2xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-300">
@@ -366,7 +366,7 @@ export function AccessWorkspace({
               <div className="text-slate-500">Test accounts stay out of this queue.</div>
             )}
             {activeFilter === 'needs-assignment' && filteredProfiles.length === 0 && needsAssignmentCount === 0 && (
-              <div className="text-emerald-300">Everyone is already in a group.</div>
+              <div className="text-emerald-300">Everyone is already in Main Group or a private group.</div>
             )}
           </div>
 

@@ -52,7 +52,9 @@ export default function SignupPage({
     <div className="flex-1 flex flex-col w-full px-8 sm:max-w-md justify-center gap-2 mx-auto animate-in fade-in duration-500 mt-20">
       <div className="bg-card border border-white/10 p-8 rounded-3xl shadow-2xl">
         <h1 className="text-3xl font-black italic tracking-tighter mb-2 text-center">Join the grid</h1>
-        <p className="mb-6 text-center text-sm text-slate-400">Create your account, confirm your email, and get ready for the next lock.</p>
+        <p className="mb-6 text-center text-sm text-slate-400">
+          Create your account and start in Main Group automatically. Private invites can move you into a group later.
+        </p>
         
         <SignupForm formAction={formAction} pending={pending} error={state.error} next={next} />
       </div>

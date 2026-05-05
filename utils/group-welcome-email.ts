@@ -11,19 +11,58 @@ type SendEmailResult =
   | { status: 'sent' }
   | { status: 'skipped'; reason: 'missing-email' | 'not-configured' }
 
-const RESEND_API_URL = 'https://api.resend.com/emails'
+const BREVO_API_URL = 'https://api.brevo.com/v3/smtp/email'
 
-function getFromAddress() {
-  return (
-    process.env.GROUP_WELCOME_EMAIL_FROM?.trim() ||
-    process.env.RESEND_FROM?.trim() ||
+type ParsedSender = {
+  email: string
+  name?: string
+}
+
+function parseSender(value: string | null | undefined): ParsedSender | null {
+  const raw = value?.trim()
+  if (!raw) return null
+
+  const match = raw.match(/^(.*?)<([^>]+)>$/)
+  if (match) {
+    const name = match[1]?.trim().replace(/^"|"$/g, '')
+    const email = match[2]?.trim()
+
+    if (!email) return null
+    return name ? { name, email } : { email }
+  }
+
+  return { email: raw }
+}
+
+function getSender() {
+  const combinedSender =
+    parseSender(process.env.GROUP_WELCOME_EMAIL_FROM) ||
+    parseSender(process.env.BREVO_SENDER) ||
+    parseSender(process.env.BREVO_FROM)
+
+  if (combinedSender) return combinedSender
+
+  const email =
+    process.env.BREVO_SENDER_EMAIL?.trim() ||
+    process.env.BREVO_FROM_EMAIL?.trim() ||
     ''
-  )
+  const name =
+    process.env.BREVO_SENDER_NAME?.trim() ||
+    process.env.BREVO_FROM_NAME?.trim() ||
+    ''
+
+  if (!email) return null
+  return name ? { email, name } : { email }
 }
 
 function getDisplayName(value: string | null | undefined) {
   const name = value?.trim()
   return name ? name : 'there'
+}
+
+function getRecipientName(value: string | null | undefined) {
+  const name = value?.trim()
+  return name || undefined
 }
 
 function getWelcomeSubject(groupName: string) {
@@ -89,25 +128,31 @@ export async function sendGroupWelcomeEmail(
     return { status: 'skipped', reason: 'missing-email' }
   }
 
-  const apiKey = process.env.RESEND_API_KEY?.trim()
-  const from = getFromAddress()
+  const apiKey = process.env.BREVO_API_KEY?.trim()
+  const sender = getSender()
 
-  if (!apiKey || !from) {
+  if (!apiKey || !sender) {
     return { status: 'skipped', reason: 'not-configured' }
   }
 
-  const response = await fetch(RESEND_API_URL, {
+  const response = await fetch(BREVO_API_URL, {
     method: 'POST',
     headers: {
-      Authorization: `Bearer ${apiKey}`,
+      accept: 'application/json',
+      'api-key': apiKey,
       'Content-Type': 'application/json',
       'User-Agent': 'flormula1-app/1.0',
     },
     body: JSON.stringify({
-      from,
-      to: [email],
+      sender,
+      to: [
+        {
+          email,
+          name: getRecipientName(input.displayName),
+        },
+      ],
       subject: getWelcomeSubject(input.groupName),
-      html: getWelcomeHtml(input),
+      htmlContent: getWelcomeHtml(input),
     }),
     signal: AbortSignal.timeout(4000),
   })

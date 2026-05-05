@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { AlertCircle, Calendar, ChevronRight, Clock3, MapPin, Trophy } from 'lucide-react'
-import { format, formatDistanceToNowStrict } from 'date-fns'
+import { differenceInCalendarDays, format, formatDistanceToNowStrict } from 'date-fns'
 import { redirect } from 'next/navigation'
 import { getRoundLabel } from '@/utils/race-copy'
 import { getEffectiveRaceStatus, RaceStatus } from '@/utils/race-status'
@@ -41,7 +41,7 @@ type ScoreRow = {
   total_points: number
 }
 
-type SeasonFilterKey = 'action' | 'waiting' | 'scored' | 'missed'
+type SeasonFilterKey = 'action' | 'upcoming' | 'waiting' | 'scored' | 'missed'
 
 type SeasonDashboardPageProps = {
   searchParams: Promise<{
@@ -59,25 +59,34 @@ type FilterCard = {
 }
 
 function getDefaultTab({
-  openCount,
+  actionCount,
+  upcomingCount,
   waitingCount,
   scoredCount,
   missedCount,
 }: {
-  openCount: number
+  actionCount: number
+  upcomingCount: number
   waitingCount: number
   scoredCount: number
   missedCount: number
 }): SeasonFilterKey {
-  if (openCount > 0) return 'action'
+  if (actionCount > 0) return 'action'
   if (waitingCount > 0) return 'waiting'
   if (scoredCount > 0) return 'scored'
   if (missedCount > 0) return 'missed'
+  if (upcomingCount > 0) return 'upcoming'
   return 'action'
 }
 
 function resolveFilter(rawValue: string | undefined, fallback: SeasonFilterKey): SeasonFilterKey {
-  if (rawValue === 'action' || rawValue === 'waiting' || rawValue === 'scored' || rawValue === 'missed') {
+  if (
+    rawValue === 'action' ||
+    rawValue === 'upcoming' ||
+    rawValue === 'waiting' ||
+    rawValue === 'scored' ||
+    rawValue === 'missed'
+  ) {
     return rawValue
   }
 
@@ -110,8 +119,21 @@ function getHeroContent({
     return {
       eyebrow: 'Results Pending',
       headline: race.race_name,
-      description: 'Your picks are locked. The next step is waiting for the official result or final score.',
-      status: 'Waiting on the result pipeline',
+      description: hasPredicted
+        ? 'Your picks are locked. The next step is waiting for the official result or final score.'
+        : 'The race is finished. No entry was submitted, and final scoring is still pending.',
+      status: hasPredicted ? 'Waiting on scoring' : 'No entry submitted',
+    }
+  }
+
+  if (kind === 'upcoming' && race) {
+    return {
+      eyebrow: 'Next Race',
+      headline: race.race_name,
+      description: hasPredicted
+        ? `Entry saved. You can still edit before predictions close ${formatDistanceToNowStrict(new Date(race.prediction_lock_at), { addSuffix: true })}.`
+        : 'This race is on the schedule. It becomes the main action when it is the next unentered round.',
+      status: hasPredicted ? 'Entry saved' : 'Upcoming',
     }
   }
 
@@ -120,10 +142,16 @@ function getHeroContent({
       eyebrow: 'Latest Result',
       headline: race.race_name,
       description:
-        typeof score === 'number'
+        !hasPredicted
+          ? 'This weekend is final. No entry was submitted for this round.'
+          : typeof score === 'number'
           ? `This weekend is final. You came away with ${score} pts.`
           : 'This weekend has been scored and is ready to review.',
-      status: typeof score === 'number' ? `${score} pts banked` : 'Final score published',
+      status: !hasPredicted
+        ? 'No entry submitted'
+        : typeof score === 'number'
+          ? `${score} pts banked`
+          : 'Final score published',
     }
   }
 
@@ -147,9 +175,17 @@ function getHeroContent({
 function getActiveSectionCopy(tab: SeasonFilterKey) {
   if (tab === 'action') {
     return {
-      title: 'Need Action',
-      description: 'Race weekends you can still enter or update.',
-      empty: 'No open prediction windows right now.',
+      title: 'Needs Action',
+      description: 'The next race that still needs your entry.',
+      empty: 'No race needs your entry right now.',
+    }
+  }
+
+  if (tab === 'upcoming') {
+    return {
+      title: 'Upcoming',
+      description: 'Future race weekends, kept quiet until they become the next focus.',
+      empty: 'No upcoming race weekends right now.',
     }
   }
 
@@ -195,12 +231,18 @@ function RaceListCard({
   filterKey: SeasonFilterKey
   isFeatured?: boolean
 }) {
-  const isActionable = status === 'upcoming'
+  const isPrimaryAction = status === 'upcoming' && filterKey === 'action'
   const tone = getRaceTone(status)
+  const actionLabel =
+    filterKey === 'upcoming' && status === 'upcoming'
+      ? hasPredicted
+        ? 'View entry'
+        : 'View race'
+      : getMemberRaceActionLabel(status, hasPredicted)
 
   const frameClasses =
     tone === 'open'
-      ? hasPredicted
+      ? hasPredicted || filterKey === 'upcoming'
         ? 'border-green-500/20 bg-card'
         : 'border-red-500/20 bg-card'
       : tone === 'pending'
@@ -223,7 +265,18 @@ function RaceListCard({
             value: `Race ${formatRaceDateTime(race.race_start_at)}`,
           },
         ]
-      : filterKey === 'waiting'
+      : filterKey === 'upcoming'
+        ? [
+            {
+              icon: Clock3,
+              value: `Lock ${formatRaceDateTime(race.prediction_lock_at)}`,
+            },
+            {
+              icon: Calendar,
+              value: `Race ${formatRaceDateTime(race.race_start_at)}`,
+            },
+          ]
+        : filterKey === 'waiting'
         ? [
             {
               icon: Clock3,
@@ -300,12 +353,12 @@ function RaceListCard({
               <PendingLink
                 href={`/race/${race.id}/predict`}
                 className={`inline-flex w-full items-center justify-center gap-1.5 rounded-xl px-5 py-3 font-bold transition-all lg:w-auto ${
-                  isActionable
+                  isPrimaryAction
                     ? 'bg-red-600 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)] hover:bg-red-500'
                     : 'border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
                 }`}
               >
-                {getMemberRaceActionLabel(status, hasPredicted)}
+                {actionLabel}
                 <ChevronRight className="ml-1 h-5 w-5" />
               </PendingLink>
             </div>
@@ -388,6 +441,9 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
   const scoreByRaceId = new Map(typedScores.map((score) => [score.race_id, score.total_points]))
 
   const openRaces = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'upcoming')
+  const nextOpenRace = openRaces[0] || null
+  const actionableRaces = nextOpenRace && !predictedRaceIds.has(nextOpenRace.id) ? [nextOpenRace] : []
+  const upcomingScheduleRaces = openRaces.filter((race) => race.id !== actionableRaces[0]?.id)
   const waitingRaces = typedRaces.filter((race) => {
     const status = getEffectiveRaceStatus(race)
     return (status === 'locked' || status === 'completed') && predictedRaceIds.has(race.id)
@@ -401,9 +457,29 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
       return (status === 'locked' || status === 'completed' || status === 'scored') && !predictedRaceIds.has(race.id)
     })
     .sort((left, right) => new Date(right.race_start_at).getTime() - new Date(left.race_start_at).getTime())
+  const latestFinishedRace = [...typedRaces]
+    .filter((race) => {
+      const status = getEffectiveRaceStatus(race)
+      return status === 'completed' || status === 'scored'
+    })
+    .sort((left, right) => new Date(right.race_start_at).getTime() - new Date(left.race_start_at).getTime())[0] || null
+  const latestFinishedStatus = latestFinishedRace ? getEffectiveRaceStatus(latestFinishedRace) : null
+  const latestFinishedIsRecent = latestFinishedRace
+    ? differenceInCalendarDays(new Date(), new Date(latestFinishedRace.race_start_at)) <= 7
+    : false
 
-  const defaultTab = getDefaultTab({
-    openCount: openRaces.length,
+  const postRaceDefaultTab: SeasonFilterKey | null =
+    latestFinishedRace && latestFinishedIsRecent
+      ? predictedRaceIds.has(latestFinishedRace.id)
+        ? latestFinishedStatus === 'scored'
+          ? 'scored'
+          : 'waiting'
+        : 'missed'
+      : null
+
+  const defaultTab = postRaceDefaultTab || getDefaultTab({
+    actionCount: actionableRaces.length,
+    upcomingCount: upcomingScheduleRaces.length,
     waitingCount: waitingRaces.length,
     scoredCount: scoredRaces.length,
     missedCount: missedRaces.length,
@@ -411,8 +487,15 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
   const activeTab = resolveFilter(rawTab, defaultTab)
 
   const hero =
-    openRaces[0]
-      ? { kind: 'action' as const, race: openRaces[0] }
+    latestFinishedRace && latestFinishedIsRecent
+      ? {
+          kind: latestFinishedStatus === 'scored' ? 'scored' as const : 'waiting' as const,
+          race: latestFinishedRace,
+        }
+      : actionableRaces[0]
+        ? { kind: 'action' as const, race: actionableRaces[0] }
+        : nextOpenRace
+          ? { kind: 'upcoming' as const, race: nextOpenRace }
       : waitingRaces[0]
         ? { kind: 'waiting' as const, race: waitingRaces[0] }
         : scoredRaces[0]
@@ -433,10 +516,18 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
   const filterCards: FilterCard[] = [
     {
       key: 'action',
-      label: 'Need Action',
-      hint: 'Prediction windows still live.',
-      count: openRaces.length,
+      label: 'Needs Action',
+      hint: 'Only the next unentered race gets urgency.',
+      count: actionableRaces.length,
       href: '/predictions?tab=action',
+      icon: Calendar,
+    },
+    {
+      key: 'upcoming',
+      label: 'Upcoming',
+      hint: 'Future weekends without the alarm bells.',
+      count: upcomingScheduleRaces.length,
+      href: '/predictions?tab=upcoming',
       icon: Calendar,
     },
     {
@@ -468,7 +559,9 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
   const activeSection = getActiveSectionCopy(activeTab)
   const activeRaces =
     activeTab === 'action'
-      ? openRaces
+      ? actionableRaces
+      : activeTab === 'upcoming'
+        ? upcomingScheduleRaces
       : activeTab === 'waiting'
         ? waitingRaces
         : activeTab === 'scored'
@@ -560,7 +653,7 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
         <aside className="self-start rounded-3xl border border-white/10 bg-card p-5 shadow-2xl xl:sticky xl:top-24">
           <div className="space-y-2">
             <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Race queue</div>
-            <h2 className="text-2xl font-black italic tracking-tight text-white">What needs attention</h2>
+            <h2 className="text-2xl font-black italic tracking-tight text-white">Current focus</h2>
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
@@ -623,7 +716,7 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
                 hasPredicted={predictedRaceIds.has(race.id)}
                 score={scoreByRaceId.get(race.id)}
                 filterKey={activeTab}
-                isFeatured={Boolean(hero.race && hero.kind === activeTab && hero.race.id === race.id)}
+                isFeatured={Boolean(hero.race && hero.race.id === race.id)}
               />
             ))}
           </div>
