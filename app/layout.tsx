@@ -8,6 +8,8 @@ import { getSiteUrl } from '@/utils/site'
 
 const inter = Inter({ subsets: ['latin'] })
 const siteUrl = getSiteUrl()
+const appDescription =
+  'A free Formula 1 fan scoreboard for private groups: make podium picks, follow race results, and compare season standings. No betting, wagers, or cash prizes.'
 const structuredData = {
   '@context': 'https://schema.org',
   '@type': 'SoftwareApplication',
@@ -15,8 +17,7 @@ const structuredData = {
   applicationCategory: 'SportsApplication',
   operatingSystem: 'Web',
   isAccessibleForFree: true,
-  description:
-    'Free Formula 1 fan scoreboard for private groups. No betting, no wagers, just podium picks, results, and season standings.',
+  description: appDescription,
   offers: {
     '@type': 'Offer',
     price: '0',
@@ -37,8 +38,7 @@ export const metadata: Metadata = {
     default: 'FLORMULA1',
     template: '%s | FLORMULA1',
   },
-  description:
-    'Free Formula 1 fan scoreboard for private groups. No betting, no wagers, just podium picks, results, and season standings.',
+  description: appDescription,
   keywords: [
     'Formula 1',
     'F1',
@@ -55,8 +55,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'FLORMULA1',
-    description:
-      'Free Formula 1 fan scoreboard for private groups. No betting, no wagers, just podium picks, results, and season standings.',
+    description: appDescription,
     siteName: 'FLORMULA1',
     type: 'website',
     url: '/',
@@ -64,13 +63,13 @@ export const metadata: Metadata = {
   twitter: {
     card: 'summary_large_image',
     title: 'FLORMULA1',
-    description:
-      'Free Formula 1 fan scoreboard for private groups. No betting, no wagers, just podium picks, results, and season standings.',
+    description: appDescription,
   },
   other: {
     classification: 'Sports',
     rating: 'General',
     subject: 'Formula 1 fan scoreboard and season standings',
+    'play-policy': 'Free fan scoreboard; no betting, wagers, or cash prizes',
   },
 }
 
@@ -87,7 +86,7 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en" className="dark">
+    <html lang="en" className="dark" suppressHydrationWarning>
       <body className={`${inter.className} bg-slate-950 text-slate-50 min-h-screen flex flex-col`}>
         <script
           type="application/ld+json"

@@ -108,6 +108,43 @@
   }
 }
 
+@keyframes landing-speed-drift {
+  0% {
+    opacity: 0.16;
+    transform: translate3d(-22%, 0, 0) skewX(-14deg);
+  }
+
+  42% {
+    opacity: 0.62;
+  }
+
+  100% {
+    opacity: 0.26;
+    transform: translate3d(22%, 0, 0) skewX(-14deg);
+  }
+}
+
+@keyframes landing-start-light {
+  0%,
+  14%,
+  100% {
+    opacity: 0.32;
+    transform: scale(0.86);
+    background: rgba(127, 29, 29, 0.88);
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.08);
+  }
+
+  22%,
+  62% {
+    opacity: 1;
+    transform: scale(1);
+    background: rgba(239, 68, 68, 1);
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.22),
+      0 0 18px rgba(248, 113, 113, 0.8);
+  }
+}
+
 @keyframes start-light-sequence {
   0%,
   100% {
@@ -145,6 +182,196 @@
 }
 
 @layer components {
+  .f1-landing-scene {
+    isolation: isolate;
+    background:
+      linear-gradient(100deg, rgba(2, 6, 23, 0.98) 0%, rgba(2, 6, 23, 0.86) 38%, rgba(2, 6, 23, 0.44) 67%, rgba(2, 6, 23, 0.72) 100%),
+      linear-gradient(115deg, rgba(239, 68, 68, 0.22) 0%, rgba(239, 68, 68, 0) 30%),
+      linear-gradient(150deg, rgba(8, 145, 178, 0) 48%, rgba(8, 145, 178, 0.16) 68%, rgba(8, 145, 178, 0) 86%),
+      linear-gradient(160deg, #020617 0%, #0b1120 44%, #030712 100%);
+  }
+
+  .f1-hero-vignette {
+    position: absolute;
+    inset: 0 24% 0 0;
+    z-index: 0;
+    background: linear-gradient(90deg, rgba(2, 6, 23, 0.96), rgba(2, 6, 23, 0.72) 52%, transparent);
+    pointer-events: none;
+  }
+
+  .f1-landing-scene::before {
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background:
+      linear-gradient(76deg, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+      linear-gradient(166deg, rgba(255, 255, 255, 0.04) 1px, transparent 1px);
+    background-position:
+      0 0,
+      0 0;
+    background-size:
+      56px 56px,
+      56px 56px;
+    opacity: 0.38;
+    mask-image: linear-gradient(120deg, rgba(0, 0, 0, 0.92), rgba(0, 0, 0, 0.54) 58%, transparent 88%);
+    pointer-events: none;
+  }
+
+  .f1-landing-scene::after {
+    content: "";
+    position: absolute;
+    inset: auto -18% 12% -18%;
+    z-index: 0;
+    height: 40%;
+    transform: rotate(-12deg) skewX(-12deg);
+    background:
+      linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.08) 18%, rgba(239, 68, 68, 0.12) 46%, transparent 74%),
+      linear-gradient(180deg, rgba(15, 23, 42, 0.18), rgba(15, 23, 42, 0.72));
+    border-block: 1px solid rgba(255, 255, 255, 0.1);
+    opacity: 0.45;
+    pointer-events: none;
+  }
+
+  .f1-track-ribbon {
+    position: absolute;
+    right: -13%;
+    top: 11%;
+    z-index: 0;
+    height: 11rem;
+    width: 72%;
+    transform: rotate(-14deg) skewX(-18deg);
+    border-block: 1px solid rgba(255, 255, 255, 0.18);
+    background:
+      linear-gradient(90deg, rgba(239, 68, 68, 0.88), rgba(239, 68, 68, 0.1) 16%, rgba(15, 23, 42, 0.1) 84%),
+      linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(15, 23, 42, 0.3));
+    opacity: 0.72;
+    pointer-events: none;
+  }
+
+  .f1-track-ribbon::before {
+    content: "";
+    position: absolute;
+    inset: 1rem 0 auto 0;
+    height: 0.55rem;
+    background-image: repeating-linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0.92) 0 18px,
+      rgba(255, 255, 255, 0) 18px 36px
+    );
+  }
+
+  .f1-track-ribbon::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 1rem 0;
+    height: 0.2rem;
+    background: linear-gradient(90deg, rgba(250, 204, 21, 0), rgba(250, 204, 21, 0.8), rgba(34, 197, 94, 0.62), rgba(250, 204, 21, 0));
+  }
+
+  .f1-speed-bands {
+    position: absolute;
+    inset: 8% -18% auto -18%;
+    z-index: 0;
+    height: 56%;
+    transform: rotate(-12deg);
+    pointer-events: none;
+    overflow: hidden;
+    mix-blend-mode: screen;
+  }
+
+  .f1-speed-bands::before,
+  .f1-speed-bands::after {
+    content: "";
+    position: absolute;
+    left: -22%;
+    width: 144%;
+    height: 7rem;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(34, 211, 238, 0.04) 24%,
+      rgba(34, 211, 238, 0.3) 42%,
+      rgba(239, 68, 68, 0.34) 56%,
+      rgba(255, 255, 255, 0.12) 64%,
+      transparent 78%
+    );
+    mask-image: linear-gradient(90deg, transparent, #000 18%, #000 72%, transparent);
+    animation: landing-speed-drift 3.2s ease-in-out infinite alternate;
+  }
+
+  .f1-speed-bands::before {
+    top: 18%;
+  }
+
+  .f1-speed-bands::after {
+    top: 48%;
+    height: 5.5rem;
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.04) 28%,
+      rgba(250, 204, 21, 0.22) 46%,
+      rgba(239, 68, 68, 0.28) 58%,
+      transparent 76%
+    );
+    animation-delay: -1.45s;
+  }
+
+  .f1-hero-copy {
+    position: relative;
+    text-shadow: 0 0.2rem 1.3rem rgba(0, 0, 0, 0.86);
+  }
+
+  .f1-hero-title {
+    text-shadow:
+      0 0.08rem 0 rgba(255, 255, 255, 0.12),
+      0 0.5rem 1.8rem rgba(0, 0, 0, 0.96),
+      0 0 2.6rem rgba(0, 0, 0, 0.88);
+  }
+
+  .f1-start-gantry {
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.03),
+      0 0 24px rgba(239, 68, 68, 0.08);
+  }
+
+  .f1-gantry-light {
+    animation: landing-start-light 3.8s ease-in-out infinite both;
+  }
+
+  .f1-gantry-light:nth-child(2) {
+    animation-delay: 0.12s;
+  }
+
+  .f1-gantry-light:nth-child(3) {
+    animation-delay: 0.24s;
+  }
+
+  .f1-gantry-light:nth-child(4) {
+    animation-delay: 0.36s;
+  }
+
+  .f1-gantry-light:nth-child(5) {
+    animation-delay: 0.48s;
+  }
+
+  .f1-feature-card {
+    position: relative;
+    isolation: isolate;
+    overflow: hidden;
+  }
+
+  .f1-feature-card::before {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, rgba(8, 145, 178, 0.5), rgba(239, 68, 68, 0.5), transparent);
+    opacity: 0.75;
+  }
+
   .race-link-shell {
     position: relative;
     isolation: isolate;
@@ -367,5 +594,13 @@
   .race-loading-lights .race-start-light {
     height: 0.7rem;
     width: 0.7rem;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .f1-speed-bands::before,
+    .f1-speed-bands::after,
+    .f1-gantry-light {
+      animation: none;
+    }
   }
 }
