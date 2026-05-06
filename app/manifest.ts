@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     name: 'FLORMULA1',
     short_name: 'FLORMULA1',
     description:
-      'Free Formula 1 fan scoreboard for private groups. No betting, no wagers, just podium picks, results, and season standings.',
+      'A free Formula 1 fan scoreboard for private groups: make podium picks, follow race results, and compare season standings. No betting, wagers, or cash prizes.',
     start_url: '/',
     display: 'standalone',
     background_color: '#020617',
