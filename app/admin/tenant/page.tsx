@@ -3,10 +3,12 @@ import { redirect } from 'next/navigation'
 import {
   ArrowRight,
   Building2,
-  Crown,
+  CalendarClock,
+  ClipboardCheck,
+  Link2,
   ShieldCheck,
   Trophy,
-  Users,
+  UserCheck,
 } from 'lucide-react'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { getCurrentSeason } from '@/utils/season'
@@ -18,7 +20,9 @@ import { PendingLink } from '@/components/ui/pending-link'
 import { getInvitePath } from '@/utils/group-invites'
 import { getAbsoluteUrl } from '@/utils/site'
 import { PageBackLink } from '@/components/ui/page-back-link'
+import { SectionHeader } from '@/components/ui/section-header'
 import { GroupInvitePanel } from './group-invite-panel'
+import { GroupRosterPanel } from './group-roster-panel'
 
 export const revalidate = 0
 
@@ -97,16 +101,10 @@ function getMemberRaceStatus(status: RaceStatus, hasPrediction: boolean) {
   return 'N/A'
 }
 
-function getMemberAccessLabel(member: TenantMember) {
-  if (member.role !== 'admin') {
-    return 'Tenant member'
-  }
-
-  if (member.admin_scope === 'platform') {
-    return 'Platform admin'
-  }
-
-  return 'Tenant admin'
+function isActiveGroupInvite(invite: GroupInviteRecord) {
+  if (invite.revoked_at) return false
+  if (new Date(invite.expires_at).getTime() <= Date.now()) return false
+  return invite.accepted_count < invite.max_uses
 }
 
 export default async function TenantAdminPage() {
@@ -276,6 +274,8 @@ export default async function TenantAdminPage() {
         ...invite,
         invite_url: invite.share_token ? getAbsoluteUrl(getInvitePath(invite.share_token)) : null,
       }))
+  const activeInviteCount = groupInvites.filter(isActiveGroupInvite).length
+  const isMainGroup = typedTenant?.slug === 'main'
 
   const leaderboard = sortCompetitionStandings((leaderboardRows || []) as LeaderboardEntry[])
   const leaderboardByUserId = new Map(leaderboard.map((entry) => [entry.user_id, entry]))
@@ -300,6 +300,8 @@ export default async function TenantAdminPage() {
     settledRaceIds.length > 0
       ? settledRaceIds.length * operationalMembers.length - ((settledPredictions || []) as PredictionEntry[]).length
       : 0
+  const openItemsCount =
+    (featuredRace ? missingFeaturedRaceMembers.length : 0) + (activeInviteCount === 0 ? 1 : 0)
 
   const roster = typedMembers.map((member) => {
     const standing = leaderboardByUserId.get(member.id)
@@ -316,41 +318,33 @@ export default async function TenantAdminPage() {
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-3">
-          <PageBackLink
-            href={access.isPlatformAdmin ? '/admin' : '/leaderboard?view=tenant'}
-            label={access.isPlatformAdmin ? 'Back to Admin' : 'Back to Standings'}
-          />
-          <div className="flex items-center gap-3">
-            <Building2 className="h-8 w-8 text-red-500" />
-            <div>
-              <h1 className="text-3xl font-black italic tracking-tighter text-red-500">GROUP OPERATIONS</h1>
-              <p className="text-slate-400">
-                Track submissions, roster health, and standings for {typedTenant?.name || 'your group'} without touching shared race control.
-              </p>
+      <div className="space-y-4">
+        <PageBackLink
+          href={access.isPlatformAdmin ? '/admin' : '/leaderboard?view=tenant'}
+          label={access.isPlatformAdmin ? 'Back to Admin' : 'Back to Standings'}
+        />
+        <SectionHeader
+          eyebrow="Group ops"
+          title={typedTenant?.name || 'Group operations'}
+          description={`Run the roster, invites, race-week coverage, and standings for ${typedTenant?.name || 'your group'} without touching shared race control.`}
+          aside={<Building2 className="h-8 w-8 text-red-500" />}
+        />
+
+        <div className="flex flex-wrap items-center gap-3">
+          <TenantContextBanner tenantName={typedTenant?.name || null} label="Operating in" />
+          {typedTenant?.is_test && (
+            <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm font-bold uppercase tracking-wider text-amber-200">
+              Test group
             </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <TenantContextBanner tenantName={typedTenant?.name || null} label="Operating in" />
-            {typedTenant?.is_test && (
-              <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm font-bold uppercase tracking-wider text-amber-200">
-                Test group
-              </div>
-            )}
-            {access.isPlatformAdmin ? (
-              <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200">
-                Platform admin mode stays active while you inspect group competition health.
-              </div>
-            ) : (
-              <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200">
-                Group admin mode is scoped to this roster, its standings, and weekend participation.
-              </div>
-            )}
+          )}
+          <div className="rounded-xl border border-white/10 bg-white/5 px-4 py-3 text-sm font-medium text-slate-200">
+            {access.isPlatformAdmin
+              ? 'Platform admin mode stays active while you inspect this group.'
+              : 'Group admin mode is scoped to this roster and its competition health.'}
           </div>
           {hiddenTestMemberCount > 0 && !typedTenant?.is_test && (
             <div className="rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm text-slate-300">
-              Group health and submission counts exclude {hiddenTestMemberCount} test account{hiddenTestMemberCount === 1 ? '' : 's'}.
+              Excluding {hiddenTestMemberCount} test account{hiddenTestMemberCount === 1 ? '' : 's'} from health counts.
             </div>
           )}
         </div>
@@ -363,6 +357,13 @@ export default async function TenantAdminPage() {
             Invite people
             <ArrowRight className="h-4 w-4" />
           </a>
+          <a
+            href="#group-roster"
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
+          >
+            Manage roster
+            <ArrowRight className="h-4 w-4" />
+          </a>
           <PendingLink
             href="/leaderboard?view=tenant"
             className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
@@ -372,6 +373,79 @@ export default async function TenantAdminPage() {
           </PendingLink>
         </div>
       </div>
+
+      <section className="rounded-3xl border border-white/10 bg-card p-4 shadow-xl sm:p-5">
+        <div className="flex flex-wrap items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+          <span>{openItemsCount} open item{openItemsCount === 1 ? '' : 's'}</span>
+          <span className="text-slate-700">/</span>
+          <span>{operationalMembers.length} members</span>
+          <span className="text-slate-700">/</span>
+          <span>Season {currentSeason}</span>
+        </div>
+
+        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+          <PendingLink
+            href={featuredRace ? `/race/${featuredRace.id}/predict` : '/season'}
+            className="group rounded-2xl border border-red-500/20 bg-red-500/10 p-5 transition-colors hover:bg-red-500/14"
+          >
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-red-100">
+              <ClipboardCheck className="h-4 w-4" />
+              Race-week coverage
+            </div>
+            <div className="mt-4 grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end">
+              <div className="text-5xl font-black italic leading-none text-white">
+                {featuredRace ? `${nextRaceCoverage}/${operationalMembers.length}` : '0/0'}
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-xl font-black italic tracking-tight text-white">
+                  {featuredRace ? featuredRace.race_name : 'No active race'}
+                </h2>
+                <p className="mt-1 text-sm text-red-100/80">
+                  {featuredRace
+                    ? `${coveragePercent}% submitted. ${getRaceStatusCopy(getEffectiveRaceStatus(featuredRace))}`
+                    : 'There is no current race checkpoint for this group.'}
+                </p>
+              </div>
+            </div>
+            <span className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white transition-colors group-hover:bg-red-500">
+              Open race page
+              <ArrowRight className="h-4 w-4" />
+            </span>
+          </PendingLink>
+
+          <div className="grid gap-3">
+            <a
+              href="#group-invites"
+              className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-white/5 bg-black/20 p-4 transition-colors hover:bg-white/[0.04]"
+            >
+              <div className="min-w-0">
+                <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
+                  <Link2 className="h-3.5 w-3.5 text-red-400" />
+                  Invites
+                </div>
+                <div className="mt-1 text-2xl font-black italic text-white">{activeInviteCount}</div>
+                <p className="mt-1 text-sm text-slate-400">Active links ready to share.</p>
+              </div>
+              <ArrowRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
+            </a>
+
+            <a
+              href="#group-roster"
+              className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-white/5 bg-black/20 p-4 transition-colors hover:bg-white/[0.04]"
+            >
+              <div className="min-w-0">
+                <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
+                  <UserCheck className="h-3.5 w-3.5 text-red-400" />
+                  Access
+                </div>
+                <div className="mt-1 text-2xl font-black italic text-white">{tenantAdminCount}</div>
+                <p className="mt-1 text-sm text-slate-400">Group admins with scoped control.</p>
+              </div>
+              <ArrowRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
+            </a>
+          </div>
+        </div>
+      </section>
 
       {featuredRace && (
         <section className="grid gap-5 rounded-3xl border border-red-500/20 bg-red-500/8 p-5 shadow-2xl lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] md:p-6">
@@ -518,7 +592,10 @@ export default async function TenantAdminPage() {
 
           <div className="space-y-4">
             <div className="rounded-2xl border border-white/5 bg-black/30 p-5">
-              <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Current Season</div>
+              <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                <CalendarClock className="h-3.5 w-3.5 text-red-400" />
+                Current Season
+              </div>
               <div className="mt-2 text-2xl font-bold text-white">Season {currentSeason}</div>
               <p className="mt-2 text-sm text-slate-400">
                 {openRaces.length} open, {lockedOrCompletedRaces.length} in flight, {scoredRaces.length} scored.
@@ -558,75 +635,12 @@ export default async function TenantAdminPage() {
         </section>
       </div>
 
-      <section className="rounded-3xl border border-white/10 bg-card p-6 shadow-2xl md:p-8">
-        <h2 className="mb-6 flex items-center border-b border-white/5 pb-4 text-2xl font-black italic tracking-tighter">
-          <Users className="mr-2 h-6 w-6 text-red-500" /> GROUP ROSTER
-        </h2>
-
-        {roster.length === 0 ? (
-          <div className="rounded-2xl border border-white/5 bg-black/30 p-5 text-slate-400">
-            No members are assigned to this group yet.
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-left">
-              <thead>
-                <tr className="border-b border-white/5 text-sm text-slate-400">
-                  <th className="p-4 font-bold">Member</th>
-                  <th className="p-4 font-bold">Access</th>
-                  <th className="p-4 font-bold text-right">Points</th>
-                  <th className="p-4 font-bold text-right hidden sm:table-cell">Scored</th>
-                  <th className="p-4 font-bold text-right">Featured Race</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/5">
-                {roster.map(({ member, standing, featuredRaceStatus }) => (
-                  <tr key={member.id} className="hover:bg-white/[0.02] transition-colors">
-                    <td className="p-4">
-                      <div className="font-semibold text-slate-100">
-                        {getProfileDisplayName(member.display_name, member.email)}
-                        {member.is_test && (
-                          <span className="ml-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
-                            Test
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-sm text-slate-500">{member.email}</div>
-                    </td>
-                    <td className="p-4">
-                      <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-1 text-sm font-medium text-slate-200">
-                        {member.role === 'admin' ? <Crown className="h-4 w-4 text-red-400" /> : <Users className="h-4 w-4 text-slate-400" />}
-                        {getMemberAccessLabel(member)}
-                      </div>
-                    </td>
-                    <td className="p-4 text-right text-xl font-black italic text-red-500">
-                      {standing?.total_points ?? 0}
-                    </td>
-                    <td className="p-4 text-right text-slate-400 hidden sm:table-cell">
-                      {standing?.races_scored ?? 0}
-                    </td>
-                    <td className="p-4 text-right">
-                      <span
-                        className={`inline-flex rounded-full px-3 py-1 text-sm font-bold ${
-                          featuredRaceStatus === 'Entered' || featuredRaceStatus === 'Locked in' || featuredRaceStatus === 'Scored'
-                            ? 'bg-green-500/20 text-green-300'
-                            : featuredRaceStatus === 'Needs entry'
-                              ? 'bg-amber-500/20 text-amber-300'
-                              : featuredRaceStatus.includes('Missed')
-                                ? 'bg-red-500/20 text-red-300'
-                                : 'bg-white/5 text-slate-300'
-                        }`}
-                      >
-                        {featuredRaceStatus}
-                      </span>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </section>
+      <GroupRosterPanel
+        roster={roster}
+        currentUserId={access.userId}
+        isMainGroup={isMainGroup}
+        tenantAdminCount={tenantAdminCount}
+      />
     </div>
   )
 }
