@@ -19,8 +19,13 @@ export default async function ProfilePage() {
     redirect('/login')
   }
 
-  const [{ data: profile }, tenantContext] = await Promise.all([
+  const [{ data: profile }, { data: notificationPreferences }, tenantContext] = await Promise.all([
     supabase.from('profiles').select('display_name, email').eq('id', user.id).single(),
+    supabase
+      .from('notification_preferences')
+      .select('race_reminder_emails_enabled, score_recap_emails_enabled')
+      .eq('user_id', user.id)
+      .maybeSingle(),
     getUserTenantContext(supabase, user.id),
   ])
 
@@ -70,6 +75,8 @@ export default async function ProfilePage() {
           <ProfileForm
             defaultDisplayName={resolvedDisplayName}
             email={profile?.email || user.email || null}
+            defaultRaceReminderEmailsEnabled={Boolean(notificationPreferences?.race_reminder_emails_enabled)}
+            defaultScoreRecapEmailsEnabled={Boolean(notificationPreferences?.score_recap_emails_enabled)}
           />
         </section>
 

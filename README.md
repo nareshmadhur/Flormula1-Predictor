@@ -324,12 +324,80 @@ SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 NEXT_PUBLIC_SITE_URL=https://www.flormula1.nl
 BREVO_API_KEY=your_brevo_api_key
 GROUP_WELCOME_EMAIL_FROM="Flormula1 <hello@flormula1.nl>"
+LIFECYCLE_EMAIL_FROM="Flormula1 <hello@flormula1.nl>"
+NOTIFICATION_CRON_SECRET=choose_a_long_random_secret
+RACE_REMINDER_LEAD_HOURS=24
+SCORE_RECAP_LOOKBACK_DAYS=14
 ```
 
 `NEXT_PUBLIC_SITE_URL` is the canonical public domain used for shareable links, auth email callbacks, metadata, robots, and sitemap URLs.
 
 `BREVO_API_KEY` and `GROUP_WELCOME_EMAIL_FROM` are optional. When both are present, Flormula1 sends a welcome email after a user joins a group through an invite or a platform-admin assignment.
 This is separate from Supabase Auth email delivery. Supabase can keep using Brevo SMTP for signup/reset emails, while app-triggered lifecycle emails use Brevo's transactional API.
+
+`LIFECYCLE_EMAIL_FROM` is optional and overrides the sender used for race reminder and score recap emails. If it is absent, the app falls back to `GROUP_WELCOME_EMAIL_FROM`, then the generic Brevo sender variables.
+
+`NOTIFICATION_CRON_SECRET` protects lifecycle email runner endpoints. `CRON_SECRET` is also accepted for hosts such as Vercel that already use that name.
+
+`RACE_REMINDER_LEAD_HOURS` controls the pre-lock reminder window. The default is `24`, which means the runner emails opted-in users who have not submitted when a race locks within the next 24 hours. `SCORE_RECAP_LOOKBACK_DAYS` limits score recap scans to recently raced, already-scored rounds.
+
+### Lifecycle email scheduling
+
+Apply the latest Supabase migrations before enabling lifecycle emails. They add notification preferences, one-click unsubscribe tokens, and a delivery event log that prevents duplicate sends.
+
+Schedule these protected endpoints from your deployment provider or cron runner at the send time you want:
+
+```bash
+curl -H "Authorization: Bearer $NOTIFICATION_CRON_SECRET" \
+  https://www.flormula1.nl/api/notifications/race-reminders
+
+curl -H "Authorization: Bearer $NOTIFICATION_CRON_SECRET" \
+  https://www.flormula1.nl/api/notifications/score-recaps
+```
+
+Recommended starting schedule:
+- Run `/api/notifications/race-reminders` once each morning during race weeks, or hourly if you want reminders closer to the configured lead window.
+- Run `/api/notifications/score-recaps` at the preferred recap time, for example the morning after admin scoring.
+
+Both endpoints are idempotent. They claim a unique event per user, race, and email type before sending, so repeated cron calls do not resend the same reminder or recap.
+
+Before enabling cron, test the same production project safely:
+
+```bash
+curl -H "Authorization: Bearer $NOTIFICATION_CRON_SECRET" \
+  "https://www.flormula1.nl/api/notifications/race-reminders?dryRun=1"
+
+curl -H "Authorization: Bearer $NOTIFICATION_CRON_SECRET" \
+  "https://www.flormula1.nl/api/notifications/score-recaps?dryRun=1"
+```
+
+Dry-run mode reads real eligibility, returns counts and masked recipient previews, does not call Brevo, and does not create delivery events.
+
+To verify rendered templates and Brevo delivery without emailing production users, use test-recipient mode:
+
+```bash
+curl -H "Authorization: Bearer $NOTIFICATION_CRON_SECRET" \
+  -H "x-notification-test-recipient: you@example.com" \
+  "https://www.flormula1.nl/api/notifications/race-reminders?test=1&limit=3"
+
+curl -H "Authorization: Bearer $NOTIFICATION_CRON_SECRET" \
+  -H "x-notification-test-recipient: you@example.com" \
+  "https://www.flormula1.nl/api/notifications/score-recaps?test=1&limit=3"
+```
+
+Test-recipient mode sends generated emails only to the override address, prefixes subjects with `[TEST]`, removes live unsubscribe links from the email body, and uses separate `test:` event keys so real reminder/recap sends are not consumed. The default test limit is 5 sends per call; pass `limit=` to lower or raise it up to 50.
+
+To test with actual test-user inboxes, mark the profiles or their tenants as test mode and call:
+
+```bash
+curl -H "Authorization: Bearer $NOTIFICATION_CRON_SECRET" \
+  "https://www.flormula1.nl/api/notifications/race-reminders?dryRun=1&testUsersOnly=1"
+
+curl -H "Authorization: Bearer $NOTIFICATION_CRON_SECRET" \
+  "https://www.flormula1.nl/api/notifications/score-recaps?test=1&testUsersOnly=1&limit=3"
+```
+
+`testUsersOnly=1` includes only test-mode profiles/tenants. In live cron calls, test users are still excluded.
 
 Set it in:
 - `.env.local` for local development. Use `http://localhost:3000` if you want auth email links to return to your local app.

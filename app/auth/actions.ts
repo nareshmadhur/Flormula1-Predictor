@@ -74,6 +74,7 @@ export async function signup(
   const password = String(formData.get('password') ?? '')
   const displayName = getString(formData.get('display_name'))
   const next = getSafeNextPath(formData.get('next'))
+  const emailRemindersOptIn = formData.get('email_reminders_opt_in') === 'on'
 
   if (!displayName || !email || !password) {
     return { error: 'Fill in your name, email, and password.', email }
@@ -86,6 +87,7 @@ export async function signup(
       emailRedirectTo: getAuthCallbackUrl(next),
       data: {
         display_name: displayName,
+        email_reminders_opt_in: emailRemindersOptIn,
       },
     },
   })

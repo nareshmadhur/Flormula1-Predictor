@@ -75,4 +75,6 @@ Likely new tables:
 
 ## Status
 
-Planned
+In progress
+
+Initial implementation now includes email preferences, signup opt-in capture, one-click unsubscribe, notification delivery logging, protected pre-lock reminder and post-score recap runners, and branded Brevo transactional templates.

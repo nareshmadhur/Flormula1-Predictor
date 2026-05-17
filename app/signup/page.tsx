@@ -120,6 +120,22 @@ function SignupForm({
         />
       </div>
 
+      <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/25 p-4 text-left">
+        <input
+          type="checkbox"
+          name="email_reminders_opt_in"
+          className="mt-1 h-5 w-5 rounded border-white/20 bg-black/40 text-red-600 accent-red-600"
+        />
+        <span>
+          <span className="block text-sm font-bold text-slate-100">
+            Send me race reminder and score recap emails
+          </span>
+          <span className="mt-1 block text-sm leading-5 text-slate-500">
+            Get a reminder before prediction lock if you have not entered, plus a recap when scores are published.
+          </span>
+        </span>
+      </label>
+
       <button
         type="submit"
         disabled={pending}

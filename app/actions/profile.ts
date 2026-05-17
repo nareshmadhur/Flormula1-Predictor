@@ -21,6 +21,8 @@ export async function updateOwnProfile(
   }
 
   const displayName = (formData.get('display_name') as string | null)?.trim() || null
+  const raceReminderEmailsEnabled = formData.get('race_reminder_emails_enabled') === 'on'
+  const scoreRecapEmailsEnabled = formData.get('score_recap_emails_enabled') === 'on'
 
   if (!displayName || displayName.length < 2) {
     return {
@@ -49,6 +51,30 @@ export async function updateOwnProfile(
     }
   }
 
+  const { error: preferenceError } = await supabase
+    .from('notification_preferences')
+    .upsert(
+      {
+        user_id: user.id,
+        race_reminder_emails_enabled: raceReminderEmailsEnabled,
+        score_recap_emails_enabled: scoreRecapEmailsEnabled,
+        unsubscribed_at:
+          raceReminderEmailsEnabled || scoreRecapEmailsEnabled
+            ? null
+            : new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      },
+      { onConflict: 'user_id' }
+    )
+
+  if (preferenceError) {
+    console.error('Failed to update notification preferences', preferenceError)
+    return {
+      status: 'error',
+      message: 'Your name was saved, but email preferences could not be updated.',
+    }
+  }
+
   revalidatePath('/', 'layout')
   revalidatePath('/')
   revalidatePath('/leaderboard')
@@ -60,6 +86,6 @@ export async function updateOwnProfile(
 
   return {
     status: 'success',
-    message: 'Display name updated.',
+    message: 'Profile settings updated.',
   }
 }

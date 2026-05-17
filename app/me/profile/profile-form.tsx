@@ -9,11 +9,20 @@ import { RaceStartLights } from '@/components/ui/race-start-lights'
 type ProfileFormProps = {
   defaultDisplayName: string
   email: string | null
+  defaultRaceReminderEmailsEnabled: boolean
+  defaultScoreRecapEmailsEnabled: boolean
 }
 
-export function ProfileForm({ defaultDisplayName, email }: ProfileFormProps) {
+export function ProfileForm({
+  defaultDisplayName,
+  email,
+  defaultRaceReminderEmailsEnabled,
+  defaultScoreRecapEmailsEnabled,
+}: ProfileFormProps) {
   const router = useRouter()
   const [displayName, setDisplayName] = useState(defaultDisplayName)
+  const [raceReminderEmailsEnabled, setRaceReminderEmailsEnabled] = useState(defaultRaceReminderEmailsEnabled)
+  const [scoreRecapEmailsEnabled, setScoreRecapEmailsEnabled] = useState(defaultScoreRecapEmailsEnabled)
   const [state, formAction, pending] = useActionState(
     updateOwnProfile,
     initialProfileActionState
@@ -64,6 +73,43 @@ export function ProfileForm({ defaultDisplayName, email }: ProfileFormProps) {
         </div>
       </div>
 
+      <div className="rounded-2xl border border-white/10 bg-black/25 p-5">
+        <div className="text-xs font-bold uppercase tracking-widest text-slate-500">Email preferences</div>
+        <div className="mt-4 grid gap-3">
+          <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/25 p-4">
+            <input
+              type="checkbox"
+              name="race_reminder_emails_enabled"
+              checked={raceReminderEmailsEnabled}
+              onChange={(event) => setRaceReminderEmailsEnabled(event.target.checked)}
+              className="mt-1 h-5 w-5 rounded border-white/20 bg-black/40 text-red-600 accent-red-600"
+            />
+            <span>
+              <span className="block text-sm font-bold text-slate-100">Prediction reminders</span>
+              <span className="mt-1 block text-sm leading-5 text-slate-500">
+                Send one reminder before lock only when you have not submitted for the next race.
+              </span>
+            </span>
+          </label>
+
+          <label className="flex items-start gap-3 rounded-2xl border border-white/10 bg-black/25 p-4">
+            <input
+              type="checkbox"
+              name="score_recap_emails_enabled"
+              checked={scoreRecapEmailsEnabled}
+              onChange={(event) => setScoreRecapEmailsEnabled(event.target.checked)}
+              className="mt-1 h-5 w-5 rounded border-white/20 bg-black/40 text-red-600 accent-red-600"
+            />
+            <span>
+              <span className="block text-sm font-bold text-slate-100">Score recaps</span>
+              <span className="mt-1 block text-sm leading-5 text-slate-500">
+                Send a recap when final points and leaderboard movement are published.
+              </span>
+            </span>
+          </label>
+        </div>
+      </div>
+
       <button
         type="submit"
         disabled={pending}
@@ -74,7 +120,7 @@ export function ProfileForm({ defaultDisplayName, email }: ProfileFormProps) {
         }`}
       >
         {pending && <RaceStartLights />}
-        {pending ? 'Saving Name...' : 'Save Display Name'}
+        {pending ? 'Saving Settings...' : 'Save Profile Settings'}
       </button>
 
       {state.message && (
