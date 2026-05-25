@@ -8,6 +8,14 @@ import { isTestModeProfile } from '@/utils/test-mode'
 
 type NotificationKind = 'pre_lock_reminder' | 'score_recap'
 
+export type ManualLifecycleEmailKind = 'prediction' | 'results'
+
+type ManualLifecycleEmailResult = {
+  ok: boolean
+  sent: boolean
+  message: string
+}
+
 type RaceNotificationRunResult = {
   ok: boolean
   notConfigured?: boolean
@@ -92,6 +100,21 @@ type UserRaceScore = {
   podium_points: number
   bonus_points: number
   exact_hits: number
+}
+
+type ManualUserRaceScore = UserRaceScore & {
+  race_id: string
+}
+
+type RaceScoreStanding = UserRaceScore & {
+  profiles?: { tenant_id?: string | null } | Array<{ tenant_id?: string | null }> | null
+}
+
+type RaceScorePosition = {
+  overallRank: number | null
+  overallTotal: number
+  groupRank: number | null
+  groupTotal: number
 }
 
 type LeaderboardStanding = CompetitionStanding & {
@@ -309,6 +332,26 @@ async function claimNotificationEvent(
   return data as ClaimedNotificationEvent
 }
 
+async function claimManualNotificationEvent(
+  supabase: NotificationClient,
+  input: {
+    userId: string
+    raceId: string
+    eventKey: string
+    eventType: NotificationKind
+    scheduledFor: string
+  }
+): Promise<{ event: ClaimedNotificationEvent | null; blockedStatus?: ExistingNotificationEvent['status'] }> {
+  const existing = await getExistingNotificationEvent(supabase, input)
+
+  if (existing && existing.status !== 'failed') {
+    return { event: null, blockedStatus: existing.status }
+  }
+
+  const event = await claimNotificationEvent(supabase, input)
+  return { event, blockedStatus: event ? undefined : 'queued' }
+}
+
 async function updateNotificationEvent(
   supabase: NotificationClient,
   eventId: string,
@@ -477,18 +520,72 @@ function getScoreMovement({
   }
 }
 
+function getRaceScoreProfile(entry: RaceScoreStanding) {
+  return getRelatedOne(entry.profiles)
+}
+
+function sortRaceScoreStandings<T extends UserRaceScore>(scores: T[]) {
+  return [...scores].sort((left, right) => {
+    if (right.total_points !== left.total_points) return right.total_points - left.total_points
+    if (right.exact_hits !== left.exact_hits) return right.exact_hits - left.exact_hits
+    if (right.podium_points !== left.podium_points) return right.podium_points - left.podium_points
+    if (right.bonus_points !== left.bonus_points) return right.bonus_points - left.bonus_points
+    return left.user_id.localeCompare(right.user_id)
+  })
+}
+
+function getRaceScoreRank(entries: Array<{ user_id: string }>, userId: string) {
+  const index = entries.findIndex((entry) => entry.user_id === userId)
+  return index >= 0 ? index + 1 : null
+}
+
+function getRaceScorePosition({
+  userId,
+  tenantId,
+  scores,
+}: {
+  userId: string
+  tenantId?: string | null
+  scores: RaceScoreStanding[]
+}): RaceScorePosition {
+  const overallStandings = sortRaceScoreStandings(scores)
+  const groupStandings = tenantId
+    ? sortRaceScoreStandings(
+        scores.filter((entry) => getRaceScoreProfile(entry)?.tenant_id === tenantId)
+      )
+    : []
+
+  return {
+    overallRank: getRaceScoreRank(overallStandings, userId),
+    overallTotal: overallStandings.length,
+    groupRank: tenantId ? getRaceScoreRank(groupStandings, userId) : null,
+    groupTotal: groupStandings.length,
+  }
+}
+
+function formatRank(rank: number | null, total: number) {
+  if (!rank || total === 0) return 'Rank pending'
+  return `#${rank} of ${total}`
+}
+
+function getRaceScoreRankDetail(position: RaceScorePosition) {
+  const raceRank = `Race rank ${formatRank(position.overallRank, position.overallTotal)}`
+  if (!position.groupRank) return raceRank
+  return `${raceRank}; group rank ${formatRank(position.groupRank, position.groupTotal)}`
+}
+
 function renderScoreRecapEmail({
   race,
   preference,
   score,
-  movement,
+  position,
   testRecipient,
   isTestSend,
 }: {
   race: NotificationRace
   preference: NotificationPreference
   score: UserRaceScore
-  movement: { global: string; group: string }
+  position: RaceScorePosition
   testRecipient?: string | null
   isTestSend?: boolean
 }) {
@@ -522,15 +619,12 @@ function renderScoreRecapEmail({
         {
           label: 'Weekend score',
           value: `${score.total_points} pts`,
-          detail: `${score.podium_points} podium pts, ${score.bonus_points} bonus pts, ${score.exact_hits} exact podium hit${score.exact_hits === 1 ? '' : 's'}.`,
+          detail: getRaceScoreRankDetail(position),
         },
         {
-          label: 'Overall table',
-          value: movement.global,
-        },
-        {
-          label: 'Group table',
-          value: movement.group,
+          label: 'Full results',
+          value: 'Open the race recap',
+          detail: 'Score breakdown, top scorers, bonus answers, and leaderboard movement are waiting on the site.',
         },
       ]),
   })
@@ -568,6 +662,17 @@ async function sendClaimedEmail({
           originalRecipientEmail: profile?.email || null,
         }
       : {}),
+  }
+
+  if (!targetEmail) {
+    await updateNotificationEvent(supabase, event.id, {
+      status: 'failed',
+      recipientEmail: null,
+      subject: deliveredSubject,
+      errorMessage: 'Recipient email is missing.',
+      metadata: eventMetadata,
+    })
+    return false
   }
 
   try {
@@ -608,6 +713,362 @@ async function sendClaimedEmail({
     })
     return false
   }
+}
+
+async function getManualNotificationPreference(supabase: NotificationClient, userId: string) {
+  const { data, error } = await supabase
+    .from('notification_preferences')
+    .select(
+      'user_id, race_reminder_emails_enabled, score_recap_emails_enabled, unsubscribe_token, unsubscribed_at, profiles(id, display_name, email, confirmed_at, is_test, tenant_id, tenants(is_test))'
+    )
+    .eq('user_id', userId)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to load notification preferences: ${error.message}`)
+  }
+
+  return data as NotificationPreference | null
+}
+
+function getManualPreferenceBlockReason(
+  preference: NotificationPreference | null,
+  kind: ManualLifecycleEmailKind
+) {
+  if (!preference) return 'This user has not set email preferences yet.'
+
+  const profile = getProfile(preference)
+  const email = profile?.email?.trim()
+
+  if (!email) return 'The selected user does not have an email address.'
+  if (!profile?.confirmed_at) return 'The selected user has not confirmed their email address.'
+  if (preference.unsubscribed_at) return 'The selected user has unsubscribed from emails.'
+  if (!preference.unsubscribe_token) return 'The selected user is missing unsubscribe preferences.'
+  if (kind === 'prediction' && !preference.race_reminder_emails_enabled) {
+    return 'The selected user has not enabled prediction reminder emails.'
+  }
+  if (kind === 'results' && !preference.score_recap_emails_enabled) {
+    return 'The selected user has not enabled results emails.'
+  }
+
+  return null
+}
+
+function getBlockedEventMessage(status: ExistingNotificationEvent['status'] | undefined, raceName: string) {
+  if (status === 'sent') return `This email was already sent for ${raceName}.`
+  if (status === 'queued') return `This email is already waiting to send for ${raceName}.`
+  return `This email could not be reserved for ${raceName}. Try again in a moment.`
+}
+
+async function sendManualPredictionEmail({
+  supabase,
+  preference,
+  now,
+}: {
+  supabase: NotificationClient
+  preference: NotificationPreference
+  now: Date
+}): Promise<ManualLifecycleEmailResult> {
+  const leadHours = getReminderLeadHours()
+  const nowIso = now.toISOString()
+  const windowEnd = new Date(now.getTime() + leadHours * 60 * 60_000)
+  const eventKey = buildEventKey(`pre_lock:${leadHours}h`, {})
+
+  const { data: races, error: racesError } = await supabase
+    .from('races')
+    .select('id, season, round, race_name, race_start_at, prediction_lock_at, circuits(name, country, emoji)')
+    .neq('status', 'cancelled')
+    .gt('prediction_lock_at', nowIso)
+    .lte('prediction_lock_at', windowEnd.toISOString())
+    .order('prediction_lock_at', { ascending: true })
+
+  if (racesError) {
+    throw new Error(`Failed to load races for reminders: ${racesError.message}`)
+  }
+
+  const candidateRaces = (races || []) as NotificationRace[]
+  if (candidateRaces.length === 0) {
+    return {
+      ok: false,
+      sent: false,
+      message: 'No prediction reminder is due right now. The next race is not inside the reminder window.',
+    }
+  }
+
+  const { data: predictions, error: predictionsError } = await supabase
+    .from('predictions')
+    .select('race_id')
+    .eq('user_id', preference.user_id)
+    .in(
+      'race_id',
+      candidateRaces.map((race) => race.id)
+    )
+
+  if (predictionsError) {
+    throw new Error(`Failed to load predictions: ${predictionsError.message}`)
+  }
+
+  const predictedRaceIds = new Set((predictions || []).map((prediction) => prediction.race_id as string))
+  const race = candidateRaces.find((candidateRace) => !predictedRaceIds.has(candidateRace.id))
+
+  if (!race) {
+    return {
+      ok: false,
+      sent: false,
+      message: 'No prediction reminder is due right now. The selected user has already submitted for races in the reminder window.',
+    }
+  }
+
+  const claimed = await claimManualNotificationEvent(supabase, {
+    userId: preference.user_id,
+    raceId: race.id,
+    eventKey,
+    eventType: 'pre_lock_reminder',
+    scheduledFor: nowIso,
+  })
+
+  if (!claimed.event) {
+    return {
+      ok: false,
+      sent: false,
+      message: getBlockedEventMessage(claimed.blockedStatus, race.race_name),
+    }
+  }
+
+  const subject = `Prediction reminder: ${race.race_name}`
+  const delivered = await sendClaimedEmail({
+    supabase,
+    event: claimed.event,
+    preference,
+    subject,
+    htmlContent: renderPreLockEmail({
+      race,
+      preference,
+      leadHours,
+    }),
+    metadata: {
+      leadHours,
+      predictionLockAt: race.prediction_lock_at,
+      manualAdminSend: true,
+    },
+  })
+
+  if (!delivered) {
+    return {
+      ok: false,
+      sent: false,
+      message: `The prediction reminder for ${race.race_name} could not be sent. Check the delivery log for details.`,
+    }
+  }
+
+  return {
+    ok: true,
+    sent: true,
+    message: `Sent the prediction reminder for ${race.race_name}.`,
+  }
+}
+
+async function sendManualResultsEmail({
+  supabase,
+  preference,
+  now,
+}: {
+  supabase: NotificationClient
+  preference: NotificationPreference
+  now: Date
+}): Promise<ManualLifecycleEmailResult> {
+  const lookbackDays = getScoreRecapLookbackDays()
+  const lookbackStart = new Date(now.getTime() - lookbackDays * 24 * 60 * 60_000)
+  const eventKey = buildEventKey('score_recap:published', {})
+
+  const { data: races, error: racesError } = await supabase
+    .from('races')
+    .select('id, season, round, race_name, race_start_at, prediction_lock_at, circuits(name, country, emoji)')
+    .eq('status', 'scored')
+    .gte('race_start_at', lookbackStart.toISOString())
+    .order('race_start_at', { ascending: false })
+
+  if (racesError) {
+    throw new Error(`Failed to load scored races: ${racesError.message}`)
+  }
+
+  const scoredRaces = (races || []) as NotificationRace[]
+  if (scoredRaces.length === 0) {
+    return {
+      ok: false,
+      sent: false,
+      message: 'No results email is due right now. There is no recently scored race in the send window.',
+    }
+  }
+
+  const { data: userScores, error: userScoresError } = await supabase
+    .from('user_race_scores')
+    .select('race_id, user_id, total_points, podium_points, bonus_points, exact_hits')
+    .eq('user_id', preference.user_id)
+    .in(
+      'race_id',
+      scoredRaces.map((race) => race.id)
+    )
+
+  if (userScoresError) {
+    throw new Error(`Failed to load the selected user score: ${userScoresError.message}`)
+  }
+
+  const userScoreByRaceId = new Map(
+    ((userScores || []) as ManualUserRaceScore[]).map((score) => [score.race_id, score])
+  )
+  const race = scoredRaces.find((scoredRace) => userScoreByRaceId.has(scoredRace.id))
+  const score = race ? userScoreByRaceId.get(race.id) || null : null
+
+  if (!race || !score) {
+    return {
+      ok: false,
+      sent: false,
+      message: 'No results email is due right now. The selected user does not have a score for a recently scored race.',
+    }
+  }
+
+  const [{ data: raceScores, error: raceScoresError }, { data: leaderboardRows, error: leaderboardError }] =
+    await Promise.all([
+      supabase
+        .from('user_race_scores')
+        .select('user_id, total_points, podium_points, bonus_points, exact_hits, profiles(tenant_id)')
+        .eq('race_id', race.id),
+      supabase
+        .from('leaderboard_cache')
+        .select('user_id, total_points, exact_hits, races_scored, profiles(tenant_id)')
+        .eq('season', race.season),
+    ])
+
+  if (raceScoresError) {
+    throw new Error(`Failed to load race scores for ${race.race_name}: ${raceScoresError.message}`)
+  }
+
+  if (leaderboardError) {
+    throw new Error(`Failed to load leaderboard for ${race.race_name}: ${leaderboardError.message}`)
+  }
+
+  const typedRaceScores = (raceScores || []) as RaceScoreStanding[]
+  const scoreByUserId = new Map(typedRaceScores.map((raceScore) => [raceScore.user_id, raceScore]))
+  const currentStandings = sortCompetitionStandings((leaderboardRows || []) as LeaderboardStanding[])
+  const previousStandings = sortCompetitionStandings(
+    currentStandings.flatMap((entry) => {
+      const raceScore = scoreByUserId.get(entry.user_id)
+      const previousEntry: LeaderboardStanding = {
+        ...entry,
+        total_points: entry.total_points - (raceScore?.total_points || 0),
+        exact_hits: entry.exact_hits - (raceScore?.exact_hits || 0),
+        races_scored: entry.races_scored - (raceScore ? 1 : 0),
+      }
+
+      return previousEntry.races_scored > 0 ? [previousEntry] : []
+    })
+  )
+
+  const claimed = await claimManualNotificationEvent(supabase, {
+    userId: preference.user_id,
+    raceId: race.id,
+    eventKey,
+    eventType: 'score_recap',
+    scheduledFor: now.toISOString(),
+  })
+
+  if (!claimed.event) {
+    return {
+      ok: false,
+      sent: false,
+      message: getBlockedEventMessage(claimed.blockedStatus, race.race_name),
+    }
+  }
+
+  const profile = getProfile(preference)
+  const movement = getScoreMovement({
+    userId: preference.user_id,
+    tenantId: profile?.tenant_id,
+    currentStandings,
+    previousStandings,
+  })
+  const position = getRaceScorePosition({
+    userId: preference.user_id,
+    tenantId: profile?.tenant_id,
+    scores: typedRaceScores,
+  })
+  const subject = `${race.race_name} recap: ${score.total_points} pts`
+  const delivered = await sendClaimedEmail({
+    supabase,
+    event: claimed.event,
+    preference,
+    subject,
+    htmlContent: renderScoreRecapEmail({
+      race,
+      preference,
+      score,
+      position,
+    }),
+    metadata: {
+      totalPoints: score.total_points,
+      podiumPoints: score.podium_points,
+      bonusPoints: score.bonus_points,
+      exactHits: score.exact_hits,
+      raceRank: position.overallRank,
+      raceRankTotal: position.overallTotal,
+      groupRaceRank: position.groupRank,
+      groupRaceRankTotal: position.groupTotal,
+      globalMovement: movement.global,
+      groupMovement: movement.group,
+      manualAdminSend: true,
+    },
+  })
+
+  if (!delivered) {
+    return {
+      ok: false,
+      sent: false,
+      message: `The results email for ${race.race_name} could not be sent. Check the delivery log for details.`,
+    }
+  }
+
+  return {
+    ok: true,
+    sent: true,
+    message: `Sent the results email for ${race.race_name}.`,
+  }
+}
+
+export async function sendManualLifecycleEmailForUser({
+  userId,
+  kind,
+  now = new Date(),
+}: {
+  userId: string
+  kind: ManualLifecycleEmailKind
+  now?: Date
+}): Promise<ManualLifecycleEmailResult> {
+  if (!isTransactionalEmailConfigured()) {
+    return {
+      ok: false,
+      sent: false,
+      message: 'Email sending is not ready yet.',
+    }
+  }
+
+  const supabase = createServiceRoleClient()
+  const preference = await getManualNotificationPreference(supabase, userId)
+  const blockReason = getManualPreferenceBlockReason(preference, kind)
+
+  if (blockReason || !preference) {
+    return {
+      ok: false,
+      sent: false,
+      message: blockReason || 'This user cannot receive the selected email.',
+    }
+  }
+
+  if (kind === 'prediction') {
+    return sendManualPredictionEmail({ supabase, preference, now })
+  }
+
+  return sendManualResultsEmail({ supabase, preference, now })
 }
 
 export async function runPreLockReminderEmails(
@@ -827,7 +1288,7 @@ export async function runScoreRecapEmails(
       await Promise.all([
         supabase
           .from('user_race_scores')
-          .select('user_id, total_points, podium_points, bonus_points, exact_hits')
+          .select('user_id, total_points, podium_points, bonus_points, exact_hits, profiles(tenant_id)')
           .eq('race_id', race.id),
         supabase
           .from('leaderboard_cache')
@@ -843,7 +1304,7 @@ export async function runScoreRecapEmails(
       throw new Error(`Failed to load leaderboard for ${race.race_name}: ${leaderboardError.message}`)
     }
 
-    const typedScores = (scores || []) as UserRaceScore[]
+    const typedScores = (scores || []) as RaceScoreStanding[]
     const scoreByUserId = new Map(typedScores.map((score) => [score.user_id, score]))
     const currentStandings = sortCompetitionStandings((leaderboardRows || []) as LeaderboardStanding[])
     const previousStandings = sortCompetitionStandings(
@@ -923,6 +1384,11 @@ export async function runScoreRecapEmails(
         currentStandings,
         previousStandings,
       })
+      const position = getRaceScorePosition({
+        userId: score.user_id,
+        tenantId: profile?.tenant_id,
+        scores: typedScores,
+      })
       const subject = `${race.race_name} recap: ${score.total_points} pts`
       const delivered = await sendClaimedEmail({
         supabase,
@@ -933,7 +1399,7 @@ export async function runScoreRecapEmails(
           race,
           preference,
           score,
-          movement,
+          position,
           testRecipient,
           isTestSend: isLimitedTestSend,
         }),
@@ -944,6 +1410,10 @@ export async function runScoreRecapEmails(
           podiumPoints: score.podium_points,
           bonusPoints: score.bonus_points,
           exactHits: score.exact_hits,
+          raceRank: position.overallRank,
+          raceRankTotal: position.overallTotal,
+          groupRaceRank: position.groupRank,
+          groupRaceRankTotal: position.groupTotal,
           globalMovement: movement.global,
           groupMovement: movement.group,
         },

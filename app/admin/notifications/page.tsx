@@ -15,8 +15,9 @@ import { SectionHeader } from '@/components/ui/section-header'
 import { ADMIN_TIME_LABEL, formatAmsterdamDateTime } from '@/utils/amsterdam-time'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { isTransactionalEmailConfigured } from '@/utils/email'
+import type { ManualLifecycleEmailKind } from '@/utils/race-notifications'
 import { createClient } from '@/utils/supabase/server'
-import { TestEmailForm } from './test-email-form'
+import { ManualEmailForm } from './manual-email-form'
 
 export const revalidate = 0
 
@@ -95,7 +96,17 @@ type TestUserRow = {
 }
 
 type UserScoreRow = {
+  race_id?: string | null
   total_points: number
+}
+
+type PredictionRow = {
+  race_id: string
+}
+
+type SelectedEventRow = {
+  status: EventStatus
+  updated_at?: string | null
 }
 
 type SearchParams = {
@@ -103,6 +114,7 @@ type SearchParams = {
   type?: string
   mode?: string
   user?: string
+  kind?: string
 }
 
 type AdminNotificationsPageProps = {
@@ -143,6 +155,15 @@ function formatNumber(value: number) {
 
 function formatDate(value: string | null | undefined) {
   return formatAmsterdamDateTime(value, { includeWeekday: false }) || 'Not set'
+}
+
+function getPositiveNumber(value: string | undefined, fallback: number) {
+  const parsed = Number(value)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback
+}
+
+function getManualEmailKind(value: string | undefined): ManualLifecycleEmailKind {
+  return value === 'results' ? 'results' : 'prediction'
 }
 
 function getEventTypeLabel(type: EventType) {
@@ -308,55 +329,113 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
   const selectedUserId =
     (params.user && testUsers.some((user) => user.id === params.user) && params.user) ||
     (testUsers.some((user) => user.id === access.userId) ? access.userId : testUsers[0]?.id || '')
+  const selectedKind = getManualEmailKind(params.kind)
   const selectedUser = testUsers.find((user) => user.id === selectedUserId) || null
   const selectedPreference = preferences.find((preference) => preference.user_id === selectedUserId) || null
+  const leadHours = getPositiveNumber(process.env.RACE_REMINDER_LEAD_HOURS, 24)
+  const scoreLookbackDays = getPositiveNumber(process.env.SCORE_RECAP_LOOKBACK_DAYS, 14)
+  const nowIso = now.toISOString()
+  const reminderWindowEnd = new Date(now.getTime() + leadHours * 60 * 60_000).toISOString()
+  const scoreLookbackStart = new Date(now.getTime() - scoreLookbackDays * 24 * 60 * 60_000).toISOString()
+  const transactionalEmailConfigured = isTransactionalEmailConfigured()
+  const predictionEventKey = `pre_lock:${leadHours}h`
+  const resultEventKey = 'score_recap:published'
 
-  const [{ data: nextRace }, { data: latestScoredRace }] = await Promise.all([
+  const [{ data: reminderRaceRows }, { data: scoredRaceRows }] = await Promise.all([
     selectedUserId
       ? supabase
           .from('races')
           .select('id, season, round, race_name, race_start_at, prediction_lock_at')
           .neq('status', 'cancelled')
-          .gt('prediction_lock_at', now.toISOString())
+          .gt('prediction_lock_at', nowIso)
+          .lte('prediction_lock_at', reminderWindowEnd)
           .order('prediction_lock_at', { ascending: true })
-          .limit(1)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
+          .limit(8)
+      : Promise.resolve({ data: [] }),
     selectedUserId
       ? supabase
           .from('races')
           .select('id, season, round, race_name, race_start_at, prediction_lock_at')
           .eq('status', 'scored')
+          .gte('race_start_at', scoreLookbackStart)
           .order('race_start_at', { ascending: false })
+          .limit(8)
+      : Promise.resolve({ data: [] }),
+  ])
+
+  const reminderRaces = (reminderRaceRows || []) as NotificationRaceRef[]
+  const scoredRaces = (scoredRaceRows || []) as NotificationRaceRef[]
+  const reminderRaceIds = reminderRaces.flatMap((race) => (race.id ? [race.id] : []))
+  const scoredRaceIds = scoredRaces.flatMap((race) => (race.id ? [race.id] : []))
+
+  const [{ data: selectedPredictions }, { data: selectedScores }] = await Promise.all([
+    selectedUserId && reminderRaceIds.length > 0
+      ? supabase
+          .from('predictions')
+          .select('race_id')
+          .eq('user_id', selectedUserId)
+          .in('race_id', reminderRaceIds)
+      : Promise.resolve({ data: [] }),
+    selectedUserId && scoredRaceIds.length > 0
+      ? supabase
+          .from('user_race_scores')
+          .select('race_id, total_points')
+          .eq('user_id', selectedUserId)
+          .in('race_id', scoredRaceIds)
+      : Promise.resolve({ data: [] }),
+  ])
+
+  const predictedRaceIds = new Set(
+    ((selectedPredictions || []) as PredictionRow[]).map((prediction) => prediction.race_id)
+  )
+  const typedNextRace =
+    reminderRaces.find((race) => race.id && !predictedRaceIds.has(race.id)) ||
+    reminderRaces[0] ||
+    null
+  const selectedPrediction = Boolean(typedNextRace?.id && predictedRaceIds.has(typedNextRace.id))
+  const scoreByRaceId = new Map(
+    ((selectedScores || []) as UserScoreRow[])
+      .filter((score) => score.race_id)
+      .map((score) => [score.race_id as string, score])
+  )
+  const typedLatestScoredRace =
+    scoredRaces.find((race) => race.id && scoreByRaceId.has(race.id)) ||
+    scoredRaces[0] ||
+    null
+  const typedSelectedScore = typedLatestScoredRace?.id
+    ? scoreByRaceId.get(typedLatestScoredRace.id) || null
+    : null
+
+  const [{ data: selectedPredictionEvent }, { data: selectedResultEvent }] = await Promise.all([
+    selectedUserId && typedNextRace?.id
+      ? supabase
+          .from('notification_events')
+          .select('status, updated_at')
+          .eq('user_id', selectedUserId)
+          .eq('race_id', typedNextRace.id)
+          .eq('event_key', predictionEventKey)
+          .in('status', ['queued', 'sent'])
+          .order('updated_at', { ascending: false })
+          .limit(1)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+    selectedUserId && typedLatestScoredRace?.id
+      ? supabase
+          .from('notification_events')
+          .select('status, updated_at')
+          .eq('user_id', selectedUserId)
+          .eq('race_id', typedLatestScoredRace.id)
+          .eq('event_key', resultEventKey)
+          .in('status', ['queued', 'sent'])
+          .order('updated_at', { ascending: false })
           .limit(1)
           .maybeSingle()
       : Promise.resolve({ data: null }),
   ])
 
-  const typedNextRace = nextRace as NotificationRaceRef | null
-  const typedLatestScoredRace = latestScoredRace as NotificationRaceRef | null
-
-  const [{ data: selectedPrediction }, { data: selectedScore }] = await Promise.all([
-    selectedUserId && typedNextRace?.id
-      ? supabase
-          .from('predictions')
-          .select('user_id')
-          .eq('race_id', typedNextRace.id)
-          .eq('user_id', selectedUserId)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    selectedUserId && typedLatestScoredRace?.id
-      ? supabase
-          .from('user_race_scores')
-          .select('total_points')
-          .eq('race_id', typedLatestScoredRace.id)
-          .eq('user_id', selectedUserId)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-  ])
-
-  const typedSelectedScore = selectedScore as UserScoreRow | null
-  const testEmailUsers = testUsers.map((user) => ({
+  const typedSelectedPredictionEvent = selectedPredictionEvent as SelectedEventRow | null
+  const typedSelectedResultEvent = selectedResultEvent as SelectedEventRow | null
+  const manualEmailUsers = testUsers.map((user) => ({
     id: user.id,
     label: user.email ? `${getUserLabel(user)} <${user.email}>` : getUserLabel(user),
   }))
@@ -365,63 +444,84 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
     : selectedUser
       ? getUserLabel(selectedUser)
       : 'No user selected'
-  const baseTestConditions = [
+  const baseManualConditions = [
     {
       label: 'Confirmed account email',
       passed: Boolean(selectedUser?.confirmed_at && selectedUser?.email),
       detail: selectedUser?.email || 'No email found',
     },
     {
-      label: 'Not unsubscribed',
-      passed: !selectedPreference?.unsubscribed_at,
+      label: 'Email sending ready',
+      passed: transactionalEmailConfigured,
+    },
+    {
+      label: 'Preferences active',
+      passed: Boolean(selectedPreference && !selectedPreference.unsubscribed_at),
       detail: selectedPreference?.unsubscribed_at
         ? `Unsubscribed ${formatDate(selectedPreference.unsubscribed_at)}`
-        : undefined,
+        : selectedPreference
+          ? undefined
+          : 'No preferences saved yet',
     },
   ]
-  const testConditionGroups = [
-    {
-      title: 'Prediction email',
-      conditions: [
-        ...baseTestConditions,
-        {
-          label: 'Prediction emails enabled',
-          passed: Boolean(selectedPreference?.race_reminder_emails_enabled),
-        },
-        {
-          label: 'Upcoming race available',
-          passed: Boolean(typedNextRace),
-          detail: typedNextRace?.race_name
-            ? `${typedNextRace.race_name}, locks ${formatDate(typedNextRace.prediction_lock_at)}`
-            : undefined,
-        },
-        {
-          label: 'Prediction still missing',
-          passed: Boolean(typedNextRace && !selectedPrediction),
-        },
-      ],
-    },
-    {
-      title: 'Results email',
-      conditions: [
-        ...baseTestConditions,
-        {
-          label: 'Results emails enabled',
-          passed: Boolean(selectedPreference?.score_recap_emails_enabled),
-        },
-        {
-          label: 'Scored race available',
-          passed: Boolean(typedLatestScoredRace),
-          detail: typedLatestScoredRace?.race_name || undefined,
-        },
-        {
-          label: 'User has scored result',
-          passed: Boolean(typedSelectedScore),
-          detail: typedSelectedScore ? `${typedSelectedScore.total_points} points` : undefined,
-        },
-      ],
-    },
-  ]
+  const predictionConditionGroup = {
+    title: 'Prediction reminder',
+    conditions: [
+      ...baseManualConditions,
+      {
+        label: 'Prediction emails enabled',
+        passed: Boolean(selectedPreference?.race_reminder_emails_enabled),
+      },
+      {
+        label: 'Race inside reminder window',
+        passed: Boolean(typedNextRace),
+        detail: typedNextRace?.race_name
+          ? `${typedNextRace.race_name}, locks ${formatDate(typedNextRace.prediction_lock_at)}`
+          : `No race locks in the next ${leadHours} hours`,
+      },
+      {
+        label: 'Prediction still missing',
+        passed: Boolean(typedNextRace && !selectedPrediction),
+      },
+      {
+        label: 'Not already sent for this race',
+        passed: Boolean(typedNextRace && !typedSelectedPredictionEvent),
+        detail: typedSelectedPredictionEvent
+          ? `Already ${typedSelectedPredictionEvent.status} ${formatDate(typedSelectedPredictionEvent.updated_at)}`
+          : undefined,
+      },
+    ],
+  }
+  const resultConditionGroup = {
+    title: 'Results recap',
+    conditions: [
+      ...baseManualConditions,
+      {
+        label: 'Results emails enabled',
+        passed: Boolean(selectedPreference?.score_recap_emails_enabled),
+      },
+      {
+        label: 'Recent scored race available',
+        passed: Boolean(typedLatestScoredRace),
+        detail: typedLatestScoredRace?.race_name
+          ? `${typedLatestScoredRace.race_name}, within the last ${scoreLookbackDays} days`
+          : undefined,
+      },
+      {
+        label: 'User has scored result',
+        passed: Boolean(typedSelectedScore),
+        detail: typedSelectedScore ? `${typedSelectedScore.total_points} points` : undefined,
+      },
+      {
+        label: 'Not already sent for this race',
+        passed: Boolean(typedLatestScoredRace && !typedSelectedResultEvent),
+        detail: typedSelectedResultEvent
+          ? `Already ${typedSelectedResultEvent.status} ${formatDate(typedSelectedResultEvent.updated_at)}`
+          : undefined,
+      },
+    ],
+  }
+  const selectedConditionGroup = selectedKind === 'results' ? resultConditionGroup : predictionConditionGroup
 
   const activePredictionEmailCount = preferences.filter(
     (preference) => preference.race_reminder_emails_enabled && !preference.unsubscribed_at
@@ -444,7 +544,6 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
     .filter((event) => eventMatchesMode(event, modeFilter))
   const lastSentEvent = recentEvents.find((event) => event.status === 'sent')
   const cronSecretConfigured = Boolean(process.env.CRON_SECRET || process.env.NOTIFICATION_CRON_SECRET)
-  const transactionalEmailConfigured = isTransactionalEmailConfigured()
   const automationReady = cronSecretConfigured && transactionalEmailConfigured
   const scheduledSendingLabel = cronSecretConfigured ? 'Automatic sending active' : 'Automatic sending needs setup'
   const senderLabel = transactionalEmailConfigured ? 'Email sending ready' : 'Email sending needs setup'
@@ -527,11 +626,12 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
         />
       </section>
 
-      <TestEmailForm
-        users={testEmailUsers}
+      <ManualEmailForm
+        users={manualEmailUsers}
         selectedUserId={selectedUserId}
         selectedUserLabel={selectedUserLabel}
-        conditionGroups={testConditionGroups}
+        selectedKind={selectedKind}
+        conditionGroup={selectedConditionGroup}
       />
 
       <section className="space-y-4">
@@ -543,6 +643,7 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
 
         <form action="/admin/notifications" className="rounded-2xl border border-white/5 bg-card p-4 shadow-xl">
           <input type="hidden" name="user" value={selectedUserId} />
+          <input type="hidden" name="kind" value={selectedKind} />
           <div className="grid gap-3 md:grid-cols-[repeat(3,minmax(0,1fr))_auto] md:items-end">
             <div>
               <label htmlFor="status-filter" className="mb-1.5 block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
