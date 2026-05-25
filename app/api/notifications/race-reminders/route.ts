@@ -1,20 +1,13 @@
 import { runPreLockReminderEmails } from '@/utils/race-notifications'
-import { getNotificationRunnerOptions } from '@/utils/notification-runner-request'
+import {
+  getNotificationRunnerOptions,
+  isAuthorizedNotificationRunnerRequest,
+} from '@/utils/notification-runner-request'
 
 export const dynamic = 'force-dynamic'
 
-function isAuthorized(request: Request) {
-  const expectedSecret = process.env.NOTIFICATION_CRON_SECRET || process.env.CRON_SECRET
-  if (!expectedSecret) return false
-
-  const authorization = request.headers.get('authorization')
-  const cronSecret = request.headers.get('x-cron-secret')
-
-  return authorization === `Bearer ${expectedSecret}` || cronSecret === expectedSecret
-}
-
 async function handleRequest(request: Request) {
-  if (!isAuthorized(request)) {
+  if (!isAuthorizedNotificationRunnerRequest(request)) {
     return Response.json(
       { error: 'Unauthorized notification runner request.' },
       { status: 401 }

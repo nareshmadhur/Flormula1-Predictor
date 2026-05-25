@@ -1,5 +1,21 @@
 import type { RaceNotificationRunOptions } from '@/utils/race-notifications'
 
+export function isAuthorizedNotificationRunnerRequest(request: Request) {
+  const acceptedSecrets = [
+    process.env.NOTIFICATION_CRON_SECRET,
+    process.env.CRON_SECRET,
+  ].filter((secret): secret is string => Boolean(secret))
+
+  if (acceptedSecrets.length === 0) return false
+
+  const authorization = request.headers.get('authorization')
+  const cronSecret = request.headers.get('x-cron-secret')
+
+  return acceptedSecrets.some(
+    (secret) => authorization === `Bearer ${secret}` || cronSecret === secret
+  )
+}
+
 function isTruthy(value: string | null | undefined) {
   if (!value) return false
   return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase())

@@ -306,19 +306,19 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
   const compactNote =
     effectiveStatus === 'upcoming'
       ? prediction
-        ? 'Entry locked in for now. You can still edit before FP1 minus five minutes.'
-        : 'Pick your podium before FP1 minus five minutes.'
+        ? 'Saved. Editable until lock.'
+        : 'Pick your podium before lock.'
       : effectiveStatus === 'locked'
         ? prediction
-          ? 'Your entry is locked while the weekend plays out.'
-          : 'The window is closed for this round.'
+          ? 'Entry locked.'
+          : 'Window closed.'
         : effectiveStatus === 'completed'
-          ? 'The race is finished. Final scoring is still on the way.'
+          ? 'Scoring pending.'
           : effectiveStatus === 'scored'
             ? prediction
-              ? 'Final result is in. Compare your call below.'
-              : 'No entry this round. Official result below.'
-            : 'This round is closed.'
+              ? 'Compare your call below.'
+              : 'No entry. Official result below.'
+            : 'Closed.'
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 animate-in fade-in duration-500">
@@ -567,10 +567,7 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
                 {effectiveStatus === 'completed' && (
                   <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-4">
                     <div className="text-sm font-bold text-white">Result refresh</div>
-                    <p className="mt-1 text-sm leading-6 text-slate-400">
-                      If the official source already has the podium, you can refresh this race and update
-                      standings without waiting for a manual admin pass.
-                    </p>
+                    <p className="mt-1 text-sm leading-6 text-slate-400">Refresh if the podium is already available.</p>
                     <div className="mt-4">
                       <ResultRefreshForm raceId={race.id} />
                     </div>

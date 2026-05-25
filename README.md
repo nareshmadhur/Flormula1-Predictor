@@ -307,6 +307,8 @@ Notes:
 - Node.js 18+
 - npm
 - Supabase project
+- Brevo transactional email account for app-triggered lifecycle emails
+- Vercel project for hosting and scheduled cron invocation
 
 ### Install
 ```bash
@@ -315,7 +317,8 @@ npm install
 
 ### Environment
 
-Create `.env.local`:
+Create `.env.local` for local development and mirror production-only secrets in Vercel Project Settings.
+Use `CRON_SECRET` for Vercel Cron; `NOTIFICATION_CRON_SECRET` is also supported for manual or non-Vercel runners.
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
@@ -323,35 +326,45 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
 SUPABASE_SERVICE_ROLE_KEY=your_service_role_key
 NEXT_PUBLIC_SITE_URL=https://www.flormula1.nl
 BREVO_API_KEY=your_brevo_api_key
-GROUP_WELCOME_EMAIL_FROM="Flormula1 <hello@flormula1.nl>"
 LIFECYCLE_EMAIL_FROM="Flormula1 <hello@flormula1.nl>"
-NOTIFICATION_CRON_SECRET=choose_a_long_random_secret
-RACE_REMINDER_LEAD_HOURS=24
+CRON_SECRET=choose_a_long_random_secret
+RACE_REMINDER_LEAD_HOURS=36
 SCORE_RECAP_LOOKBACK_DAYS=14
 ```
 
-`NEXT_PUBLIC_SITE_URL` is the canonical public domain used for shareable links, auth email callbacks, metadata, robots, and sitemap URLs.
+Optional welcome-email sender:
 
-`BREVO_API_KEY` and `GROUP_WELCOME_EMAIL_FROM` are optional. When both are present, Flormula1 sends a welcome email after a user joins a group through an invite or a platform-admin assignment.
-This is separate from Supabase Auth email delivery. Supabase can keep using Brevo SMTP for signup/reset emails, while app-triggered lifecycle emails use Brevo's transactional API.
+```bash
+GROUP_WELCOME_EMAIL_FROM="Flormula1 <hello@flormula1.nl>"
+```
 
-`LIFECYCLE_EMAIL_FROM` is optional and overrides the sender used for race reminder and score recap emails. If it is absent, the app falls back to `GROUP_WELCOME_EMAIL_FROM`, then the generic Brevo sender variables.
+#### Runtime dependency matrix
 
-`NOTIFICATION_CRON_SECRET` protects lifecycle email runner endpoints. `CRON_SECRET` is also accepted for hosts such as Vercel that already use that name.
+| Dependency | Values | Where to get it | Used for |
+| --- | --- | --- | --- |
+| Supabase public API | `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase project settings / API keys | Browser and server auth, normal RLS-backed reads/writes. |
+| Supabase service role | `SUPABASE_SERVICE_ROLE_KEY` | Supabase project settings / API keys | Server-only admin work: notification runners, event logging, unsubscribe updates. Never expose client-side. |
+| Site URL | `NEXT_PUBLIC_SITE_URL` | Canonical app domain | Absolute email links, unsubscribe URLs, auth callbacks, metadata, robots, sitemap. |
+| Brevo transactional API | `BREVO_API_KEY` | Brevo account / SMTP & API / API keys | App-triggered lifecycle emails and optional group welcome emails. Brevo domain auth is still needed for deliverability, but it does not replace this API key. |
+| Email sender | `LIFECYCLE_EMAIL_FROM` | A Brevo-verified sender on the authenticated domain | Visible From address for prediction reminders and score recaps. |
+| Cron authentication | `CRON_SECRET` or `NOTIFICATION_CRON_SECRET` | Generate a long random secret | Protects `/api/notifications/*` runner endpoints. Vercel Cron automatically sends `CRON_SECRET` as `Authorization: Bearer ...`. |
+| Reminder window | `RACE_REMINDER_LEAD_HOURS` | App choice | How far ahead of prediction lock reminders are eligible. Use `36` for daily Vercel Cron. |
+| Recap lookback | `SCORE_RECAP_LOOKBACK_DAYS` | App choice | How many recent scored races the recap runner scans. Default `14`. |
+| Welcome sender | `GROUP_WELCOME_EMAIL_FROM` | A Brevo-verified sender | Optional sender fallback for group welcome emails. |
 
-`RACE_REMINDER_LEAD_HOURS` controls the pre-lock reminder window. The default is `24`, which means the runner emails opted-in users who have not submitted when a race locks within the next 24 hours. `SCORE_RECAP_LOOKBACK_DAYS` limits score recap scans to recently raced, already-scored rounds.
+For local `.env.local` changes, restart `npm run dev`. Next.js reads server-side env vars when the dev server starts, so the admin monitor can show a missing cron secret until the process is restarted.
 
 ### Lifecycle email scheduling
 
 Apply the latest Supabase migrations before enabling lifecycle emails. They add notification preferences, one-click unsubscribe tokens, and a delivery event log that prevents duplicate sends.
 
-Schedule these protected endpoints from your deployment provider or cron runner at the send time you want:
+Schedule these protected endpoints from your deployment provider or cron runner at the send time you want. The examples use `CRON_SECRET`; substitute `NOTIFICATION_CRON_SECRET` if that is the variable you configured.
 
 ```bash
-curl -H "Authorization: Bearer $NOTIFICATION_CRON_SECRET" \
+curl -H "Authorization: Bearer $CRON_SECRET" \
   https://www.flormula1.nl/api/notifications/race-reminders
 
-curl -H "Authorization: Bearer $NOTIFICATION_CRON_SECRET" \
+curl -H "Authorization: Bearer $CRON_SECRET" \
   https://www.flormula1.nl/api/notifications/score-recaps
 ```
 
@@ -361,13 +374,22 @@ Recommended starting schedule:
 
 Both endpoints are idempotent. They claim a unique event per user, race, and email type before sending, so repeated cron calls do not resend the same reminder or recap.
 
+This repo includes `vercel.json` cron entries for Vercel:
+
+- `/api/notifications/race-reminders` runs daily at `06:00 UTC`.
+- `/api/notifications/score-recaps` runs daily at `07:00 UTC`.
+
+Vercel Cron schedules are UTC. On Vercel Hobby, daily schedules are the most flexible supported option, and invocation timing can land anywhere within the scheduled hour. On Vercel Pro, change the reminder schedule to hourly if you want tighter pre-lock timing. Supabase Cron is more lenient for frequency and precision, but Vercel is the simplest fit for this app because the notification runners already live as Vercel API routes.
+
+For Vercel Cron, set `CRON_SECRET` in the Vercel production environment. Vercel automatically sends it as `Authorization: Bearer $CRON_SECRET` when invoking cron paths.
+
 Before enabling cron, test the same production project safely:
 
 ```bash
-curl -H "Authorization: Bearer $NOTIFICATION_CRON_SECRET" \
+curl -H "Authorization: Bearer $CRON_SECRET" \
   "https://www.flormula1.nl/api/notifications/race-reminders?dryRun=1"
 
-curl -H "Authorization: Bearer $NOTIFICATION_CRON_SECRET" \
+curl -H "Authorization: Bearer $CRON_SECRET" \
   "https://www.flormula1.nl/api/notifications/score-recaps?dryRun=1"
 ```
 
@@ -376,11 +398,11 @@ Dry-run mode reads real eligibility, returns counts and masked recipient preview
 To verify rendered templates and Brevo delivery without emailing production users, use test-recipient mode:
 
 ```bash
-curl -H "Authorization: Bearer $NOTIFICATION_CRON_SECRET" \
+curl -H "Authorization: Bearer $CRON_SECRET" \
   -H "x-notification-test-recipient: you@example.com" \
   "https://www.flormula1.nl/api/notifications/race-reminders?test=1&limit=3"
 
-curl -H "Authorization: Bearer $NOTIFICATION_CRON_SECRET" \
+curl -H "Authorization: Bearer $CRON_SECRET" \
   -H "x-notification-test-recipient: you@example.com" \
   "https://www.flormula1.nl/api/notifications/score-recaps?test=1&limit=3"
 ```
@@ -390,14 +412,16 @@ Test-recipient mode sends generated emails only to the override address, prefixe
 To test with actual test-user inboxes, mark the profiles or their tenants as test mode and call:
 
 ```bash
-curl -H "Authorization: Bearer $NOTIFICATION_CRON_SECRET" \
+curl -H "Authorization: Bearer $CRON_SECRET" \
   "https://www.flormula1.nl/api/notifications/race-reminders?dryRun=1&testUsersOnly=1"
 
-curl -H "Authorization: Bearer $NOTIFICATION_CRON_SECRET" \
+curl -H "Authorization: Bearer $CRON_SECRET" \
   "https://www.flormula1.nl/api/notifications/score-recaps?test=1&testUsersOnly=1&limit=3"
 ```
 
 `testUsersOnly=1` includes only test-mode profiles/tenants. In live cron calls, test users are still excluded.
+
+Platform admins can monitor the flow at `/admin/notifications`. The page summarizes runtime readiness, active reminder/recap audiences, failed or queued events, the latest send, recent delivery logs, and subscription preference rows. It is read-only; manual send controls should stay platform-admin only until tenant-scoped sending exists.
 
 Set it in:
 - `.env.local` for local development. Use `http://localhost:3000` if you want auth email links to return to your local app.

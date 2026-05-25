@@ -42,13 +42,10 @@ export default async function ProfilePage() {
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div className="space-y-2">
             <div className="inline-flex items-center gap-2 rounded-full border border-red-500/25 bg-red-500/15 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-red-300">
-              <UserRound className="h-4 w-4" /> Profile
+              <UserRound className="h-4 w-4" /> Profile & Notifications
             </div>
             <div>
               <h1 className="text-3xl font-black italic tracking-tighter md:text-4xl">Your public name</h1>
-              <p className="mt-2 max-w-2xl text-sm text-slate-300">
-                Update how you appear across standings, race recaps, and group views.
-              </p>
             </div>
           </div>
 
@@ -67,8 +64,7 @@ export default async function ProfilePage() {
           <div className="mb-6 flex items-center gap-3">
             <IdCard className="h-6 w-6 text-red-500" />
             <div>
-              <h2 className="text-2xl font-black italic tracking-tight">Profile settings</h2>
-              <p className="text-sm text-slate-400">Change your public name without touching your login email.</p>
+              <h2 className="text-2xl font-black italic tracking-tight">Profile & notification settings</h2>
             </div>
           </div>
 

@@ -43,7 +43,7 @@ export function TenantAssignmentRequired({ isAdmin = false }: TenantAssignmentRe
           href="/me/profile"
           className="inline-flex items-center rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-colors hover:bg-white/10"
         >
-          Open Profile
+          Open Profile & Notifications
         </PendingLink>
         {isAdmin ? (
           <PendingLink

@@ -108,26 +108,22 @@ function getEntrySummary(status: RaceStatus, hasPredicted: boolean, score?: Scor
   }
 
   if (status === 'scored' && !hasPredicted) {
-    return 'No entry submitted. This round counted as 0.'
+    return 'No entry · 0 pts'
   }
 
   if ((status === 'locked' || status === 'completed') && hasPredicted) {
-    return status === 'locked'
-      ? 'Entry locked in. Weekend is live.'
-      : 'Race finished. Final scoring is still pending.'
+    return status === 'locked' ? 'Entry locked.' : 'Scoring pending.'
   }
 
   if ((status === 'locked' || status === 'completed') && !hasPredicted) {
-    return status === 'locked'
-      ? 'The window closed without an entry.'
-      : 'Missed this race. Final scoring is still pending.'
+    return status === 'locked' ? 'No entry.' : 'No entry · scoring pending.'
   }
 
   if (hasPredicted) {
-    return 'Entry saved. You can still edit before lock.'
+    return 'Entry saved.'
   }
 
-  return 'Prediction window is open.'
+  return 'Window open.'
 }
 
 function getBonusQuestionLabel(questionText: string) {
@@ -293,7 +289,6 @@ export default async function UserHistoryPage() {
       <SectionHeader
         eyebrow="History"
         title="My season"
-        description="Entered, pending, scored, and missed weekends."
         aside={<TenantContextBanner tenantName={tenantContext.tenantName} label="Playing in" />}
       />
 
@@ -428,7 +423,7 @@ export default async function UserHistoryPage() {
 
                       <div className="shrink-0">
                         <PendingLink
-                          href={`/race/${entry.race.id}/predict`}
+                          href={entry.status === 'scored' ? `/race/${entry.race.id}#top-scorers` : `/race/${entry.race.id}/predict`}
                           className="inline-flex items-center gap-1.5 font-bold text-red-400 transition-colors hover:text-red-300"
                         >
                           {getActionLabel(entry)}

@@ -1,15 +1,17 @@
 import type { Metadata } from 'next'
 import { notFound } from 'next/navigation'
-import { Calendar, ChevronRight, Clock3, Flag } from 'lucide-react'
+import { Calendar, ChevronRight, Clock3, Flag, Trophy } from 'lucide-react'
 import { format } from 'date-fns'
 import { getEffectiveRaceStatus, RaceStatus } from '@/utils/race-status'
 import {
   getBonusAnswerLabel,
   getDriverLabel,
   getPublicRacePageData,
+  type PublicRaceTopScorer,
 } from '@/utils/race-page'
 import { getRoundLabel } from '@/utils/race-copy'
 import { getAbsoluteUrl } from '@/utils/site'
+import { getProfileDisplayName } from '@/utils/profile-name'
 import { PendingLink } from '@/components/ui/pending-link'
 import { RaceStatusPill } from '@/components/ui/race-status-pill'
 import { RaceMetaStrip } from '@/components/ui/race-meta-strip'
@@ -52,6 +54,14 @@ function getMetadataDescription(raceName: string, status: RaceStatus) {
   }
 
   return `Track the ${raceName} status, published results, and official race updates on the public race hub.`
+}
+
+function getTopScorerProfile(scorer: PublicRaceTopScorer) {
+  if (Array.isArray(scorer.profiles)) {
+    return scorer.profiles[0] || null
+  }
+
+  return scorer.profiles || null
 }
 
 export async function generateMetadata({ params }: PageProps): Promise<Metadata> {
@@ -97,11 +107,12 @@ export default async function PublicRacePage({ params }: PageProps) {
     notFound()
   }
 
-  const { race, drivers, bonusQuestions, raceResult, raceBonusAnswers, previousRace, nextRace } = raceData
+  const { race, drivers, bonusQuestions, raceResult, raceBonusAnswers, topScorers, previousRace, nextRace } = raceData
   const effectiveStatus = getEffectiveRaceStatus(race)
   const officialBonusAnswerMap = new Map(
     raceBonusAnswers.map((answer) => [answer.bonus_question_id, answer.correct_bonus_option_id])
   )
+  const winningScore = topScorers[0]?.total_points ?? null
 
   const officialPodium = raceResult
     ? [
@@ -170,6 +181,14 @@ export default async function PublicRacePage({ params }: PageProps) {
             >
               Standings
             </PendingLink>
+            {effectiveStatus === 'scored' && (
+              <PendingLink
+                href={`/race/${race.id}#top-scorers`}
+                className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
+              >
+                Top scorers
+              </PendingLink>
+            )}
             {effectiveStatus === 'upcoming' && (
               <PendingLink
                 href={`/race/${race.id}/predict`}
@@ -229,6 +248,61 @@ export default async function PublicRacePage({ params }: PageProps) {
           )}
         </section>
       </div>
+
+      {effectiveStatus === 'scored' && (
+        <section id="top-scorers" className="scroll-mt-24 rounded-3xl border border-white/10 bg-card p-5 shadow-2xl md:p-6">
+          <SectionHeader
+            eyebrow="Race scores"
+            title="Top scorers"
+            aside={<Trophy className="h-6 w-6 text-yellow-500" />}
+          />
+
+          {topScorers.length === 0 ? (
+            <div className="mt-4 rounded-2xl border border-dashed border-white/10 px-4 py-8 text-center text-sm text-slate-500">
+              No published player scores for this race.
+            </div>
+          ) : (
+            <div className="mt-4 divide-y divide-white/5 overflow-hidden rounded-2xl border border-white/5 bg-black/20">
+              {topScorers.map((score, index) => {
+                const profile = getTopScorerProfile(score)
+                const isWinner = winningScore !== null && score.total_points === winningScore
+
+                return (
+                  <div
+                    key={score.user_id}
+                    className="grid gap-3 px-4 py-3 sm:grid-cols-[3rem_minmax(0,1fr)_auto] sm:items-center"
+                  >
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/30 text-sm font-black italic text-white">
+                      {index + 1}
+                    </div>
+
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="break-words font-semibold text-white">
+                          {getProfileDisplayName(profile?.display_name, profile?.email)}
+                        </div>
+                        {isWinner && (
+                          <span className="rounded-full border border-yellow-500/25 bg-yellow-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-widest text-yellow-200">
+                            Top
+                          </span>
+                        )}
+                      </div>
+                      <div className="mt-1 text-xs text-slate-400">
+                        {score.podium_points} podium · {score.bonus_points} bonus · {score.exact_hits} exact
+                      </div>
+                    </div>
+
+                    <div className="text-left sm:text-right">
+                      <div className="text-2xl font-black italic text-red-500">{score.total_points}</div>
+                      <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-slate-500">pts</div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="flex flex-wrap gap-4">
         {previousRace && (

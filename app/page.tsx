@@ -80,21 +80,21 @@ const landingFeatures: LandingFeature[] = [
   {
     eyebrow: 'Private groups',
     title: 'Private grids',
-    description: 'Create a group table for friends, family, or colleagues and keep the rivalry in one clean season view.',
+    description: 'Create a private group table.',
     icon: Users,
     tone: 'text-cyan-300',
   },
   {
     eyebrow: 'Race weekend',
     title: 'Race-weekend picks',
-    description: 'Pick the top three before the lock, then compare everyone against the official race result.',
+    description: 'Pick the top three before lock.',
     icon: Flag,
     tone: 'text-red-300',
   },
   {
     eyebrow: 'Standings',
     title: 'Live season table',
-    description: 'Points, exact hits, recaps, and gaps make every race weekend feel like its own mini championship.',
+    description: 'Track points, exact hits, and gaps.',
     icon: Gauge,
     tone: 'text-emerald-300',
   },
@@ -151,8 +151,7 @@ function VisitorLandingHero({
             Predict F1 podiums with your friends.
           </h1>
           <p className="max-w-2xl text-base leading-7 text-slate-200 md:text-lg">
-            A race-weekend scoreboard for private F1 groups: make your top-three call, follow the official result,
-            and watch your mini championship move after every Grand Prix.
+            Make your top-three call, follow the result, and track your private season table.
           </p>
 
           <div className="flex flex-wrap gap-3">
@@ -375,11 +374,9 @@ export default async function HomePage() {
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <div className="space-y-1.5">
                 <h1 className="text-2xl font-black italic text-white md:text-3xl">{standingsTitle}</h1>
-                <p className="max-w-2xl text-sm text-slate-400">
-                  {showLatestRecapFirst
-                    ? 'Latest result is ready. Your next race lives under My Race.'
-                    : 'Your next race lives under My Race. Standings are the pulse check.'}
-                </p>
+                {showLatestRecapFirst && (
+                  <p className="max-w-2xl text-sm text-slate-400">Latest result is ready.</p>
+                )}
               </div>
               {currentUserRank && currentUserEntry && (
                 <div className="flex flex-wrap gap-3 text-sm font-bold uppercase text-slate-200">
@@ -389,10 +386,6 @@ export default async function HomePage() {
                 </div>
               )}
             </div>
-            <div className="text-xs font-medium uppercase text-slate-500">
-              Private group grid · Podium calls · Season momentum
-            </div>
-
             <div className="rounded-lg border border-white/10 bg-black/35 p-5 shadow-xl">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <div className="text-sm font-bold uppercase text-slate-500">Leaderboard</div>
@@ -457,7 +450,7 @@ export default async function HomePage() {
               {showLatestRecapFirst && latestScored ? (
                 <>
                   <PendingLink
-                    href={`/race/${latestScored.id}/predict`}
+                    href={`/race/${latestScored.id}#top-scorers`}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
                   >
                     Latest recap
@@ -575,7 +568,7 @@ export default async function HomePage() {
 
               <div className="flex flex-wrap gap-4 pt-1">
                 <PendingLink
-                  href={user ? `/race/${latestScored.id}/predict` : `/race/${latestScored.id}`}
+                  href={`/race/${latestScored.id}#top-scorers`}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-bold text-white transition-colors hover:bg-white/10"
                 >
                   Recap

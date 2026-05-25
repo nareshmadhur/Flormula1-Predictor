@@ -51,7 +51,7 @@ async function handleRequest(_request: Request, context: RouteContext) {
         eyebrow: 'Email preferences',
         title: 'This unsubscribe link is no longer active',
         intro: 'Your preferences may already have changed, or this link may be from an older email.',
-        actions: [{ label: 'Manage profile', url: getAbsoluteUrl('/me/profile') }],
+        actions: [{ label: 'Manage notifications', url: getAbsoluteUrl('/me/profile') }],
       }),
       404
     )
@@ -63,7 +63,7 @@ async function handleRequest(_request: Request, context: RouteContext) {
       title: 'You are unsubscribed',
       intro: 'Race reminder and score recap emails are now turned off for this FLORMULA1 account.',
       actions: [
-        { label: 'Open profile settings', url: getAbsoluteUrl('/me/profile') },
+        { label: 'Open Profile & Notifications', url: getAbsoluteUrl('/me/profile') },
         { label: 'Back to season', url: getAbsoluteUrl('/predictions'), tone: 'secondary' },
       ],
     })

@@ -493,7 +493,7 @@ function renderScoreRecapEmail({
   isTestSend?: boolean
 }) {
   const profile = getProfile(preference)
-  const recapUrl = getAbsoluteUrl(`/race/${race.id}/predict`)
+  const recapUrl = getAbsoluteUrl(`/race/${race.id}#top-scorers`)
   const leaderboardUrl = getAbsoluteUrl('/leaderboard')
   const testNotice = isTestSend
     ? `
@@ -512,7 +512,7 @@ function renderScoreRecapEmail({
     title: `${score.total_points} pts at ${race.race_name}`,
     intro: `Hi ${getProfileDisplayName(profile?.display_name, profile?.email, 'there')}, the ${race.race_name} scores are published.`,
     actions: [
-      { label: 'View my recap', url: recapUrl },
+      { label: 'View race recap', url: recapUrl },
       { label: 'Open standings', url: leaderboardUrl, tone: 'secondary' },
     ],
     unsubscribeUrl: isTestSend ? null : getUnsubscribeUrl(preference),

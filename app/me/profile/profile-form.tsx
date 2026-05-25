@@ -50,9 +50,6 @@ export function ProfileForm({
             className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-3 text-base text-white outline-none transition-all focus:border-red-500 focus:ring-1 focus:ring-red-500"
             placeholder="Your public display name"
           />
-          <p className="text-sm text-slate-500">
-            This is the name shown on leaderboards, race recaps, and admin views.
-          </p>
         </div>
 
         <div className="space-y-2">
@@ -60,9 +57,6 @@ export function ProfileForm({
           <div className="rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-sm text-slate-300">
             {email || 'No email found'}
           </div>
-          <p className="text-sm text-slate-500">
-            Email is managed through authentication and stays fixed here.
-          </p>
         </div>
       </div>
 

@@ -1,6 +1,7 @@
 import { cache } from 'react'
 import { createPublicClient } from '@/utils/supabase/public'
 import { RaceStatus } from '@/utils/race-status'
+import { isTestModeProfile } from '@/utils/test-mode'
 
 export type PublicRaceDriver = {
   id: string
@@ -47,16 +48,50 @@ type PublicRaceBonusAnswer = {
   correct_bonus_option_id: string
 }
 
+type PublicRaceTopScorerProfile = {
+  display_name?: string | null
+  email?: string | null
+  is_test?: boolean | null
+  tenants?: { is_test?: boolean | null } | Array<{ is_test?: boolean | null }> | null
+}
+
+export type PublicRaceTopScorer = {
+  user_id: string
+  total_points: number
+  podium_points: number
+  bonus_points: number
+  exact_hits: number
+  profiles?: PublicRaceTopScorerProfile | PublicRaceTopScorerProfile[] | null
+}
+
 type PublicRaceNeighbor = {
   id: string
   round: number
   race_name: string
 }
 
+function getTopScorerProfile(scorer: PublicRaceTopScorer) {
+  if (Array.isArray(scorer.profiles)) {
+    return scorer.profiles[0] || null
+  }
+
+  return scorer.profiles || null
+}
+
+function sortRaceTopScorers(scores: PublicRaceTopScorer[]) {
+  return [...scores].sort((left, right) => {
+    if (right.total_points !== left.total_points) return right.total_points - left.total_points
+    if (right.exact_hits !== left.exact_hits) return right.exact_hits - left.exact_hits
+    if (right.podium_points !== left.podium_points) return right.podium_points - left.podium_points
+    if (right.bonus_points !== left.bonus_points) return right.bonus_points - left.bonus_points
+    return left.user_id.localeCompare(right.user_id)
+  })
+}
+
 export const getPublicRacePageData = cache(async (raceId: string) => {
   const supabase = createPublicClient()
 
-  const [raceResponse, driversResponse, bonusQuestionsResponse, raceResultResponse, raceBonusAnswersResponse] =
+  const [raceResponse, driversResponse, bonusQuestionsResponse, raceResultResponse, raceBonusAnswersResponse, raceScoresResponse] =
     await Promise.all([
       supabase
         .from('races')
@@ -82,11 +117,29 @@ export const getPublicRacePageData = cache(async (raceId: string) => {
         .from('race_bonus_answers')
         .select('bonus_question_id, correct_bonus_option_id')
         .eq('race_id', raceId),
+      supabase
+        .from('user_race_scores')
+        .select('user_id, total_points, podium_points, bonus_points, exact_hits, profiles(display_name, email, is_test, tenants(is_test))')
+        .eq('race_id', raceId),
     ])
 
   if (!raceResponse.data) {
     return null
   }
+
+  const legacyRaceScoresResponse = raceScoresResponse.error?.message?.includes('is_test')
+    ? await supabase
+        .from('user_race_scores')
+        .select('user_id, total_points, podium_points, bonus_points, exact_hits, profiles(display_name, email)')
+        .eq('race_id', raceId)
+    : null
+  const testModeFilterAvailable = !raceScoresResponse.error
+  const raceScoreRows = (legacyRaceScoresResponse?.data || raceScoresResponse.data || []) as PublicRaceTopScorer[]
+  const topScorers = sortRaceTopScorers(
+    raceScoreRows.filter((score) =>
+      testModeFilterAvailable ? !isTestModeProfile(getTopScorerProfile(score)) : true
+    )
+  ).slice(0, 5)
 
   const { data: seasonRaces } = await supabase
     .from('races')
@@ -108,6 +161,7 @@ export const getPublicRacePageData = cache(async (raceId: string) => {
     bonusQuestions: (bonusQuestionsResponse.data || []) as PublicRaceBonusQuestion[],
     raceResult: (raceResultResponse.data || null) as PublicRaceResult | null,
     raceBonusAnswers: (raceBonusAnswersResponse.data || []) as PublicRaceBonusAnswer[],
+    topScorers,
     previousRace,
     nextRace,
   }

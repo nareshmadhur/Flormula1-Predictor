@@ -85,7 +85,7 @@ export default async function Navbar() {
                         href="/me/profile"
                         className="flex items-center rounded-xl px-3 py-2 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10"
                       >
-                        Profile
+                        Profile & Notifications
                       </PendingLink>
                       <form action={signout} className="rounded-xl px-3 py-2 hover:bg-white/10">
                         <SignOutButton />

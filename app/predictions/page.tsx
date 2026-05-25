@@ -52,7 +52,6 @@ type SeasonDashboardPageProps = {
 type FilterCard = {
   key: SeasonFilterKey
   label: string
-  hint: string
   count: number
   href: string
   icon: typeof Calendar
@@ -109,8 +108,8 @@ function getHeroContent({
       eyebrow: 'Next Race',
       headline: race.race_name,
       description: hasPredicted
-        ? `Entry locked in. Predictions close ${formatDistanceToNowStrict(new Date(race.prediction_lock_at), { addSuffix: true })}.`
-        : `Your next weekend is live. Submit before predictions close ${formatDistanceToNowStrict(new Date(race.prediction_lock_at), { addSuffix: true })}.`,
+        ? `Entries close ${formatDistanceToNowStrict(new Date(race.prediction_lock_at), { addSuffix: true })}.`
+        : `Submit before entries close ${formatDistanceToNowStrict(new Date(race.prediction_lock_at), { addSuffix: true })}.`,
       status: hasPredicted ? 'Entry locked in' : 'No entry yet',
     }
   }
@@ -119,9 +118,7 @@ function getHeroContent({
     return {
       eyebrow: 'Results Pending',
       headline: race.race_name,
-      description: hasPredicted
-        ? 'Your picks are locked. The next step is waiting for the official result or final score.'
-        : 'The race is finished. No entry was submitted, and final scoring is still pending.',
+      description: hasPredicted ? 'Waiting for results.' : 'No entry submitted.',
       status: hasPredicted ? 'Waiting on scoring' : 'No entry submitted',
     }
   }
@@ -131,8 +128,8 @@ function getHeroContent({
       eyebrow: 'Next Race',
       headline: race.race_name,
       description: hasPredicted
-        ? `Entry saved. You can still edit before predictions close ${formatDistanceToNowStrict(new Date(race.prediction_lock_at), { addSuffix: true })}.`
-        : 'This race is on the schedule. It becomes the main action when it is the next unentered round.',
+        ? `Editable until ${formatDistanceToNowStrict(new Date(race.prediction_lock_at), { addSuffix: true })}.`
+        : 'Upcoming.',
       status: hasPredicted ? 'Entry saved' : 'Upcoming',
     }
   }
@@ -143,10 +140,10 @@ function getHeroContent({
       headline: race.race_name,
       description:
         !hasPredicted
-          ? 'This weekend is final. No entry was submitted for this round.'
+          ? 'No entry submitted.'
           : typeof score === 'number'
-          ? `This weekend is final. You came away with ${score} pts.`
-          : 'This weekend has been scored and is ready to review.',
+          ? `${score} pts.`
+          : 'Final score published.',
       status: !hasPredicted
         ? 'No entry submitted'
         : typeof score === 'number'
@@ -159,7 +156,7 @@ function getHeroContent({
     return {
       eyebrow: 'Catch Up',
       headline: race.race_name,
-      description: 'There is no open window right now. Review the last missed weekend and reset for the next one.',
+      description: 'No entry submitted.',
       status: 'Missed weekend',
     }
   }
@@ -167,7 +164,7 @@ function getHeroContent({
   return {
     eyebrow: 'My Race',
     headline: 'Season Pause',
-    description: 'No races are currently scheduled for this season.',
+    description: 'No races scheduled.',
     status: 'No active weekend',
   }
 }
@@ -176,7 +173,6 @@ function getActiveSectionCopy(tab: SeasonFilterKey) {
   if (tab === 'action') {
     return {
       title: 'Needs Action',
-      description: 'The next race that still needs your entry.',
       empty: 'No race needs your entry right now.',
     }
   }
@@ -184,7 +180,6 @@ function getActiveSectionCopy(tab: SeasonFilterKey) {
   if (tab === 'upcoming') {
     return {
       title: 'Upcoming',
-      description: 'Future race weekends, kept quiet until they become the next focus.',
       empty: 'No upcoming race weekends right now.',
     }
   }
@@ -192,7 +187,6 @@ function getActiveSectionCopy(tab: SeasonFilterKey) {
   if (tab === 'waiting') {
     return {
       title: 'Locked In',
-      description: 'Your entered races that are now waiting on results or scoring.',
       empty: 'Nothing is waiting on results right now.',
     }
   }
@@ -200,14 +194,12 @@ function getActiveSectionCopy(tab: SeasonFilterKey) {
   if (tab === 'scored') {
     return {
       title: 'Results',
-      description: 'Completed weekends with points ready to review.',
       empty: 'No races have been scored yet this season.',
     }
   }
 
   return {
     title: 'Missed',
-    description: 'Closed weekends that counted without your prediction.',
     empty: 'You have not missed any race weekends this season.',
   }
 }
@@ -222,14 +214,12 @@ function RaceListCard({
   hasPredicted,
   score,
   filterKey,
-  isFeatured = false,
 }: {
   race: RaceCardData
   status: RaceStatus
   hasPredicted: boolean
   score?: number
   filterKey: SeasonFilterKey
-  isFeatured?: boolean
 }) {
   const isPrimaryAction = status === 'upcoming' && filterKey === 'action'
   const tone = getRaceTone(status)
@@ -239,6 +229,7 @@ function RaceListCard({
         ? 'View entry'
         : 'View race'
       : getMemberRaceActionLabel(status, hasPredicted)
+  const actionHref = status === 'scored' ? `/race/${race.id}#top-scorers` : `/race/${race.id}/predict`
 
   const frameClasses =
     tone === 'open'
@@ -319,11 +310,6 @@ function RaceListCard({
           <div className="flex flex-wrap items-center gap-2">
             <span className="text-xs font-bold uppercase tracking-widest text-red-500">{getRoundLabel(race.round)}</span>
             <RaceStatusPill status={status} size="xs" />
-            {isFeatured && (
-              <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-slate-300">
-                Featured above
-              </span>
-            )}
             {hasPredicted && status === 'upcoming' && (
               <span className="rounded-full bg-green-500/20 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-green-400">
                 Entered
@@ -351,7 +337,7 @@ function RaceListCard({
 
             <div className="w-full lg:w-auto">
               <PendingLink
-                href={`/race/${race.id}/predict`}
+                href={actionHref}
                 className={`inline-flex w-full items-center justify-center gap-1.5 rounded-xl px-5 py-3 font-bold transition-all lg:w-auto ${
                   isPrimaryAction
                     ? 'bg-red-600 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)] hover:bg-red-500'
@@ -506,6 +492,9 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
 
   const heroHasPredicted = hero.race ? predictedRaceIds.has(hero.race.id) : false
   const heroScore = hero.race ? scoreByRaceId.get(hero.race.id) : undefined
+  const heroStatus = hero.race ? getEffectiveRaceStatus(hero.race) : null
+  const heroHref =
+    hero.race && heroStatus === 'scored' ? `/race/${hero.race.id}#top-scorers` : hero.race ? `/race/${hero.race.id}/predict` : ''
   const heroContent = getHeroContent({
     kind: hero.kind,
     race: hero.race,
@@ -517,7 +506,6 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
     {
       key: 'action',
       label: 'Needs Action',
-      hint: 'Only the next unentered race gets urgency.',
       count: actionableRaces.length,
       href: '/predictions?tab=action',
       icon: Calendar,
@@ -525,7 +513,6 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
     {
       key: 'upcoming',
       label: 'Upcoming',
-      hint: 'Future weekends without the alarm bells.',
       count: upcomingScheduleRaces.length,
       href: '/predictions?tab=upcoming',
       icon: Calendar,
@@ -533,7 +520,6 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
     {
       key: 'waiting',
       label: 'Locked In',
-      hint: 'Locked entries waiting on the pipeline.',
       count: waitingRaces.length,
       href: '/predictions?tab=waiting',
       icon: Clock3,
@@ -541,7 +527,6 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
     {
       key: 'scored',
       label: 'Results',
-      hint: 'Completed weekends with points.',
       count: scoredRaces.length,
       href: '/predictions?tab=scored',
       icon: Trophy,
@@ -549,7 +534,6 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
     {
       key: 'missed',
       label: 'Missed',
-      hint: 'Closed races without an entry.',
       count: missedRaces.length,
       href: '/predictions?tab=missed',
       icon: AlertCircle,
@@ -601,7 +585,7 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
                   <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-slate-300">
                     {getRoundLabel(hero.race.round)}
                   </span>
-                  <RaceStatusPill status={getEffectiveRaceStatus(hero.race)} size="xs" />
+                  <RaceStatusPill status={heroStatus || getEffectiveRaceStatus(hero.race)} size="xs" />
                 </div>
 
                 <RaceMetaStrip
@@ -631,14 +615,14 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
                 </div>
 
                 <PendingLink
-                  href={`/race/${hero.race.id}/predict`}
+                  href={heroHref}
                   className={`mt-5 inline-flex items-center gap-1.5 rounded-xl px-5 py-3 font-bold transition-all ${
                     hero.kind === 'action'
                       ? 'bg-red-600 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)] hover:bg-red-500'
                       : 'border border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700'
                   }`}
                 >
-                  {getMemberRaceActionLabel(getEffectiveRaceStatus(hero.race), heroHasPredicted)}
+                  {getMemberRaceActionLabel(heroStatus || getEffectiveRaceStatus(hero.race), heroHasPredicted)}
                   <ChevronRight className="ml-1 h-5 w-5" />
                 </PendingLink>
               </div>
@@ -652,8 +636,8 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
 
         <aside className="self-start rounded-3xl border border-white/10 bg-card p-5 shadow-2xl xl:sticky xl:top-24">
           <div className="space-y-2">
-            <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Race queue</div>
-            <h2 className="text-2xl font-black italic tracking-tight text-white">Current focus</h2>
+            <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">My races</div>
+            <h2 className="text-2xl font-black italic tracking-tight text-white">Race views</h2>
           </div>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
@@ -677,7 +661,6 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
                         <Icon className={`h-4 w-4 ${isActive ? 'text-red-300' : 'text-slate-400'}`} />
                         {card.label}
                       </div>
-                      {isActive && <p className="mt-2 text-sm text-slate-400">{card.hint}</p>}
                     </div>
                     <div className={`shrink-0 text-3xl font-black italic ${isActive ? 'text-red-300' : 'text-white'}`}>
                       {card.count}
@@ -692,9 +675,7 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
 
       <section className="space-y-4">
         <SectionHeader
-          eyebrow={activeSection.title}
           title={activeSection.title}
-          description={activeSection.description}
           aside={
             <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-sm font-bold text-slate-300">
               {activeRaces.length} race{activeRaces.length === 1 ? '' : 's'}
@@ -716,7 +697,6 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
                 hasPredicted={predictedRaceIds.has(race.id)}
                 score={scoreByRaceId.get(race.id)}
                 filterKey={activeTab}
-                isFeatured={Boolean(hero.race && hero.race.id === race.id)}
               />
             ))}
           </div>

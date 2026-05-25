@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { CalendarSync, ChevronRight, ClipboardCheck, Database, PlusCircle, Settings, Users } from 'lucide-react'
+import { CalendarSync, ChevronRight, ClipboardCheck, Database, MailCheck, PlusCircle, Settings, Users } from 'lucide-react'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { getAdminRaceStatusClasses, getAdminRaceStatusLabel } from '@/utils/admin-race-status'
 import { CreateRaceForm } from '@/components/ui/create-race-form'
@@ -154,7 +154,7 @@ export default async function AdminDashboardPage() {
           description="The remaining recurring admin jobs are grouped by intent."
         />
 
-        <div className="grid gap-3 md:grid-cols-3">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <PendingLink
             href="/admin/schedule"
             className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-4 shadow-xl transition-colors hover:bg-white/[0.02]"
@@ -181,6 +181,21 @@ export default async function AdminDashboardPage() {
               </div>
               <h2 className="text-base font-bold leading-tight text-white">Groups & users</h2>
               <p className="mt-1 break-words text-sm text-slate-400">Manage groups, roles, and rare setup gaps.</p>
+            </div>
+            <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
+          </PendingLink>
+
+          <PendingLink
+            href="/admin/notifications"
+            className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-4 shadow-xl transition-colors hover:bg-white/[0.02]"
+          >
+            <div className="min-w-0">
+              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
+                <MailCheck className="h-3.5 w-3.5 text-red-400" />
+                Email
+              </div>
+              <h2 className="text-base font-bold leading-tight text-white">Notifications</h2>
+              <p className="mt-1 break-words text-sm text-slate-400">Review preferences, delivery status, and recent sends.</p>
             </div>
             <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
           </PendingLink>

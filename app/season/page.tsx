@@ -254,7 +254,6 @@ export default async function PublicSeasonPage({ searchParams }: PageProps) {
           className="mt-4"
           eyebrow="Season"
           title="Season board"
-          description="Current gaps first, then the next lock and the latest result."
           aside={
             <div className="flex flex-wrap gap-3">
               <PendingLink
@@ -287,9 +286,6 @@ export default async function PublicSeasonPage({ searchParams }: PageProps) {
                   {getRoundLabel(waitingRace.round)}
                 </div>
                 <h2 className="mt-1 text-xl font-black italic tracking-tight text-white">{waitingRace.race_name}</h2>
-                <p className="mt-1 text-sm text-amber-50/75">
-                  Most recent weekend still waiting for a published recap.
-                </p>
               </div>
               <PendingLink
                 href={`/race/${waitingRace.id}`}
@@ -344,9 +340,6 @@ export default async function PublicSeasonPage({ searchParams }: PageProps) {
                   {getRoundLabel(latestResult.round)}
                 </div>
                 <h2 className="mt-1 text-xl font-black italic tracking-tight text-white">{latestResult.race_name}</h2>
-                <p className="mt-1 text-sm text-emerald-50/75">
-                  Published result and standings impact are ready to review.
-                </p>
               </div>
               <PendingLink
                 href={`/race/${latestResult.id}`}
@@ -366,11 +359,6 @@ export default async function PublicSeasonPage({ searchParams }: PageProps) {
         <SectionHeader
           eyebrow="Race board"
           title="Race board"
-          description={
-            activeFilter === 'all'
-              ? 'Focused on current gaps, the next few locks, and recent recaps.'
-              : 'Filtered race calendar, still ordered by what is most useful first.'
-          }
           aside={
             <div className="flex flex-wrap gap-2">
               {filterLinks.map((filter) => {
