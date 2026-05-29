@@ -15,9 +15,16 @@ import { SectionHeader } from '@/components/ui/section-header'
 import { ADMIN_TIME_LABEL, formatAmsterdamDateTime } from '@/utils/amsterdam-time'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { isTransactionalEmailConfigured } from '@/utils/email'
+import {
+  getDefaultNotificationTiming,
+  getEffectiveNotificationTimingForProfile,
+  getFallbackRaceReminderLeadHours,
+  normalizeEmailDomain,
+} from '@/utils/notification-settings'
 import type { ManualLifecycleEmailKind } from '@/utils/race-notifications'
 import { createClient } from '@/utils/supabase/server'
 import { ManualEmailForm } from './manual-email-form'
+import { DomainTimingSettings } from './domain-timing-settings'
 
 export const revalidate = 0
 
@@ -93,7 +100,14 @@ type TestUserRow = {
   display_name?: string | null
   email?: string | null
   confirmed_at?: string | null
+  tenant_id?: string | null
   tenants?: TenantRef | TenantRef[] | null
+}
+
+type DomainSettingRow = {
+  domain: string
+  race_reminder_lead_hours: number
+  updated_at?: string | null
 }
 
 type UserScoreRow = {
@@ -312,7 +326,7 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
       .gte('created_at', summaryWindowStart),
     supabase
       .from('profiles')
-      .select('id, display_name, email, confirmed_at, tenants(name, is_test)')
+      .select('id, display_name, email, confirmed_at, tenant_id, tenants(name, is_test)')
       .order('display_name', { ascending: true }),
   ])
 
@@ -345,15 +359,68 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
   const selectedKind = getManualEmailKind(params.kind)
   const selectedUser = testUsers.find((user) => user.id === selectedUserId) || null
   const selectedPreference = preferences.find((preference) => preference.user_id === selectedUserId) || null
-  const leadHours = getPositiveNumber(process.env.RACE_REMINDER_LEAD_HOURS, 24)
+  const observedDomains = [
+    ...new Set(testUsers.flatMap((user) => {
+      const domain = normalizeEmailDomain(user.email)
+      return domain ? [domain] : []
+    })),
+  ].sort()
+  const domainSettingsResult =
+    observedDomains.length > 0
+      ? await supabase
+          .from('notification_domain_settings')
+          .select('domain, race_reminder_lead_hours, updated_at')
+          .in('domain', observedDomains)
+      : { data: [] as DomainSettingRow[], error: null }
+  const domainSettingsError = domainSettingsResult.error?.message?.includes('notification_domain_settings')
+    ? null
+    : domainSettingsResult.error
+
+  if (domainSettingsError) {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-500">
+        <PageBackLink href="/admin" label="Back to Admin" />
+        <SectionHeader
+          eyebrow="Notifications"
+          title="Email monitor"
+          description="Email timing settings are unavailable right now."
+          aside={<AlertTriangle className="h-8 w-8 text-amber-400" />}
+        />
+        <section className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-6 text-sm text-amber-100">
+          Refresh in a moment. If this continues, check the app health from the admin console.
+        </section>
+      </div>
+    )
+  }
+
+  const domainSettings = (domainSettingsResult.data || []) as DomainSettingRow[]
+  const domainSettingsByDomain = new Map(domainSettings.map((setting) => [setting.domain, setting]))
+  const domainTimingRows = observedDomains.map((domain) => ({
+    domain,
+    raceReminderLeadHours:
+      domainSettingsByDomain.get(domain)?.race_reminder_lead_hours || getFallbackRaceReminderLeadHours(),
+    source: domainSettingsByDomain.has(domain) ? 'domain' : 'fallback',
+    accountCount: testUsers.filter((user) => normalizeEmailDomain(user.email) === domain).length,
+  }))
+  const selectedTiming = selectedUserId
+    ? await getEffectiveNotificationTimingForProfile(supabase, {
+        user_id: selectedUserId,
+        email: selectedUser?.email,
+        tenant_id: selectedUser?.tenant_id,
+      })
+    : getDefaultNotificationTiming()
+  const leadHours = selectedTiming.raceReminderLeadHours
+  const timingSourceLabel =
+    selectedTiming.source === 'tenant'
+      ? 'group override'
+      : selectedTiming.source === 'domain'
+        ? `${selectedTiming.domain} default`
+        : 'fallback default'
   const scoreLookbackDays = getPositiveNumber(process.env.SCORE_RECAP_LOOKBACK_DAYS, 14)
   const nowIso = now.toISOString()
   const reminderWindowEnd = new Date(now.getTime() + leadHours * 60 * 60_000).toISOString()
   const scoreLookbackStart = new Date(now.getTime() - scoreLookbackDays * 24 * 60 * 60_000).toISOString()
   const transactionalEmailConfigured = isTransactionalEmailConfigured()
-  const predictionEventKey = `pre_lock:${leadHours}h`
-  const resultEventKey = 'score_recap:published'
-
   const [{ data: reminderRaceRows }, { data: scoredRaceRows }] = await Promise.all([
     selectedUserId
       ? supabase
@@ -443,8 +510,9 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
           .select('status, updated_at')
           .eq('user_id', selectedUserId)
           .eq('race_id', typedNextRace.id)
-          .eq('event_key', predictionEventKey)
+          .eq('event_type', 'pre_lock_reminder')
           .in('status', ['queued', 'sent'])
+          .not('event_key', 'like', 'test:%')
           .order('updated_at', { ascending: false })
           .limit(1)
           .maybeSingle()
@@ -455,8 +523,9 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
           .select('status, updated_at')
           .eq('user_id', selectedUserId)
           .eq('race_id', typedLatestScoredRace.id)
-          .eq('event_key', resultEventKey)
+          .eq('event_type', 'score_recap')
           .in('status', ['queued', 'sent'])
+          .not('event_key', 'like', 'test:%')
           .order('updated_at', { ascending: false })
           .limit(1)
           .maybeSingle()
@@ -520,7 +589,7 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
         label: 'Inside normal reminder window',
         passed: selectedPredictionRaceInWindow,
         detail: typedNextRace?.race_name
-          ? `${typedNextRace.race_name}, locks ${formatDate(typedNextRace.prediction_lock_at)}. Normal reminders send within ${leadHours} hours of lock.`
+          ? `${typedNextRace.race_name}, locks ${formatDate(typedNextRace.prediction_lock_at)}. Normal reminders send within ${leadHours} hours of lock from the ${timingSourceLabel}.`
           : `No race locks in the next ${leadHours} hours`,
         kind: 'rule',
       },
@@ -691,6 +760,11 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
         selectedUserLabel={selectedUserLabel}
         selectedKind={selectedKind}
         conditionGroup={selectedConditionGroup}
+      />
+
+      <DomainTimingSettings
+        rows={domainTimingRows}
+        fallbackHours={getFallbackRaceReminderLeadHours()}
       />
 
       <section className="space-y-4">

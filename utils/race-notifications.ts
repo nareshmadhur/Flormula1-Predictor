@@ -5,6 +5,12 @@ import { getProfileDisplayName } from '@/utils/profile-name'
 import { getAbsoluteUrl } from '@/utils/site'
 import { createServiceRoleClient } from '@/utils/supabase/service-role'
 import { isTestModeProfile } from '@/utils/test-mode'
+import {
+  getEffectiveNotificationTimingForProfile,
+  getEffectiveNotificationTimingForProfiles,
+  getFallbackRaceReminderLeadHours,
+  type EffectiveNotificationTiming,
+} from '@/utils/notification-settings'
 
 type NotificationKind = 'pre_lock_reminder' | 'score_recap'
 
@@ -133,7 +139,7 @@ function getPositiveNumber(value: string | undefined, fallback: number) {
 }
 
 function getReminderLeadHours() {
-  return getPositiveNumber(process.env.RACE_REMINDER_LEAD_HOURS, 24)
+  return getFallbackRaceReminderLeadHours()
 }
 
 function getScoreRecapLookbackDays() {
@@ -192,6 +198,16 @@ function buildRunResult(
 
 function getProfile(preference: NotificationPreference) {
   return getRelatedOne(preference.profiles)
+}
+
+function getTimingProfile(preference: NotificationPreference) {
+  const profile = getProfile(preference)
+
+  return {
+    user_id: preference.user_id,
+    email: profile?.email,
+    tenant_id: profile?.tenant_id,
+  }
 }
 
 function isEligiblePreference(
@@ -260,6 +276,33 @@ async function getExistingNotificationEvent(
 
   if (existingError) {
     throw new Error(`Failed to check notification event: ${existingError.message}`)
+  }
+
+  return existing as ExistingNotificationEvent | null
+}
+
+async function getBlockingLiveNotificationEvent(
+  supabase: NotificationClient,
+  input: {
+    userId: string
+    raceId: string
+    eventType: NotificationKind
+  }
+): Promise<ExistingNotificationEvent | null> {
+  const { data: existing, error } = await supabase
+    .from('notification_events')
+    .select('id, status')
+    .eq('user_id', input.userId)
+    .eq('race_id', input.raceId)
+    .eq('event_type', input.eventType)
+    .in('status', ['queued', 'sent'])
+    .not('event_key', 'like', 'test:%')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(`Failed to check notification event: ${error.message}`)
   }
 
   return existing as ExistingNotificationEvent | null
@@ -343,30 +386,32 @@ async function claimManualNotificationEvent(
     allowDuplicate?: boolean
   }
 ): Promise<{ event: ClaimedNotificationEvent | null; blockedStatus?: ExistingNotificationEvent['status'] }> {
-  const existing = await getExistingNotificationEvent(supabase, input)
+  const existing = input.allowDuplicate
+    ? null
+    : await getBlockingLiveNotificationEvent(supabase, input)
 
-  if (existing && existing.status !== 'failed') {
-    if (input.allowDuplicate) {
-      const { data, error } = await supabase
-        .from('notification_events')
-        .insert({
-          user_id: input.userId,
-          race_id: input.raceId,
-          event_key: `manual:${input.eventKey}:${Date.now()}`,
-          event_type: input.eventType,
-          status: 'queued',
-          scheduled_for: input.scheduledFor,
-        })
-        .select('id')
-        .single()
+  if (input.allowDuplicate) {
+    const { data, error } = await supabase
+      .from('notification_events')
+      .insert({
+        user_id: input.userId,
+        race_id: input.raceId,
+        event_key: `manual:${input.eventKey}:${Date.now()}`,
+        event_type: input.eventType,
+        status: 'queued',
+        scheduled_for: input.scheduledFor,
+      })
+      .select('id')
+      .single()
 
-      if (error) {
-        throw new Error(`Failed to claim override notification event: ${error.message}`)
-      }
-
-      return { event: data as ClaimedNotificationEvent }
+    if (error) {
+      throw new Error(`Failed to claim override notification event: ${error.message}`)
     }
 
+    return { event: data as ClaimedNotificationEvent }
+  }
+
+  if (existing) {
     return { event: null, blockedStatus: existing.status }
   }
 
@@ -794,10 +839,11 @@ async function sendManualPredictionEmail({
     }
   }
 
-  const leadHours = getReminderLeadHours()
+  const timing = await getEffectiveNotificationTimingForProfile(supabase, getTimingProfile(preference))
+  const leadHours = timing.raceReminderLeadHours
   const nowIso = now.toISOString()
   const windowEnd = new Date(now.getTime() + leadHours * 60 * 60_000)
-  const eventKey = buildEventKey(`pre_lock:${leadHours}h`, {})
+  const eventKey = buildEventKey('pre_lock', {})
 
   let racesQuery = supabase
     .from('races')
@@ -882,6 +928,8 @@ async function sendManualPredictionEmail({
     }),
     metadata: {
       leadHours,
+      leadHoursSource: timing.source,
+      leadHoursDomain: timing.domain,
       predictionLockAt: race.prediction_lock_at,
       manualAdminSend: true,
       manualAdminOverride: Boolean(overrideRules),
@@ -1149,13 +1197,22 @@ export async function runPreLockReminderEmails(
   }
 
   const supabase = createServiceRoleClient()
-  const leadHours = getReminderLeadHours()
   const nowIso = now.toISOString()
-  const windowEnd = new Date(now.getTime() + leadHours * 60 * 60_000)
   const previewLimit = getPreviewLimit(options)
   const testLimit = getTestLimit(options)
   const isLimitedTestSend = shouldLimitTestSends(options, testRecipient)
   const previews: NotificationPreview[] = []
+  const preferences = await getNotificationPreferences(supabase, 'pre_lock_reminder', options)
+  const preferenceUserIds = preferences.map((preference) => preference.user_id)
+  const timingByUserId = await getEffectiveNotificationTimingForProfiles(
+    supabase,
+    preferences.map(getTimingProfile)
+  )
+  const maxLeadHours = Math.max(
+    getReminderLeadHours(),
+    ...[...timingByUserId.values()].map((timing) => timing.raceReminderLeadHours)
+  )
+  const windowEnd = new Date(now.getTime() + maxLeadHours * 60 * 60_000)
 
   const { data: races, error: racesError } = await supabase
     .from('races')
@@ -1170,9 +1227,6 @@ export async function runPreLockReminderEmails(
   }
 
   const candidateRaces = (races || []) as NotificationRace[]
-  const preferences = await getNotificationPreferences(supabase, 'pre_lock_reminder', options)
-  const preferenceUserIds = preferences.map((preference) => preference.user_id)
-  const eventKey = buildEventKey(`pre_lock:${leadHours}h`, options)
   let attempted = 0
   let sent = 0
   let skipped = 0
@@ -1192,11 +1246,25 @@ export async function runPreLockReminderEmails(
     }
 
     const predictedUserIds = new Set((predictions || []).map((prediction) => prediction.user_id as string))
-    const unsubmittedPreferences = preferences.filter(
-      (preference) => !predictedUserIds.has(preference.user_id)
-    )
+    const raceLockTime = new Date(race.prediction_lock_at).getTime()
+    const unsubmittedPreferences = preferences.filter((preference) => {
+      if (predictedUserIds.has(preference.user_id)) return false
+
+      const timing = timingByUserId.get(preference.user_id)
+      const leadHours = timing?.raceReminderLeadHours || getReminderLeadHours()
+      const userWindowEnd = now.getTime() + leadHours * 60 * 60_000
+      return raceLockTime <= userWindowEnd
+    })
 
     for (const preference of unsubmittedPreferences) {
+      const timing = timingByUserId.get(preference.user_id) || {
+        raceReminderLeadHours: getReminderLeadHours(),
+        source: 'fallback',
+        domain: null,
+      } satisfies EffectiveNotificationTiming
+      const leadHours = timing.raceReminderLeadHours
+      const eventKey = buildEventKey('pre_lock', options)
+
       if (isLimitedTestSend && attempted >= testLimit) {
         skipped += 1
         continue
@@ -1208,7 +1276,16 @@ export async function runPreLockReminderEmails(
         eventKey,
       })
 
-      if (!canClaim) {
+      const blockingLiveEvent =
+        isLimitedTestSend || options.dryRun
+          ? null
+          : await getBlockingLiveNotificationEvent(supabase, {
+              userId: preference.user_id,
+              raceId: race.id,
+              eventType: 'pre_lock_reminder',
+            })
+
+      if (!canClaim || blockingLiveEvent) {
         skipped += 1
         continue
       }
@@ -1263,6 +1340,8 @@ export async function runPreLockReminderEmails(
         isTestSend: isLimitedTestSend,
         metadata: {
           leadHours,
+          leadHoursSource: timing.source,
+          leadHoursDomain: timing.domain,
           predictionLockAt: race.prediction_lock_at,
         },
       })
@@ -1395,7 +1474,16 @@ export async function runScoreRecapEmails(
         eventKey,
       })
 
-      if (!canClaim) {
+      const blockingLiveEvent =
+        isLimitedTestSend || options.dryRun
+          ? null
+          : await getBlockingLiveNotificationEvent(supabase, {
+              userId: preference.user_id,
+              raceId: race.id,
+              eventType: 'score_recap',
+            })
+
+      if (!canClaim || blockingLiveEvent) {
         skipped += 1
         continue
       }

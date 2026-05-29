@@ -348,7 +348,7 @@ GROUP_WELCOME_EMAIL_FROM="Flormula1 <hello@flormula1.nl>"
 | Brevo transactional API | `BREVO_API_KEY` | Brevo account / SMTP & API / API keys | App-triggered lifecycle emails and optional group welcome emails. Brevo domain auth is still needed for deliverability, but it does not replace this API key. |
 | Email sender | `LIFECYCLE_EMAIL_FROM` | A Brevo-verified sender on the authenticated domain | Visible From address for prediction reminders and score recaps. |
 | Cron authentication | `CRON_SECRET` or `NOTIFICATION_CRON_SECRET` | Generate a long random secret | Protects `/api/notifications/*` runner endpoints. Vercel Cron automatically sends `CRON_SECRET` as `Authorization: Bearer ...`. |
-| Reminder window | `RACE_REMINDER_LEAD_HOURS` | App choice | How far ahead of prediction lock reminders are eligible. Use `36` for daily Vercel Cron. |
+| Reminder fallback window | `RACE_REMINDER_LEAD_HOURS` | App choice | Fallback prediction reminder window when no domain default or group override is configured. Platform admins can manage domain defaults in `/admin/notifications`; group admins can override their group from `/admin/tenant`. |
 | Recap lookback | `SCORE_RECAP_LOOKBACK_DAYS` | App choice | How many recent scored races the recap runner scans. Default `14`. |
 | Welcome sender | `GROUP_WELCOME_EMAIL_FROM` | A Brevo-verified sender | Optional sender fallback for group welcome emails. |
 
@@ -356,7 +356,7 @@ For local `.env.local` changes, restart `npm run dev`. Next.js reads server-side
 
 ### Lifecycle email scheduling
 
-Apply the latest Supabase migrations before enabling lifecycle emails. They add notification preferences, one-click unsubscribe tokens, and a delivery event log that prevents duplicate sends.
+Apply the latest Supabase migrations before enabling lifecycle emails. They add notification preferences, one-click unsubscribe tokens, configurable reminder timing, and a delivery event log that prevents duplicate sends.
 
 Schedule these protected endpoints from your deployment provider or cron runner at the send time you want. The examples use `CRON_SECRET`; substitute `NOTIFICATION_CRON_SECRET` if that is the variable you configured.
 

@@ -117,7 +117,7 @@ export function renderBrandedEmail({
         You are receiving this because you asked for FLORMULA1 race emails.
         <a href="${escapeHtml(profileUrl)}" style="color:#cbd5e1;text-decoration:underline;">Manage preferences</a>
         or
-        <a href="${escapeHtml(unsubscribeUrl)}" style="color:#cbd5e1;text-decoration:underline;">unsubscribe from these emails</a>.
+        <a href="${escapeHtml(unsubscribeUrl)}" style="color:#cbd5e1;text-decoration:underline;">change email choices</a>.
       </p>
     `
     : ''
