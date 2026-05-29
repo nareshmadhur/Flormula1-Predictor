@@ -17,14 +17,14 @@ export function SectionHeader({
 }: SectionHeaderProps) {
   return (
     <div className={`flex flex-col gap-3 md:flex-row md:items-end md:justify-between ${className}`.trim()}>
-      <div className="space-y-1.5">
+      <div className="min-w-0 space-y-1.5">
         {eyebrow && (
-          <div className="text-xs font-bold uppercase tracking-[0.24em] text-slate-500">
+          <div className="break-words text-xs font-bold uppercase tracking-[0.2em] text-slate-500 sm:tracking-[0.24em]">
             {eyebrow}
           </div>
         )}
-        <h2 className="text-2xl font-black italic tracking-tight text-white md:text-3xl">{title}</h2>
-        {description && <p className="max-w-2xl text-sm text-slate-400">{description}</p>}
+        <h2 className="break-words text-2xl font-black italic tracking-tight text-white md:text-3xl">{title}</h2>
+        {description && <p className="max-w-2xl break-words text-sm text-slate-400">{description}</p>}
       </div>
       {aside}
     </div>

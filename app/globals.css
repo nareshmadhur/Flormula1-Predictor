@@ -376,13 +376,21 @@
     position: relative;
     isolation: isolate;
     overflow: hidden;
+    max-width: 100%;
+    min-width: 0;
     transform: translateZ(0);
     transition:
       transform 160ms ease,
       background-color 180ms ease,
       border-color 180ms ease,
       color 180ms ease;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .race-link-nowrap {
     white-space: nowrap;
+    overflow-wrap: normal;
   }
 
   .race-link-shell:active {

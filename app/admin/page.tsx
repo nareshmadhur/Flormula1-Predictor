@@ -96,22 +96,22 @@ export default async function AdminDashboardPage() {
         <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
           <PendingLink
             href="/admin/results"
-            className="group rounded-2xl border border-red-500/20 bg-red-500/10 p-5 transition-colors hover:bg-red-500/14"
+            className="group block min-w-0 rounded-2xl border border-red-500/20 bg-red-500/10 p-5 transition-colors hover:bg-red-500/14"
           >
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-red-100">
-              <ClipboardCheck className="h-4 w-4" />
+            <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold uppercase leading-5 tracking-[0.18em] text-red-100 sm:tracking-[0.22em]">
+              <ClipboardCheck className="h-4 w-4 shrink-0" />
               Results desk
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end">
               <div className="text-5xl font-black italic leading-none text-white">{resultsCount}</div>
               <div className="min-w-0">
-                <h2 className="text-xl font-black italic tracking-tight text-white">Finished races need results</h2>
-                <p className="mt-1 text-sm text-red-100/80">
+                <h2 className="break-words text-xl font-black italic tracking-tight text-white">Finished races need results</h2>
+                <p className="mt-1 break-words text-sm text-red-100/80">
                   Publish podiums and bonus answers here. This is the normal path for scoring.
                 </p>
               </div>
             </div>
-            <span className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white transition-colors group-hover:bg-red-500">
+            <span className="mt-5 inline-flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-1 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white transition-colors group-hover:bg-red-500">
               Open results
               <ChevronRight className="h-4 w-4" />
             </span>
@@ -120,24 +120,24 @@ export default async function AdminDashboardPage() {
           <div className="grid gap-3">
             <PendingLink
               href={firstLiveRace ? `/admin/races/${firstLiveRace.id}` : '/admin/schedule'}
-              className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-amber-500/15 bg-amber-500/8 p-4 transition-colors hover:bg-amber-500/12"
+              className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-amber-500/15 bg-amber-500/8 p-4 transition-colors hover:bg-amber-500/12"
             >
               <div className="min-w-0">
-                <div className="text-xs font-bold uppercase tracking-[0.2em] text-amber-100">Live weekends</div>
+                <div className="break-words text-xs font-bold uppercase leading-5 tracking-[0.16em] text-amber-100 sm:tracking-[0.2em]">Live weekends</div>
                 <div className="mt-1 text-2xl font-black italic text-white">{liveCount}</div>
-                <p className="mt-1 text-sm text-amber-100/75">Locked races currently in motion.</p>
+                <p className="mt-1 break-words text-sm text-amber-100/75">Locked races currently in motion.</p>
               </div>
               <ChevronRight className="h-5 w-5 shrink-0 text-amber-100/70 transition-colors group-hover:text-white" />
             </PendingLink>
 
             <PendingLink
               href="/admin/tenants"
-              className="group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-sky-500/15 bg-sky-500/8 p-4 transition-colors hover:bg-sky-500/12"
+              className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-sky-500/15 bg-sky-500/8 p-4 transition-colors hover:bg-sky-500/12"
             >
               <div className="min-w-0">
-                <div className="text-xs font-bold uppercase tracking-[0.2em] text-sky-100">Setup gaps</div>
+                <div className="break-words text-xs font-bold uppercase leading-5 tracking-[0.16em] text-sky-100 sm:tracking-[0.2em]">Setup gaps</div>
                 <div className="mt-1 text-2xl font-black italic text-white">{unassignedCount}</div>
-                <p className="mt-1 text-sm text-sky-100/75">
+                <p className="mt-1 break-words text-sm text-sky-100/75">
                   Should stay at zero once Main Group defaulting is live.
                 </p>
               </div>
@@ -157,11 +157,11 @@ export default async function AdminDashboardPage() {
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <PendingLink
             href="/admin/schedule"
-            className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-4 shadow-xl transition-colors hover:bg-white/[0.02]"
+            className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-4 shadow-xl transition-colors hover:bg-white/[0.02]"
           >
             <div className="min-w-0">
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
-                <CalendarSync className="h-3.5 w-3.5 text-red-400" />
+              <div className="mb-2 inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase leading-5 tracking-[0.14em] text-slate-300 sm:tracking-[0.18em]">
+                <CalendarSync className="h-3.5 w-3.5 shrink-0 text-red-400" />
                 Schedule
               </div>
               <h2 className="text-base font-bold leading-tight text-white">Sync race timing</h2>
@@ -172,11 +172,11 @@ export default async function AdminDashboardPage() {
 
           <PendingLink
             href="/admin/tenants"
-            className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-4 shadow-xl transition-colors hover:bg-white/[0.02]"
+            className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-4 shadow-xl transition-colors hover:bg-white/[0.02]"
           >
             <div className="min-w-0">
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
-                <Users className="h-3.5 w-3.5 text-red-400" />
+              <div className="mb-2 inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase leading-5 tracking-[0.14em] text-slate-300 sm:tracking-[0.18em]">
+                <Users className="h-3.5 w-3.5 shrink-0 text-red-400" />
                 Access
               </div>
               <h2 className="text-base font-bold leading-tight text-white">Groups & users</h2>
@@ -187,11 +187,11 @@ export default async function AdminDashboardPage() {
 
           <PendingLink
             href="/admin/notifications"
-            className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-4 shadow-xl transition-colors hover:bg-white/[0.02]"
+            className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-4 shadow-xl transition-colors hover:bg-white/[0.02]"
           >
             <div className="min-w-0">
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
-                <MailCheck className="h-3.5 w-3.5 text-red-400" />
+              <div className="mb-2 inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase leading-5 tracking-[0.14em] text-slate-300 sm:tracking-[0.18em]">
+                <MailCheck className="h-3.5 w-3.5 shrink-0 text-red-400" />
                 Email
               </div>
               <h2 className="text-base font-bold leading-tight text-white">Notifications</h2>
@@ -202,11 +202,11 @@ export default async function AdminDashboardPage() {
 
           <PendingLink
             href={access.tenantId ? '/admin/tenant' : '/admin/tenants'}
-            className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-4 shadow-xl transition-colors hover:bg-white/[0.02]"
+            className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-4 shadow-xl transition-colors hover:bg-white/[0.02]"
           >
             <div className="min-w-0">
-              <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
-                <ClipboardCheck className="h-3.5 w-3.5 text-red-400" />
+              <div className="mb-2 inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase leading-5 tracking-[0.14em] text-slate-300 sm:tracking-[0.18em]">
+                <ClipboardCheck className="h-3.5 w-3.5 shrink-0 text-red-400" />
                 Group ops
               </div>
               <h2 className="text-base font-bold leading-tight text-white">Coverage & invites</h2>
@@ -230,7 +230,7 @@ export default async function AdminDashboardPage() {
               <PendingLink
                 href={`/admin/races/${race.id}`}
                 key={race.id}
-                className="group grid gap-3 border-b border-white/5 p-4 transition-colors last:border-b-0 hover:bg-white/[0.02] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+                className="group grid min-w-0 gap-3 border-b border-white/5 p-4 transition-colors last:border-b-0 hover:bg-white/[0.02] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
               >
                 <div className="min-w-0 space-y-1">
                   <div className="text-xs font-bold uppercase tracking-widest text-red-500">
@@ -242,8 +242,8 @@ export default async function AdminDashboardPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between gap-3 lg:justify-end">
-                  <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-right text-[11px] font-bold uppercase tracking-[0.18em]">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 lg:justify-end">
+                  <div className="max-w-full rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-left text-[11px] font-bold uppercase leading-4 tracking-[0.14em] sm:tracking-[0.18em] lg:text-right">
                     <span className={getAdminRaceStatusClasses(getEffectiveRaceStatus(race))}>
                       {getAdminRaceStatusLabel(getEffectiveRaceStatus(race))}
                     </span>
@@ -259,8 +259,8 @@ export default async function AdminDashboardPage() {
       <details className="group border-t border-white/10 pt-5">
         <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
           <div className="min-w-0">
-            <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-amber-100">
-              <PlusCircle className="h-3.5 w-3.5 text-amber-300" />
+            <div className="mb-2 inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-[11px] font-bold uppercase leading-5 tracking-[0.14em] text-amber-100 sm:tracking-[0.18em]">
+              <PlusCircle className="h-3.5 w-3.5 shrink-0 text-amber-300" />
               Advanced
             </div>
             <h2 className="text-lg font-bold leading-tight text-white">Repair and fallback tools</h2>
@@ -277,11 +277,11 @@ export default async function AdminDashboardPage() {
           <div className="space-y-4">
             <PendingLink
               href="/admin/data"
-              className="group grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-5 shadow-xl transition-colors hover:bg-white/[0.02]"
+              className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-5 shadow-xl transition-colors hover:bg-white/[0.02]"
             >
               <div className="min-w-0">
-                <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.18em] text-slate-300">
-                  <Database className="h-3.5 w-3.5 text-red-400" />
+                <div className="mb-2 inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase leading-5 tracking-[0.14em] text-slate-300 sm:tracking-[0.18em]">
+                  <Database className="h-3.5 w-3.5 shrink-0 text-red-400" />
                   Reference
                 </div>
                 <h2 className="break-words text-base font-bold leading-tight text-white">Source mapping</h2>
@@ -307,7 +307,7 @@ export default async function AdminDashboardPage() {
       <details className="group border-t border-white/10 pt-5">
         <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
           <div className="min-w-0">
-            <div className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Calendar reference</div>
+            <div className="break-words text-xs font-bold uppercase leading-5 tracking-[0.16em] text-slate-500 sm:tracking-[0.22em]">Calendar reference</div>
             <h2 className="mt-1 text-lg font-bold leading-tight text-white">All race detail pages</h2>
             <p className="mt-1 max-w-2xl text-sm text-slate-400">
               Open the full calendar only for inspection, exceptions, corrections, or advanced tools.
@@ -324,7 +324,7 @@ export default async function AdminDashboardPage() {
               <PendingLink
                 href={`/admin/races/${race.id}`}
                 key={race.id}
-                className="group grid gap-3 border-b border-white/5 p-4 transition-colors last:border-b-0 hover:bg-white/[0.02] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+                className="group grid min-w-0 gap-3 border-b border-white/5 p-4 transition-colors last:border-b-0 hover:bg-white/[0.02] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
               >
                 <div className="min-w-0 space-y-1">
                   <div className="text-xs font-bold uppercase tracking-widest text-red-500">
@@ -336,8 +336,8 @@ export default async function AdminDashboardPage() {
                   </div>
                 </div>
 
-                <div className="flex items-center justify-between gap-3 lg:justify-end">
-                  <div className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-right text-[11px] font-bold uppercase tracking-[0.18em]">
+                <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 lg:justify-end">
+                  <div className="max-w-full rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-left text-[11px] font-bold uppercase leading-4 tracking-[0.14em] sm:tracking-[0.18em] lg:text-right">
                     <span className={getAdminRaceStatusClasses(getEffectiveRaceStatus(race))}>
                       {getAdminRaceStatusLabel(getEffectiveRaceStatus(race))}
                     </span>
