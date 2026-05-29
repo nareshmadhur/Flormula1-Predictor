@@ -348,7 +348,7 @@ GROUP_WELCOME_EMAIL_FROM="Flormula1 <hello@flormula1.nl>"
 | Brevo transactional API | `BREVO_API_KEY` | Brevo account / SMTP & API / API keys | App-triggered lifecycle emails and optional group welcome emails. Brevo domain auth is still needed for deliverability, but it does not replace this API key. |
 | Email sender | `LIFECYCLE_EMAIL_FROM` | A Brevo-verified sender on the authenticated domain | Visible From address for prediction reminders and score recaps. |
 | Cron authentication | `CRON_SECRET` or `NOTIFICATION_CRON_SECRET` | Generate a long random secret | Protects `/api/notifications/*` runner endpoints. Vercel Cron automatically sends `CRON_SECRET` as `Authorization: Bearer ...`. |
-| Reminder fallback window | `RACE_REMINDER_LEAD_HOURS` | App choice | Fallback prediction reminder window when no domain default or group override is configured. Platform admins can manage domain defaults in `/admin/notifications`; group admins can override their group from `/admin/tenant`. |
+| Reminder fallback window | `RACE_REMINDER_LEAD_HOURS` | App choice | Fallback prediction reminder window when no platform default or group override is configured. Platform admins can manage the platform default in `/admin/notifications`; group admins can override their group from `/admin/tenant`. |
 | Recap lookback | `SCORE_RECAP_LOOKBACK_DAYS` | App choice | How many recent scored races the recap runner scans. Default `14`. |
 | Welcome sender | `GROUP_WELCOME_EMAIL_FROM` | A Brevo-verified sender | Optional sender fallback for group welcome emails. |
 
@@ -421,7 +421,7 @@ curl -H "Authorization: Bearer $CRON_SECRET" \
 
 `testUsersOnly=1` includes only test-mode profiles/tenants. In live cron calls, test users are still excluded.
 
-Platform admins can monitor the flow at `/admin/notifications`. The page summarizes runtime readiness, active reminder/recap audiences, failed or queued events, the latest send, recent delivery logs, and subscription preference rows. It is read-only; manual send controls should stay platform-admin only until tenant-scoped sending exists.
+Platform admins can monitor the flow at `/admin/notifications`. The page summarizes runtime readiness, active reminder/recap audiences, failed or queued events, the latest send, recent delivery logs, subscription preference rows, manual lifecycle sends, and the platform default reminder timing. Group admins can set their own group reminder override from `/admin/tenant`.
 
 Set it in:
 - `.env.local` for local development. Use `http://localhost:3000` if you want auth email links to return to your local app.

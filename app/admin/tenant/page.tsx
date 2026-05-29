@@ -25,9 +25,7 @@ import { GroupInvitePanel } from './group-invite-panel'
 import { GroupRosterPanel } from './group-roster-panel'
 import { TenantNotificationTimingPanel } from './notification-timing-panel'
 import {
-  getEffectiveNotificationTimingForProfiles,
-  getFallbackRaceReminderLeadHours,
-  normalizeEmailDomain,
+  getPlatformNotificationTiming,
 } from '@/utils/notification-settings'
 
 export const revalidate = 0
@@ -204,21 +202,7 @@ export default async function TenantAdminPage() {
     ? typedMembers
     : typedMembers.filter((member) => !member.is_test)
   const hiddenTestMemberCount = typedMembers.length - operationalMembers.length
-  const timingProfiles = operationalMembers.map((member) => ({
-    user_id: member.id,
-    email: member.email,
-    tenant_id: member.tenant_id,
-  }))
-  const timingByUserId = await getEffectiveNotificationTimingForProfiles(supabase, timingProfiles)
-  const domainTimingLabels = [
-    ...new Set(
-      operationalMembers.flatMap((member) => {
-        const domain = normalizeEmailDomain(member.email)
-        const timing = timingByUserId.get(member.id)
-        return domain && timing ? [`${domain}: ${timing.raceReminderLeadHours}h`] : []
-      })
-    ),
-  ].sort()
+  const platformTiming = await getPlatformNotificationTiming(supabase)
   const tenantTimingResult = await supabase
     .from('notification_tenant_settings')
     .select('race_reminder_lead_hours')
@@ -228,20 +212,11 @@ export default async function TenantAdminPage() {
     ? null
     : (tenantTimingResult.data as TenantNotificationSettingRow | null)
   const tenantOverrideLeadHours = tenantTimingSetting?.race_reminder_lead_hours || null
-  const defaultTenantLeadHours =
-    tenantOverrideLeadHours ||
-    (domainTimingLabels.length === 1
-      ? Number(domainTimingLabels[0]?.match(/: (\d+)h/)?.[1] || getFallbackRaceReminderLeadHours())
-      : getFallbackRaceReminderLeadHours())
-  const timingHeading = tenantOverrideLeadHours
-    ? `${tenantOverrideLeadHours}h before prediction lock`
-    : domainTimingLabels.length === 1
-      ? `${domainTimingLabels[0]?.split(': ')[1]} before prediction lock`
-      : 'Platform defaults by member domain'
-  const domainTimingSummary =
-    domainTimingLabels.length > 0
-      ? `Current member domains: ${domainTimingLabels.join(', ')}.`
-      : `No member email domains found yet. Fallback is ${getFallbackRaceReminderLeadHours()}h.`
+  const defaultTenantLeadHours = tenantOverrideLeadHours || platformTiming.raceReminderLeadHours
+  const timingHeading = `${defaultTenantLeadHours}h before prediction lock`
+  const timingSummary = tenantOverrideLeadHours
+    ? `${typedTenant?.name || 'This group'} uses a group override. The platform default is ${platformTiming.raceReminderLeadHours}h.`
+    : `${typedTenant?.name || 'This group'} follows the platform default of ${platformTiming.raceReminderLeadHours}h.`
   const typedRaces = (races || []) as RaceRecord[]
   const memberIds = operationalMembers.map((member) => member.id)
 
@@ -500,7 +475,7 @@ export default async function TenantAdminPage() {
         currentLeadHoursLabel={timingHeading}
         defaultLeadHours={defaultTenantLeadHours}
         overrideLeadHours={tenantOverrideLeadHours}
-        domainSummary={domainTimingSummary}
+        timingSummary={timingSummary}
       />
 
       {featuredRace && (

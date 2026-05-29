@@ -929,7 +929,6 @@ async function sendManualPredictionEmail({
     metadata: {
       leadHours,
       leadHoursSource: timing.source,
-      leadHoursDomain: timing.domain,
       predictionLockAt: race.prediction_lock_at,
       manualAdminSend: true,
       manualAdminOverride: Boolean(overrideRules),
@@ -1260,7 +1259,6 @@ export async function runPreLockReminderEmails(
       const timing = timingByUserId.get(preference.user_id) || {
         raceReminderLeadHours: getReminderLeadHours(),
         source: 'fallback',
-        domain: null,
       } satisfies EffectiveNotificationTiming
       const leadHours = timing.raceReminderLeadHours
       const eventKey = buildEventKey('pre_lock', options)
@@ -1341,7 +1339,6 @@ export async function runPreLockReminderEmails(
         metadata: {
           leadHours,
           leadHoursSource: timing.source,
-          leadHoursDomain: timing.domain,
           predictionLockAt: race.prediction_lock_at,
         },
       })

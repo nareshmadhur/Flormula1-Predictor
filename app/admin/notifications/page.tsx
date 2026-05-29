@@ -19,12 +19,12 @@ import {
   getDefaultNotificationTiming,
   getEffectiveNotificationTimingForProfile,
   getFallbackRaceReminderLeadHours,
-  normalizeEmailDomain,
+  getPlatformNotificationTiming,
 } from '@/utils/notification-settings'
 import type { ManualLifecycleEmailKind } from '@/utils/race-notifications'
 import { createClient } from '@/utils/supabase/server'
 import { ManualEmailForm } from './manual-email-form'
-import { DomainTimingSettings } from './domain-timing-settings'
+import { PlatformTimingSettings } from './platform-timing-settings'
 
 export const revalidate = 0
 
@@ -102,12 +102,6 @@ type TestUserRow = {
   confirmed_at?: string | null
   tenant_id?: string | null
   tenants?: TenantRef | TenantRef[] | null
-}
-
-type DomainSettingRow = {
-  domain: string
-  race_reminder_lead_hours: number
-  updated_at?: string | null
 }
 
 type UserScoreRow = {
@@ -359,49 +353,7 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
   const selectedKind = getManualEmailKind(params.kind)
   const selectedUser = testUsers.find((user) => user.id === selectedUserId) || null
   const selectedPreference = preferences.find((preference) => preference.user_id === selectedUserId) || null
-  const observedDomains = [
-    ...new Set(testUsers.flatMap((user) => {
-      const domain = normalizeEmailDomain(user.email)
-      return domain ? [domain] : []
-    })),
-  ].sort()
-  const domainSettingsResult =
-    observedDomains.length > 0
-      ? await supabase
-          .from('notification_domain_settings')
-          .select('domain, race_reminder_lead_hours, updated_at')
-          .in('domain', observedDomains)
-      : { data: [] as DomainSettingRow[], error: null }
-  const domainSettingsError = domainSettingsResult.error?.message?.includes('notification_domain_settings')
-    ? null
-    : domainSettingsResult.error
-
-  if (domainSettingsError) {
-    return (
-      <div className="space-y-6 animate-in fade-in duration-500">
-        <PageBackLink href="/admin" label="Back to Admin" />
-        <SectionHeader
-          eyebrow="Notifications"
-          title="Email monitor"
-          description="Email timing settings are unavailable right now."
-          aside={<AlertTriangle className="h-8 w-8 text-amber-400" />}
-        />
-        <section className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-6 text-sm text-amber-100">
-          Refresh in a moment. If this continues, check the app health from the admin console.
-        </section>
-      </div>
-    )
-  }
-
-  const domainSettings = (domainSettingsResult.data || []) as DomainSettingRow[]
-  const domainSettingsByDomain = new Map(domainSettings.map((setting) => [setting.domain, setting]))
-  const domainTimingRows = observedDomains.map((domain) => ({
-    domain,
-    raceReminderLeadHours:
-      domainSettingsByDomain.get(domain)?.race_reminder_lead_hours || getFallbackRaceReminderLeadHours(),
-    source: domainSettingsByDomain.has(domain) ? 'domain' : 'fallback',
-    accountCount: testUsers.filter((user) => normalizeEmailDomain(user.email) === domain).length,
-  }))
+  const platformTiming = await getPlatformNotificationTiming(supabase)
   const selectedTiming = selectedUserId
     ? await getEffectiveNotificationTimingForProfile(supabase, {
         user_id: selectedUserId,
@@ -413,8 +365,8 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
   const timingSourceLabel =
     selectedTiming.source === 'tenant'
       ? 'group override'
-      : selectedTiming.source === 'domain'
-        ? `${selectedTiming.domain} default`
+      : selectedTiming.source === 'platform'
+        ? 'platform default'
         : 'fallback default'
   const scoreLookbackDays = getPositiveNumber(process.env.SCORE_RECAP_LOOKBACK_DAYS, 14)
   const nowIso = now.toISOString()
@@ -762,9 +714,10 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
         conditionGroup={selectedConditionGroup}
       />
 
-      <DomainTimingSettings
-        rows={domainTimingRows}
+      <PlatformTimingSettings
+        currentLeadHours={platformTiming.raceReminderLeadHours}
         fallbackHours={getFallbackRaceReminderLeadHours()}
+        source={platformTiming.source}
       />
 
       <section className="space-y-4">

@@ -14,7 +14,7 @@ type TenantNotificationTimingPanelProps = {
   currentLeadHoursLabel: string
   defaultLeadHours: number
   overrideLeadHours?: number | null
-  domainSummary: string
+  timingSummary: string
 }
 
 const initialState: NotificationTimingActionState = {}
@@ -24,7 +24,7 @@ export function TenantNotificationTimingPanel({
   currentLeadHoursLabel,
   defaultLeadHours,
   overrideLeadHours,
-  domainSummary,
+  timingSummary,
 }: TenantNotificationTimingPanelProps) {
   const [saveState, saveAction] = useActionState(saveTenantNotificationTiming, initialState)
   const [clearState, clearAction] = useActionState(clearTenantNotificationTiming, initialState)
@@ -44,9 +44,9 @@ export function TenantNotificationTimingPanel({
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
             {hasOverride
               ? `${groupName} uses its own reminder window.`
-              : `${groupName} follows platform defaults by member email domain.`}
+              : `${groupName} follows the platform reminder window.`}
           </p>
-          <p className="mt-1 text-sm leading-6 text-slate-500">{domainSummary}</p>
+          <p className="mt-1 text-sm leading-6 text-slate-500">{timingSummary}</p>
         </div>
 
         <div className="rounded-2xl border border-white/5 bg-black/25 p-4">

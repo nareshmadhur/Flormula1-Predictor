@@ -3,7 +3,6 @@
 import { revalidatePath } from 'next/cache'
 import { assertPlatformAdmin, getAdminAccessContext } from '@/utils/admin-access'
 import { createClient } from '@/utils/supabase/server'
-import { normalizeSettingsDomain } from '@/utils/notification-settings'
 import {
   sendManualLifecycleEmailForUser,
   type ManualLifecycleEmailKind,
@@ -67,42 +66,37 @@ export async function sendAdminNotificationEmail(
   }
 }
 
-export async function saveDomainNotificationTiming(
+export async function savePlatformNotificationTiming(
   _prevState: NotificationTimingActionState,
   formData: FormData
 ): Promise<NotificationTimingActionState> {
   try {
     const { supabase, access } = await assertPlatformAdmin()
-    const domain = normalizeSettingsDomain(String(formData.get('domain') || ''))
     const leadHours = getSubmittedLeadHours(formData.get('race_reminder_lead_hours'))
-
-    if (!domain) {
-      return { status: 'error', message: 'Enter a valid email domain.' }
-    }
 
     if (!leadHours) {
       return { status: 'error', message: 'Reminder timing must be between 1 and 240 hours.' }
     }
 
-    const { error } = await supabase.from('notification_domain_settings').upsert({
-      domain,
+    const { error } = await supabase.from('notification_platform_settings').upsert({
+      id: 'global',
       race_reminder_lead_hours: leadHours,
       updated_at: new Date().toISOString(),
       updated_by: access.userId,
     })
 
     if (error) {
-      return { status: 'error', message: `Could not save domain timing: ${error.message}` }
+      return { status: 'error', message: `Could not save platform timing: ${error.message}` }
     }
 
     revalidatePath('/admin/notifications')
     revalidatePath('/admin/tenant')
 
-    return { status: 'success', message: `Saved ${leadHours}h default for ${domain}.` }
+    return { status: 'success', message: `Saved ${leadHours}h platform default.` }
   } catch (error) {
     return {
       status: 'error',
-      message: error instanceof Error ? error.message : 'Could not save domain timing.',
+      message: error instanceof Error ? error.message : 'Could not save platform timing.',
     }
   }
 }
