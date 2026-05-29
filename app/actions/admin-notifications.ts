@@ -25,6 +25,7 @@ export async function sendAdminNotificationEmail(
 
     const userId = String(formData.get('user_id') || '').trim()
     const emailKind = String(formData.get('email_kind') || '').trim()
+    const overrideRules = formData.get('override_rules') === 'on'
 
     if (!userId) {
       return { status: 'error', message: 'Choose a user before sending an email.' }
@@ -37,6 +38,7 @@ export async function sendAdminNotificationEmail(
     const result = await sendManualLifecycleEmailForUser({
       userId,
       kind: emailKind,
+      overrideRules,
     })
 
     revalidatePath('/admin/notifications')

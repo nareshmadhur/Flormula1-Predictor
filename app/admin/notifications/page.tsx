@@ -60,6 +60,7 @@ type NotificationEventMetadata = {
   testRecipient?: string | null
   testUsersOnly?: boolean | null
   originalRecipientEmail?: string | null
+  manualAdminOverride?: boolean | null
 }
 
 type NotificationEventRow = {
@@ -107,6 +108,18 @@ type PredictionRow = {
 type SelectedEventRow = {
   status: EventStatus
   updated_at?: string | null
+}
+
+type ManualEmailCondition = {
+  label: string
+  passed: boolean
+  detail?: string
+  kind: 'required' | 'rule'
+}
+
+type ManualEmailConditionGroup = {
+  title: string
+  conditions: ManualEmailCondition[]
 }
 
 type SearchParams = {
@@ -348,7 +361,6 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
           .select('id, season, round, race_name, race_start_at, prediction_lock_at')
           .neq('status', 'cancelled')
           .gt('prediction_lock_at', nowIso)
-          .lte('prediction_lock_at', reminderWindowEnd)
           .order('prediction_lock_at', { ascending: true })
           .limit(8)
       : Promise.resolve({ data: [] }),
@@ -357,7 +369,6 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
           .from('races')
           .select('id, season, round, race_name, race_start_at, prediction_lock_at')
           .eq('status', 'scored')
-          .gte('race_start_at', scoreLookbackStart)
           .order('race_start_at', { ascending: false })
           .limit(8)
       : Promise.resolve({ data: [] }),
@@ -365,6 +376,16 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
 
   const reminderRaces = (reminderRaceRows || []) as NotificationRaceRef[]
   const scoredRaces = (scoredRaceRows || []) as NotificationRaceRef[]
+  const reminderWindowEndTime = new Date(reminderWindowEnd).getTime()
+  const scoreLookbackStartTime = new Date(scoreLookbackStart).getTime()
+  const racesInsideReminderWindow = reminderRaces.filter((race) => {
+    const lockTime = race.prediction_lock_at ? new Date(race.prediction_lock_at).getTime() : Number.NaN
+    return Number.isFinite(lockTime) && lockTime <= reminderWindowEndTime
+  })
+  const racesInsideResultsWindow = scoredRaces.filter((race) => {
+    const startTime = race.race_start_at ? new Date(race.race_start_at).getTime() : Number.NaN
+    return Number.isFinite(startTime) && startTime >= scoreLookbackStartTime
+  })
   const reminderRaceIds = reminderRaces.flatMap((race) => (race.id ? [race.id] : []))
   const scoredRaceIds = scoredRaces.flatMap((race) => (race.id ? [race.id] : []))
 
@@ -389,22 +410,31 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
     ((selectedPredictions || []) as PredictionRow[]).map((prediction) => prediction.race_id)
   )
   const typedNextRace =
-    reminderRaces.find((race) => race.id && !predictedRaceIds.has(race.id)) ||
+    racesInsideReminderWindow.find((race) => race.id && !predictedRaceIds.has(race.id)) ||
+    racesInsideReminderWindow[0] ||
     reminderRaces[0] ||
     null
   const selectedPrediction = Boolean(typedNextRace?.id && predictedRaceIds.has(typedNextRace.id))
+  const selectedPredictionRaceInWindow = Boolean(
+    typedNextRace?.id && racesInsideReminderWindow.some((race) => race.id === typedNextRace.id)
+  )
   const scoreByRaceId = new Map(
     ((selectedScores || []) as UserScoreRow[])
       .filter((score) => score.race_id)
       .map((score) => [score.race_id as string, score])
   )
   const typedLatestScoredRace =
+    racesInsideResultsWindow.find((race) => race.id && scoreByRaceId.has(race.id)) ||
+    racesInsideResultsWindow[0] ||
     scoredRaces.find((race) => race.id && scoreByRaceId.has(race.id)) ||
     scoredRaces[0] ||
     null
   const typedSelectedScore = typedLatestScoredRace?.id
     ? scoreByRaceId.get(typedLatestScoredRace.id) || null
     : null
+  const selectedResultRaceInWindow = Boolean(
+    typedLatestScoredRace?.id && racesInsideResultsWindow.some((race) => race.id === typedLatestScoredRace.id)
+  )
 
   const [{ data: selectedPredictionEvent }, { data: selectedResultEvent }] = await Promise.all([
     selectedUserId && typedNextRace?.id
@@ -444,15 +474,18 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
     : selectedUser
       ? getUserLabel(selectedUser)
       : 'No user selected'
-  const baseManualConditions = [
+  const baseManualConditions: ManualEmailCondition[] = [
     {
       label: 'Confirmed account email',
       passed: Boolean(selectedUser?.confirmed_at && selectedUser?.email),
       detail: selectedUser?.email || 'No email found',
+      kind: 'required',
     },
     {
       label: 'Email sending ready',
       passed: transactionalEmailConfigured,
+      detail: 'Brevo sender and API access are available.',
+      kind: 'required',
     },
     {
       label: 'Preferences active',
@@ -462,26 +495,40 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
         : selectedPreference
           ? undefined
           : 'No preferences saved yet',
+      kind: 'required',
     },
   ]
-  const predictionConditionGroup = {
+  const predictionConditionGroup: ManualEmailConditionGroup = {
     title: 'Prediction reminder',
     conditions: [
       ...baseManualConditions,
       {
-        label: 'Prediction emails enabled',
-        passed: Boolean(selectedPreference?.race_reminder_emails_enabled),
-      },
-      {
-        label: 'Race inside reminder window',
+        label: 'Upcoming race found',
         passed: Boolean(typedNextRace),
         detail: typedNextRace?.race_name
           ? `${typedNextRace.race_name}, locks ${formatDate(typedNextRace.prediction_lock_at)}`
+          : 'No upcoming race is available',
+        kind: 'required',
+      },
+      {
+        label: 'Prediction emails enabled',
+        passed: Boolean(selectedPreference?.race_reminder_emails_enabled),
+        detail: 'Normal sends respect the user preference for prediction reminders.',
+        kind: 'rule',
+      },
+      {
+        label: 'Inside normal reminder window',
+        passed: selectedPredictionRaceInWindow,
+        detail: typedNextRace?.race_name
+          ? `${typedNextRace.race_name}, locks ${formatDate(typedNextRace.prediction_lock_at)}. Normal reminders send within ${leadHours} hours of lock.`
           : `No race locks in the next ${leadHours} hours`,
+        kind: 'rule',
       },
       {
         label: 'Prediction still missing',
         passed: Boolean(typedNextRace && !selectedPrediction),
+        detail: selectedPrediction ? 'The selected user already submitted for this race.' : undefined,
+        kind: 'rule',
       },
       {
         label: 'Not already sent for this race',
@@ -489,28 +536,39 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
         detail: typedSelectedPredictionEvent
           ? `Already ${typedSelectedPredictionEvent.status} ${formatDate(typedSelectedPredictionEvent.updated_at)}`
           : undefined,
+        kind: 'rule',
       },
     ],
   }
-  const resultConditionGroup = {
+  const resultConditionGroup: ManualEmailConditionGroup = {
     title: 'Results recap',
     conditions: [
       ...baseManualConditions,
       {
+        label: 'Scored race found',
+        passed: Boolean(typedLatestScoredRace),
+        detail: typedLatestScoredRace?.race_name || 'No scored race is available',
+        kind: 'required',
+      },
+      {
+        label: 'User has a score',
+        passed: Boolean(typedSelectedScore),
+        detail: typedSelectedScore ? `${typedSelectedScore.total_points} points` : 'A results email needs a race score for this user.',
+        kind: 'required',
+      },
+      {
         label: 'Results emails enabled',
         passed: Boolean(selectedPreference?.score_recap_emails_enabled),
+        detail: 'Normal sends respect the user preference for results recaps.',
+        kind: 'rule',
       },
       {
-        label: 'Recent scored race available',
-        passed: Boolean(typedLatestScoredRace),
+        label: 'Inside normal results window',
+        passed: selectedResultRaceInWindow,
         detail: typedLatestScoredRace?.race_name
-          ? `${typedLatestScoredRace.race_name}, within the last ${scoreLookbackDays} days`
+          ? `${typedLatestScoredRace.race_name}, normal recaps use races scored within the last ${scoreLookbackDays} days.`
           : undefined,
-      },
-      {
-        label: 'User has scored result',
-        passed: Boolean(typedSelectedScore),
-        detail: typedSelectedScore ? `${typedSelectedScore.total_points} points` : undefined,
+        kind: 'rule',
       },
       {
         label: 'Not already sent for this race',
@@ -518,6 +576,7 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
         detail: typedSelectedResultEvent
           ? `Already ${typedSelectedResultEvent.status} ${formatDate(typedSelectedResultEvent.updated_at)}`
           : undefined,
+        kind: 'rule',
       },
     ],
   }
@@ -726,6 +785,11 @@ export default async function AdminNotificationsPage({ searchParams }: AdminNoti
                       {isTestEvent(event) && (
                         <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-amber-200">
                           Test
+                        </span>
+                      )}
+                      {event.metadata?.manualAdminOverride && (
+                        <span className="rounded-full border border-red-500/20 bg-red-500/10 px-2.5 py-1 text-xs font-bold uppercase tracking-wider text-red-200">
+                          Override
                         </span>
                       )}
                     </div>

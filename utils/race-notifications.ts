@@ -340,11 +340,33 @@ async function claimManualNotificationEvent(
     eventKey: string
     eventType: NotificationKind
     scheduledFor: string
+    allowDuplicate?: boolean
   }
 ): Promise<{ event: ClaimedNotificationEvent | null; blockedStatus?: ExistingNotificationEvent['status'] }> {
   const existing = await getExistingNotificationEvent(supabase, input)
 
   if (existing && existing.status !== 'failed') {
+    if (input.allowDuplicate) {
+      const { data, error } = await supabase
+        .from('notification_events')
+        .insert({
+          user_id: input.userId,
+          race_id: input.raceId,
+          event_key: `manual:${input.eventKey}:${Date.now()}`,
+          event_type: input.eventType,
+          status: 'queued',
+          scheduled_for: input.scheduledFor,
+        })
+        .select('id')
+        .single()
+
+      if (error) {
+        throw new Error(`Failed to claim override notification event: ${error.message}`)
+      }
+
+      return { event: data as ClaimedNotificationEvent }
+    }
+
     return { event: null, blockedStatus: existing.status }
   }
 
@@ -732,8 +754,7 @@ async function getManualNotificationPreference(supabase: NotificationClient, use
 }
 
 function getManualPreferenceBlockReason(
-  preference: NotificationPreference | null,
-  kind: ManualLifecycleEmailKind
+  preference: NotificationPreference | null
 ) {
   if (!preference) return 'This user has not set email preferences yet.'
 
@@ -744,19 +765,13 @@ function getManualPreferenceBlockReason(
   if (!profile?.confirmed_at) return 'The selected user has not confirmed their email address.'
   if (preference.unsubscribed_at) return 'The selected user has unsubscribed from emails.'
   if (!preference.unsubscribe_token) return 'The selected user is missing unsubscribe preferences.'
-  if (kind === 'prediction' && !preference.race_reminder_emails_enabled) {
-    return 'The selected user has not enabled prediction reminder emails.'
-  }
-  if (kind === 'results' && !preference.score_recap_emails_enabled) {
-    return 'The selected user has not enabled results emails.'
-  }
 
   return null
 }
 
 function getBlockedEventMessage(status: ExistingNotificationEvent['status'] | undefined, raceName: string) {
-  if (status === 'sent') return `This email was already sent for ${raceName}.`
-  if (status === 'queued') return `This email is already waiting to send for ${raceName}.`
+  if (status === 'sent') return `This email was already sent for ${raceName}. Confirm the override to resend it.`
+  if (status === 'queued') return `This email is already waiting to send for ${raceName}. Confirm the override to send another copy.`
   return `This email could not be reserved for ${raceName}. Try again in a moment.`
 }
 
@@ -764,23 +779,37 @@ async function sendManualPredictionEmail({
   supabase,
   preference,
   now,
+  overrideRules,
 }: {
   supabase: NotificationClient
   preference: NotificationPreference
   now: Date
+  overrideRules?: boolean
 }): Promise<ManualLifecycleEmailResult> {
+  if (!preference.race_reminder_emails_enabled && !overrideRules) {
+    return {
+      ok: false,
+      sent: false,
+      message: 'Prediction reminders are not enabled for this user. Confirm the override to send anyway.',
+    }
+  }
+
   const leadHours = getReminderLeadHours()
   const nowIso = now.toISOString()
   const windowEnd = new Date(now.getTime() + leadHours * 60 * 60_000)
   const eventKey = buildEventKey(`pre_lock:${leadHours}h`, {})
 
-  const { data: races, error: racesError } = await supabase
+  let racesQuery = supabase
     .from('races')
     .select('id, season, round, race_name, race_start_at, prediction_lock_at, circuits(name, country, emoji)')
     .neq('status', 'cancelled')
     .gt('prediction_lock_at', nowIso)
-    .lte('prediction_lock_at', windowEnd.toISOString())
-    .order('prediction_lock_at', { ascending: true })
+
+  if (!overrideRules) {
+    racesQuery = racesQuery.lte('prediction_lock_at', windowEnd.toISOString())
+  }
+
+  const { data: races, error: racesError } = await racesQuery.order('prediction_lock_at', { ascending: true })
 
   if (racesError) {
     throw new Error(`Failed to load races for reminders: ${racesError.message}`)
@@ -791,7 +820,9 @@ async function sendManualPredictionEmail({
     return {
       ok: false,
       sent: false,
-      message: 'No prediction reminder is due right now. The next race is not inside the reminder window.',
+      message: overrideRules
+        ? 'No upcoming race is available for a prediction reminder.'
+        : 'No prediction reminder is due right now. The next race is not inside the reminder window.',
     }
   }
 
@@ -809,13 +840,15 @@ async function sendManualPredictionEmail({
   }
 
   const predictedRaceIds = new Set((predictions || []).map((prediction) => prediction.race_id as string))
-  const race = candidateRaces.find((candidateRace) => !predictedRaceIds.has(candidateRace.id))
+  const race = overrideRules
+    ? candidateRaces[0]
+    : candidateRaces.find((candidateRace) => !predictedRaceIds.has(candidateRace.id))
 
   if (!race) {
     return {
       ok: false,
       sent: false,
-      message: 'No prediction reminder is due right now. The selected user has already submitted for races in the reminder window.',
+      message: 'No prediction reminder is due right now. The selected user has already submitted for races in the reminder window. Confirm the override to send anyway.',
     }
   }
 
@@ -825,6 +858,7 @@ async function sendManualPredictionEmail({
     eventKey,
     eventType: 'pre_lock_reminder',
     scheduledFor: nowIso,
+    allowDuplicate: overrideRules,
   })
 
   if (!claimed.event) {
@@ -850,6 +884,7 @@ async function sendManualPredictionEmail({
       leadHours,
       predictionLockAt: race.prediction_lock_at,
       manualAdminSend: true,
+      manualAdminOverride: Boolean(overrideRules),
     },
   })
 
@@ -872,21 +907,35 @@ async function sendManualResultsEmail({
   supabase,
   preference,
   now,
+  overrideRules,
 }: {
   supabase: NotificationClient
   preference: NotificationPreference
   now: Date
+  overrideRules?: boolean
 }): Promise<ManualLifecycleEmailResult> {
+  if (!preference.score_recap_emails_enabled && !overrideRules) {
+    return {
+      ok: false,
+      sent: false,
+      message: 'Results emails are not enabled for this user. Confirm the override to send anyway.',
+    }
+  }
+
   const lookbackDays = getScoreRecapLookbackDays()
   const lookbackStart = new Date(now.getTime() - lookbackDays * 24 * 60 * 60_000)
   const eventKey = buildEventKey('score_recap:published', {})
 
-  const { data: races, error: racesError } = await supabase
+  let racesQuery = supabase
     .from('races')
     .select('id, season, round, race_name, race_start_at, prediction_lock_at, circuits(name, country, emoji)')
     .eq('status', 'scored')
-    .gte('race_start_at', lookbackStart.toISOString())
-    .order('race_start_at', { ascending: false })
+
+  if (!overrideRules) {
+    racesQuery = racesQuery.gte('race_start_at', lookbackStart.toISOString())
+  }
+
+  const { data: races, error: racesError } = await racesQuery.order('race_start_at', { ascending: false })
 
   if (racesError) {
     throw new Error(`Failed to load scored races: ${racesError.message}`)
@@ -897,7 +946,9 @@ async function sendManualResultsEmail({
     return {
       ok: false,
       sent: false,
-      message: 'No results email is due right now. There is no recently scored race in the send window.',
+      message: overrideRules
+        ? 'No scored race is available for a results email.'
+        : 'No results email is due right now. There is no recently scored race in the send window.',
     }
   }
 
@@ -971,6 +1022,7 @@ async function sendManualResultsEmail({
     eventKey,
     eventType: 'score_recap',
     scheduledFor: now.toISOString(),
+    allowDuplicate: overrideRules,
   })
 
   if (!claimed.event) {
@@ -1017,6 +1069,7 @@ async function sendManualResultsEmail({
       globalMovement: movement.global,
       groupMovement: movement.group,
       manualAdminSend: true,
+      manualAdminOverride: Boolean(overrideRules),
     },
   })
 
@@ -1038,10 +1091,12 @@ async function sendManualResultsEmail({
 export async function sendManualLifecycleEmailForUser({
   userId,
   kind,
+  overrideRules = false,
   now = new Date(),
 }: {
   userId: string
   kind: ManualLifecycleEmailKind
+  overrideRules?: boolean
   now?: Date
 }): Promise<ManualLifecycleEmailResult> {
   if (!isTransactionalEmailConfigured()) {
@@ -1054,7 +1109,7 @@ export async function sendManualLifecycleEmailForUser({
 
   const supabase = createServiceRoleClient()
   const preference = await getManualNotificationPreference(supabase, userId)
-  const blockReason = getManualPreferenceBlockReason(preference, kind)
+  const blockReason = getManualPreferenceBlockReason(preference)
 
   if (blockReason || !preference) {
     return {
@@ -1065,10 +1120,10 @@ export async function sendManualLifecycleEmailForUser({
   }
 
   if (kind === 'prediction') {
-    return sendManualPredictionEmail({ supabase, preference, now })
+    return sendManualPredictionEmail({ supabase, preference, now, overrideRules })
   }
 
-  return sendManualResultsEmail({ supabase, preference, now })
+  return sendManualResultsEmail({ supabase, preference, now, overrideRules })
 }
 
 export async function runPreLockReminderEmails(
