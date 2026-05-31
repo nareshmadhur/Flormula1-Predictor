@@ -46,8 +46,8 @@ function getWelcomeHtml({
     title: `Welcome to ${groupName}`,
     intro: `Hi ${getDisplayName(displayName)}, ${getWelcomeIntro(joinedVia, groupName)} Your standings and race picks are ready.`,
     actions: [
-      { label: 'Open group standings', url: standingsUrl },
-      { label: 'Open my race page', url: picksUrl, tone: 'secondary' },
+      { label: 'Open my race page', url: picksUrl },
+      { label: 'Open group standings', url: standingsUrl, tone: 'secondary' },
     ],
   })
 }

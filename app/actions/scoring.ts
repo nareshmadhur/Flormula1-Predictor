@@ -1,6 +1,5 @@
 'use server'
 import { revalidatePath } from 'next/cache'
-import { rebuildLeaderboardForSeason } from '@/utils/leaderboard'
 import { assertPlatformAdmin } from '@/utils/admin-access'
 import { recalculateRaceScores } from '@/utils/race-scoring'
 
@@ -16,6 +15,9 @@ export async function calculateRaceScoresAction(formData: FormData) {
   revalidatePath(`/leaderboard`)
   revalidatePath('/me/history')
   revalidatePath('/predictions')
+  revalidatePath('/season')
+  revalidatePath(`/race/${raceId}`)
+  revalidatePath(`/race/${raceId}/predict`)
 }
 
 export async function repairScoresAndLeaderboardsAction() {
@@ -31,15 +33,8 @@ export async function repairScoresAndLeaderboardsAction() {
 
   const resultRaceIds = new Set((raceResults || []).map((row) => row.race_id))
   const targetRaces = (races || []).filter((race) => resultRaceIds.has(race.id))
-  const affectedSeasons = new Set<number>()
-
   for (const race of targetRaces) {
-    const recalculated = await recalculateRaceScores(supabase, race.id, { rebuildLeaderboard: false })
-    affectedSeasons.add(recalculated.season)
-  }
-
-  for (const season of affectedSeasons) {
-    await rebuildLeaderboardForSeason(supabase, season)
+    await recalculateRaceScores(supabase, race.id)
   }
 
   revalidatePath('/admin')

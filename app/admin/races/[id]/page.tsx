@@ -11,6 +11,8 @@ import { calculateRaceScoresAction } from '@/app/actions/scoring'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { getProfileDisplayName } from '@/utils/profile-name'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
+import { invalidateRaceScores, recalculateRaceScores } from '@/utils/race-scoring'
+import { saveHistoricPrediction, saveOfficialRaceResult } from '@/utils/result-pipeline'
 import { getAdminRaceStatusBadgeClasses, getAdminRaceStatusLabel } from '@/utils/admin-race-status'
 import {
   buildOpenF1ScheduleReview,
@@ -102,11 +104,17 @@ async function addBonusQuestion(formData: FormData) {
   const points = parseInt(formData.get('points') as string)
   const optionLabels = Array.from(formData.getAll('options')) as string[]
 
-  const { data: question } = await supabase.from('bonus_questions').insert({
+  await invalidateRaceScores(supabase, raceId)
+
+  const { data: question, error: questionError } = await supabase.from('bonus_questions').insert({
     race_id: raceId,
     question_text: questionText,
     points
   }).select().single()
+
+  if (questionError || !question) {
+    throw new Error('Failed to add bonus question')
+  }
 
   if (question) {
     const options = optionLabels.filter(l => l.trim()).map(label => ({
@@ -115,10 +123,16 @@ async function addBonusQuestion(formData: FormData) {
       label
     }))
     if (options.length > 0) {
-      await supabase.from('bonus_options').insert(options)
+      const { error: optionsError } = await supabase.from('bonus_options').insert(options)
+      if (optionsError) throw new Error('Failed to add bonus options')
     }
   }
   revalidatePath(`/admin/races/${raceId}`)
+  revalidatePath(`/race/${raceId}`)
+  revalidatePath(`/race/${raceId}/predict`)
+  revalidatePath('/leaderboard')
+  revalidatePath('/predictions')
+  revalidatePath('/me/history')
 }
 
 async function saveResults(formData: FormData) {
@@ -132,36 +146,23 @@ async function saveResults(formData: FormData) {
   const p2 = formData.get('p2_driver_id') as string
   const p3 = formData.get('p3_driver_id') as string
   
-  // Upsert race results
-  await supabase.from('race_results').upsert({
-    race_id: raceId,
-    p1_driver_id: p1,
-    p2_driver_id: p2,
-    p3_driver_id: p3,
-    entered_by: access.userId
-  }, { onConflict: 'race_id' })
-
-  // Insert bonus answers
   const bonusIds = Array.from(formData.keys()).filter(k => k.startsWith('bonus_'))
-  
-  // Clear old
-  await supabase.from('race_bonus_answers').delete().eq('race_id', raceId)
-  
-  const inserts = bonusIds.map(key => ({
-    race_id: raceId,
-    bonus_question_id: key.replace('bonus_', ''),
-    correct_bonus_option_id: formData.get(key) as string
-  }))
 
-  if (inserts.length > 0) {
-    await supabase.from('race_bonus_answers').insert(inserts)
-  }
-
-  await supabase.from('races').update({ status: 'completed' }).eq('id', raceId)
+  await saveOfficialRaceResult(supabase, {
+    raceId,
+    podium: { p1, p2, p3 },
+    bonusAnswers: bonusIds.map((key) => ({
+      questionId: key.replace('bonus_', ''),
+      optionId: formData.get(key) as string,
+    })),
+  })
 
   revalidatePath(`/admin/races/${raceId}`)
   revalidatePath('/admin/results')
   revalidatePath('/season')
+  revalidatePath('/leaderboard')
+  revalidatePath('/predictions')
+  revalidatePath('/me/history')
   revalidatePath(`/race/${raceId}`)
   revalidatePath(`/race/${raceId}/predict`)
 }
@@ -183,15 +184,33 @@ export async function proxyPrediction(formData: FormData) {
       return
   }
 
-  const { data: existing } = await supabase.from('predictions').select('id').eq('race_id', raceId).eq('user_id', targetUserId).maybeSingle()
-  
-  if (existing) {
-     await supabase.from('predictions').update({ p1_driver_id: p1, p2_driver_id: p2, p3_driver_id: p3, submitted_at: new Date().toISOString() }).eq('id', existing.id)
-  } else {
-     await supabase.from('predictions').insert({ race_id: raceId, user_id: targetUserId, p1_driver_id: p1, p2_driver_id: p2, p3_driver_id: p3, submitted_at: new Date().toISOString() })
+  const bonusAnswers = Array.from(formData.keys())
+    .filter((key) => key.startsWith('bonus_'))
+    .flatMap((key) => {
+      const optionId = String(formData.get(key) || '').trim()
+      return optionId
+        ? [{ questionId: key.replace('bonus_', ''), optionId }]
+        : []
+    })
+
+  const result = await saveHistoricPrediction(supabase, {
+    raceId,
+    userId: targetUserId,
+    podium: { p1, p2, p3 },
+    bonusAnswers,
+  })
+
+  if (result.shouldRecalculate) {
+    await recalculateRaceScores(supabase, raceId)
   }
   
   revalidatePath(`/admin/races/${raceId}`)
+  revalidatePath('/season')
+  revalidatePath('/leaderboard')
+  revalidatePath('/predictions')
+  revalidatePath('/me/history')
+  revalidatePath(`/race/${raceId}`)
+  revalidatePath(`/race/${raceId}/predict`)
 }
 
 // Scoring action imported from '@/app/actions/scoring'
@@ -213,7 +232,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
 
   const { data: drivers } = await supabase.from('drivers').select('*').order('full_name')
   const { data: circuits } = await supabase.from('circuits').select('*').order('name')
-  const { data: bonusQuestions } = await supabase.from('bonus_questions').select('*, bonus_options(*)').eq('race_id', id)
+  const { data: bonusQuestions } = await supabase.from('bonus_questions').select('*, bonus_options(*)').eq('race_id', id).eq('is_active', true)
   const { data: existingResult } = await supabase.from('race_results').select('*').eq('race_id', id).single()
   const { data: existingBonusAnswers } = await supabase.from('race_bonus_answers').select('*').eq('race_id', id)
   const { data: profiles } = await supabase.from('profiles').select('*').order('display_name')
@@ -640,7 +659,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
              <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
                <div>
                  <h2 className="text-xl font-bold flex items-center"><Plus className="w-5 h-5 mr-2 text-amber-300" /> Log Historic Prediction</h2>
-                 <p className="mt-2 text-sm text-slate-400">Use this for backfills or corrections, not normal race-week submissions.</p>
+	                 <p className="mt-2 text-sm text-slate-400">Use this for backfills or corrections, not normal race-week submissions. Saved official races are rescored automatically.</p>
                </div>
                <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-amber-100">
                  Advanced
@@ -662,7 +681,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
                       </select>
                    </div>
 
-                   <div className="grid grid-cols-3 gap-2">
+	                   <div className="grid grid-cols-3 gap-2">
                        <div>
                           <label className="block text-xs font-bold text-slate-500 mb-1">P1</label>
                           <select name="p1" required defaultValue="" className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-2 text-sm">
@@ -684,9 +703,31 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
                              {typedDrivers.map((d) => <option key={d.id} value={d.id} className="bg-slate-900 text-white">{d.code}</option>)}
                           </select>
                        </div>
-                   </div>
+	                   </div>
 
-                   <FormActionButton idleLabel="Submit prediction for user" pendingLabel="Saving prediction..." tone="secondary" className="mt-2" />
+                       {typedBonusQuestions.length > 0 && (
+                         <div className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-4">
+                           <div>
+                             <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-400">Historic bonus answers</div>
+                             <p className="mt-1 text-xs text-slate-500">Leave an answer blank when the member did not submit one.</p>
+                           </div>
+                           {typedBonusQuestions.map((question) => (
+                             <div key={question.id}>
+                               <label className="mb-1 block text-sm font-medium text-slate-300">{question.question_text}</label>
+                               <select name={`bonus_${question.id}`} defaultValue="" className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm">
+                                 <option value="" className="bg-slate-900 text-white">No answer recorded</option>
+                                 {question.bonus_options?.map((option) => (
+                                   <option key={option.id} value={option.id} className="bg-slate-900 text-white">
+                                     {option.label}
+                                   </option>
+                                 ))}
+                               </select>
+                             </div>
+                           ))}
+                         </div>
+                       )}
+
+	                   <FormActionButton idleLabel="Submit prediction for user" pendingLabel="Saving prediction..." tone="secondary" className="mt-2" />
                </form>
              </div>
           </details>

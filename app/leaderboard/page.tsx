@@ -1,10 +1,9 @@
 import { createClient } from '@/utils/supabase/server'
-import { ArrowRight, ChevronDown, Medal, Trophy, UsersRound } from 'lucide-react'
+import { ArrowRight, ChevronDown, Medal, Target, TrendingUp, Trophy, UsersRound } from 'lucide-react'
 import { format } from 'date-fns'
 import { getRoundLabel } from '@/utils/race-copy'
 import { getCurrentSeason } from '@/utils/season'
 import { getUserTenantContext } from '@/utils/tenant'
-import { getAdminAccessContext } from '@/utils/admin-access'
 import { getProfileDisplayName } from '@/utils/profile-name'
 import { getCompetitionRank, sortCompetitionStandings } from '@/utils/competition'
 import { PendingLink } from '@/components/ui/pending-link'
@@ -140,6 +139,14 @@ function getSlotStatusText(slot: PodiumSlotBreakdown) {
   return '✕'
 }
 
+function getLatestMovementLabel(currentRank: number | null, previousRank: number | null) {
+  if (!currentRank) return 'Not ranked yet'
+  if (!previousRank) return `New at #${currentRank}`
+  if (currentRank < previousRank) return `Up ${previousRank - currentRank} position${previousRank - currentRank === 1 ? '' : 's'}`
+  if (currentRank > previousRank) return `Down ${currentRank - previousRank} position${currentRank - previousRank === 1 ? '' : 's'}`
+  return `Holding #${currentRank}`
+}
+
 const summaryGridTemplate = '4rem minmax(0,1fr) 5.5rem 5.5rem 5.5rem 1.5rem'
 const breakdownGridTemplate = 'minmax(210px, 2.3fr) repeat(3, minmax(88px, 1fr)) minmax(92px, 0.9fr) minmax(56px, 0.55fr)'
 
@@ -152,7 +159,6 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
     data: { user },
   } = await supabase.auth.getUser()
 
-  const access = user ? await getAdminAccessContext(supabase) : null
   const groupContext = user
     ? await getUserTenantContext(supabase, user.id)
     : {
@@ -163,7 +169,7 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
       }
 
   const hasGroup = Boolean(groupContext.tenantId)
-  const defaultView = hasGroup && !access?.isPlatformAdmin ? 'tenant' : 'global'
+  const defaultView = hasGroup ? 'tenant' : 'global'
   const activeView =
     requestedView === 'global'
       ? 'global'
@@ -317,6 +323,40 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
     raceBonusAnswers: raceBonusAnswerRows,
     driversById,
   })
+  const nextReachableEntry =
+    currentUserRank && currentUserRank > 1
+      ? sortedVisibleLeaderboard[currentUserRank - 2] || null
+      : null
+  const nextReachableProfile = nextReachableEntry ? getLeaderboardProfile(nextReachableEntry) : null
+  const pointsToNextPosition =
+    currentUserEntry && nextReachableEntry
+      ? nextReachableEntry.total_points - currentUserEntry.total_points
+      : 0
+  const latestScoredRaceId = scoredRaceIds[0]
+  const latestScoreByUserId = new Map(
+    raceScoreRows
+      .filter((score) => score.race_id === latestScoredRaceId)
+      .map((score) => [score.user_id, score])
+  )
+  const previousVisibleLeaderboard = sortCompetitionStandings(
+    sortedVisibleLeaderboard.flatMap((entry) => {
+      const latestScore = latestScoreByUserId.get(entry.user_id)
+      const previousEntry = {
+        ...entry,
+        total_points: entry.total_points - (latestScore?.total_points || 0),
+        exact_hits: entry.exact_hits - (latestScore?.exact_hits || 0),
+        races_scored: entry.races_scored - (latestScore ? 1 : 0),
+      }
+
+      return previousEntry.races_scored > 0 ? [previousEntry] : []
+    })
+  )
+  const latestMovement = user
+    ? getLatestMovementLabel(
+        getCompetitionRank(sortedVisibleLeaderboard, user.id),
+        getCompetitionRank(previousVisibleLeaderboard, user.id)
+      )
+    : null
 
   return (
     <div className="space-y-5 animate-in fade-in duration-500">
@@ -388,6 +428,37 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
         )}
       </div>
 
+      {user && currentUserRank && currentUserEntry && (
+        <section className="grid gap-3 md:grid-cols-2">
+          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-red-200">
+              <Target className="h-4 w-4" />
+              Next target
+            </div>
+            <div className="mt-2 text-lg font-black italic text-white">
+              {nextReachableEntry
+                ? `${pointsToNextPosition} pt${pointsToNextPosition === 1 ? '' : 's'} from #${currentUserRank - 1}`
+                : 'You are leading this table'}
+            </div>
+            <p className="mt-1 text-sm text-red-50/75">
+              {nextReachableEntry
+                ? `${getProfileDisplayName(nextReachableProfile?.display_name, nextReachableProfile?.email)} is within reach.`
+                : 'Every new race is a chance to protect the lead.'}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-card p-4">
+            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
+              <TrendingUp className="h-4 w-4 text-red-300" />
+              Latest race
+            </div>
+            <div className="mt-2 text-lg font-black italic text-white">{latestMovement}</div>
+            <p className="mt-1 text-sm text-slate-400">
+              {scoredRaces?.[0]?.race_name || 'Movement will appear after the first scored weekend.'}
+            </p>
+          </div>
+        </section>
+      )}
+
       {user && groupContext.role === 'user' && groupContext.tenantSlug === 'main' && (
         <section className="flex flex-col gap-3 rounded-2xl border border-red-500/15 bg-red-500/8 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex items-start gap-3">
@@ -441,7 +512,6 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
             return (
               <details
                 key={entry.user_id}
-                open={isCurrentUser}
                 className={`rounded-2xl border bg-card shadow-xl ${isCurrentUser ? 'border-red-500/25' : 'border-white/5'}`}
               >
                 <summary className="list-none cursor-pointer px-5 py-3.5 md:px-6">

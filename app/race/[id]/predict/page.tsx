@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { AlertCircle, ClipboardList, Lock, TimerReset, Trophy } from 'lucide-react'
+import { AlertCircle, ClipboardList, Flag, Lock, Sparkles, TimerReset, Trophy, Users } from 'lucide-react'
 import { format, formatDistanceToNowStrict } from 'date-fns'
 import PredictionForm from './prediction-form'
 import { getRoundLabel } from '@/utils/race-copy'
@@ -12,7 +12,13 @@ import { RaceStatusPill } from '@/components/ui/race-status-pill'
 import { RaceMetaStrip } from '@/components/ui/race-meta-strip'
 import { SectionHeader } from '@/components/ui/section-header'
 import { getRaceParticipationLabel, getRaceTone } from '@/utils/race-experience'
-import { ResultRefreshForm } from './result-refresh-form'
+import { PageBackLink } from '@/components/ui/page-back-link'
+import {
+  getGroupPredictionInsights,
+  getPersonalRecapInsight,
+  getPrivateGroupRaceExperience,
+} from '@/utils/group-race-experience'
+import { getProfileDisplayName } from '@/utils/profile-name'
 
 type Driver = {
   id: string
@@ -149,8 +155,9 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
   }
 
   const effectiveStatus = getEffectiveRaceStatus(race)
-  const isLocked = effectiveStatus === 'locked' || effectiveStatus === 'completed' || effectiveStatus === 'cancelled'
-  const shouldShowReadOnlyState = isLocked || effectiveStatus === 'scored'
+  const isLocked = effectiveStatus !== 'upcoming'
+  const shouldShowReadOnlyState = isLocked
+  const groupRaceExperience = await getPrivateGroupRaceExperience(tenantContext.tenantId, race.id)
 
   const { data: allDrivers } = await supabase
     .from('drivers')
@@ -249,6 +256,9 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
       bonusAnswerMap.get(question.id) &&
       bonusAnswerMap.get(question.id) === officialBonusAnswerMap.get(question.id)
   ).length
+  const groupPredictionInsights = getGroupPredictionInsights(groupRaceExperience?.predictions || [], user.id)
+  const currentGroupPrediction =
+    groupRaceExperience?.predictions.find((entry) => entry.userId === user.id) || null
 
   const lockCountdown =
     effectiveStatus === 'upcoming'
@@ -303,6 +313,16 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
     groupMovement = getMovementLabel(currentGroupRank, previousGroupRank)
   }
 
+  const personalRecapInsight =
+    effectiveStatus === 'scored'
+      ? getPersonalRecapInsight({
+          prediction: currentGroupPrediction,
+          officialPodiumIds: actualPodiumIds,
+          exactHits: exactPodiumHits,
+          groupPredictions: groupRaceExperience?.predictions || [],
+        })
+      : null
+
   const compactNote =
     effectiveStatus === 'upcoming'
       ? prediction
@@ -322,6 +342,8 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
 
   return (
     <div className="mx-auto max-w-5xl space-y-5 animate-in fade-in duration-500">
+      <PageBackLink href="/predictions" label="Back to My Race" />
+
       <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-2xl md:p-6">
         <div className="flex flex-wrap items-center gap-2">
           <span className="rounded-full border border-white/10 bg-black/25 px-2.5 py-1 text-xs font-medium text-slate-300">
@@ -370,8 +392,109 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
               },
             ]}
           />
+
+          {effectiveStatus === 'upcoming' && groupRaceExperience && (
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
+                <Users className="h-4 w-4 text-red-300" />
+                Group grid
+              </div>
+              <div className="mt-2 font-bold text-white">
+                {groupRaceExperience.submittedEntries} of {groupRaceExperience.totalMembers} entries submitted
+              </div>
+              <p className="mt-1 text-sm text-slate-400">
+                {groupRaceExperience.totalMembers > 0 &&
+                groupRaceExperience.submittedEntries === groupRaceExperience.totalMembers
+                  ? `Full grid. Everyone submitted for ${race.race_name}.`
+                  : 'Picks stay hidden until the deadline.'}
+              </p>
+            </div>
+          )}
         </div>
       </section>
+
+      {effectiveStatus !== 'upcoming' && effectiveStatus !== 'cancelled' && groupRaceExperience && (
+        <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-2xl md:p-6">
+          <SectionHeader
+            eyebrow="Group reveal"
+            title="The grid is locked"
+            description={`${groupRaceExperience.submittedEntries} of ${groupRaceExperience.totalMembers} group entries are on the board.`}
+            aside={<Flag className="h-7 w-7 text-red-400" />}
+          />
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {groupPredictionInsights.consensus && (
+              <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4">
+                <div className="text-xs font-bold uppercase tracking-[0.2em] text-red-200">Consensus pick</div>
+                <div className="mt-2 text-lg font-black italic text-white">
+                  {getDriverLabel(drivers, groupPredictionInsights.consensus.driverId)}
+                </div>
+                <p className="mt-1 text-sm text-red-50/75">
+                  Backed for the podium by {groupPredictionInsights.consensus.count} player
+                  {groupPredictionInsights.consensus.count === 1 ? '' : 's'}.
+                </p>
+              </div>
+            )}
+            {groupPredictionInsights.boldCall && (
+              <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4">
+                <div className="text-xs font-bold uppercase tracking-[0.2em] text-amber-200">Your bold call</div>
+                <div className="mt-2 text-lg font-black italic text-white">
+                  {groupPredictionInsights.boldCall.slot} · {getDriverLabel(drivers, groupPredictionInsights.boldCall.driverId)}
+                </div>
+                <p className="mt-1 text-sm text-amber-50/75">
+                  Only {groupPredictionInsights.boldCall.count} player
+                  {groupPredictionInsights.boldCall.count === 1 ? '' : 's'} in your group made this podium pick.
+                </p>
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 grid gap-3 md:grid-cols-2">
+            {groupRaceExperience.predictions.map((entry) => (
+              <div
+                key={entry.userId}
+                className={`rounded-2xl border p-4 ${
+                  entry.userId === user.id
+                    ? 'border-red-500/25 bg-red-500/10'
+                    : 'border-white/10 bg-black/20'
+                }`}
+              >
+                <div className="flex items-center justify-between gap-3">
+                  <div className="font-bold text-white">
+                    {getProfileDisplayName(entry.displayName, entry.email)}
+                  </div>
+                  {entry.userId === user.id && (
+                    <span className="rounded-full border border-red-500/25 bg-red-500/10 px-2 py-0.5 text-[11px] font-bold uppercase tracking-widest text-red-200">
+                      You
+                    </span>
+                  )}
+                </div>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {[
+                    ['P1', entry.p1DriverId],
+                    ['P2', entry.p2DriverId],
+                    ['P3', entry.p3DriverId],
+                  ].map(([slot, driverId]) => (
+                    <span
+                      key={`${entry.userId}-${slot}`}
+                      className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-bold text-slate-200"
+                    >
+                      {slot} {getDriverLabel(drivers, driverId)}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {groupRaceExperience.submittedEntries < groupRaceExperience.totalMembers && (
+            <p className="mt-4 text-sm text-slate-500">
+              {groupRaceExperience.totalMembers - groupRaceExperience.submittedEntries} group member
+              {groupRaceExperience.totalMembers - groupRaceExperience.submittedEntries === 1 ? '' : 's'} sat this weekend out.
+            </p>
+          )}
+        </section>
+      )}
 
       {!shouldShowReadOnlyState && (
         <PredictionForm
@@ -382,6 +505,40 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
           existingBonusAnswers={predictionBonusAnswers}
           isLocked={isLocked}
         />
+      )}
+
+      {effectiveStatus === 'scored' && userScore && (
+        <section className="rounded-3xl border border-red-500/20 bg-gradient-to-br from-red-500/15 via-slate-900 to-black p-5 shadow-2xl md:p-6">
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-red-200">
+            <Sparkles className="h-4 w-4" />
+            Personal recap
+          </div>
+          <div className="mt-3 grid gap-4 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+            <div>
+              <h2 className="text-3xl font-black italic tracking-tight text-white">
+                {userScore.total_points} pts · {groupMovement.title}
+              </h2>
+              <p className="mt-2 text-sm text-slate-300">{groupMovement.detail}</p>
+              {personalRecapInsight && (
+                <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-4">
+                  <div className="text-xs font-bold uppercase tracking-[0.2em] text-red-200">
+                    {personalRecapInsight.eyebrow}
+                  </div>
+                  <div className="mt-2 font-bold text-white">
+                    {personalRecapInsight.driverId
+                      ? getDriverLabel(drivers, personalRecapInsight.driverId)
+                      : personalRecapInsight.title}
+                  </div>
+                  <p className="mt-1 text-sm text-slate-400">{personalRecapInsight.description}</p>
+                </div>
+              )}
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/25 px-5 py-4 text-center">
+              <div className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Weekend score</div>
+              <div className="mt-2 text-5xl font-black italic text-red-400">{userScore.total_points}</div>
+            </div>
+          </div>
+        </section>
       )}
 
       {shouldShowReadOnlyState && (
@@ -564,15 +721,6 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
                       ? 'The race is complete, but final scoring is still pending.'
                       : 'This race is no longer open for prediction.'}
                 </div>
-                {effectiveStatus === 'completed' && (
-                  <div className="mt-4 rounded-2xl border border-white/10 bg-black/25 p-4">
-                    <div className="text-sm font-bold text-white">Result refresh</div>
-                    <p className="mt-1 text-sm leading-6 text-slate-400">Refresh if the podium is already available.</p>
-                    <div className="mt-4">
-                      <ResultRefreshForm raceId={race.id} />
-                    </div>
-                  </div>
-                )}
               </section>
             )}
           </div>

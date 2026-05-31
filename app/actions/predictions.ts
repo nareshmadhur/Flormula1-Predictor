@@ -41,7 +41,7 @@ export async function submitPrediction(formData: FormData) {
   if (!race) return { error: 'Race not found' }
 
   const effectiveStatus = getEffectiveRaceStatus(race)
-  if (effectiveStatus === 'locked' || effectiveStatus === 'completed' || effectiveStatus === 'cancelled') {
+  if (effectiveStatus !== 'upcoming') {
     return { error: 'Predictions for this race are not available.' }
   }
 
@@ -71,14 +71,51 @@ export async function submitPrediction(formData: FormData) {
   if (bonusAnswersRaw) {
     try {
       const parsedAnswers = JSON.parse(bonusAnswersRaw) as SubmittedBonusAnswer[]
-      if (parsedAnswers && parsedAnswers.length > 0) {
-        // Delete old bonus answers for this prediction to avoid orphans or duplicates
-        await supabase
-          .from('prediction_bonus_answers')
-          .delete()
-          .eq('prediction_id', prediction.id)
+      if (!Array.isArray(parsedAnswers)) {
+        return { error: 'Bonus answers were not submitted correctly.' }
+      }
 
-        // Insert new answers
+      const { data: validQuestions, error: questionsError } = await supabase
+        .from('bonus_questions')
+        .select('id, bonus_options(id)')
+        .eq('race_id', raceId)
+        .eq('is_active', true)
+
+      if (questionsError) {
+        return { error: 'Could not validate bonus answers. Please try again.' }
+      }
+
+      const optionIdsByQuestion = new Map(
+        (validQuestions || []).map((question) => [
+          question.id,
+          new Set((question.bonus_options || []).map((option) => option.id)),
+        ])
+      )
+      const submittedQuestionIds = new Set<string>()
+
+      for (const answer of parsedAnswers) {
+        if (
+          !answer?.question_id ||
+          !answer.option_id ||
+          submittedQuestionIds.has(answer.question_id) ||
+          !optionIdsByQuestion.get(answer.question_id)?.has(answer.option_id)
+        ) {
+          return { error: 'One or more bonus answers are invalid. Please review your entry.' }
+        }
+
+        submittedQuestionIds.add(answer.question_id)
+      }
+
+      const { error: clearBonusError } = await supabase
+        .from('prediction_bonus_answers')
+        .delete()
+        .eq('prediction_id', prediction.id)
+
+      if (clearBonusError) {
+        return { error: 'Could not replace your bonus answers. Please try again.' }
+      }
+
+      if (parsedAnswers.length > 0) {
         const bulkInserts = parsedAnswers.map((a) => ({
           prediction_id: prediction.id,
           bonus_question_id: a.question_id,
@@ -91,12 +128,12 @@ export async function submitPrediction(formData: FormData) {
 
         if (bonusError) {
           console.error('Bonus save error', bonusError)
-          // We don't want to completely fail if only bonus answers failed, 
-          // but we should probably tell the user
+          return { error: 'Your podium was saved, but the bonus answers could not be saved. Please try again.' }
         }
       }
     } catch (e) {
       console.error('Failed to parse bonus answers', e)
+      return { error: 'Bonus answers were not submitted correctly.' }
     }
   }
 

@@ -99,6 +99,7 @@ function PodiumDraftSlot({
   return (
     <div
       role="button"
+      aria-label={`${label}: ${driver ? driver.full_name : 'not selected'}${isActive ? ', currently editing' : ''}`}
       tabIndex={0}
       onClick={() => onActivate(slot)}
       onKeyDown={(event) => {
@@ -142,6 +143,7 @@ function PodiumDraftSlot({
         {driver && (
           <button
             type="button"
+            aria-label={`Clear ${label} selection`}
             onClick={(event) => {
               event.stopPropagation()
               onClear(slot)
@@ -217,6 +219,7 @@ export default function PredictionForm({
       (activeSlot !== 'p3' && selectedIds.p3 === driverId)
 
     if (chosenElsewhere) return
+    setSubmitResult(null)
 
     if (activeSlot === 'p1') setP1(driverId)
     if (activeSlot === 'p2') setP2(driverId)
@@ -230,6 +233,7 @@ export default function PredictionForm({
   }
 
   const handleClearSlot = (slot: SlotKey) => {
+    setSubmitResult(null)
     if (slot === 'p1') setP1('')
     if (slot === 'p2') setP2('')
     if (slot === 'p3') setP3('')
@@ -238,6 +242,7 @@ export default function PredictionForm({
 
   const handleBonusChange = (questionId: string, optionId: string) => {
     if (isLocked) return
+    setSubmitResult(null)
     setBonusAnswers((current) => ({ ...current, [questionId]: optionId }))
   }
 
@@ -275,7 +280,7 @@ export default function PredictionForm({
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-6 pb-28">
+    <form onSubmit={handleSubmit} className="space-y-6 pb-24 sm:pb-28">
       <section className="rounded-3xl border border-white/10 bg-card p-6 shadow-2xl md:p-8">
         <SectionHeader
           eyebrow="Podium"
@@ -326,7 +331,7 @@ export default function PredictionForm({
             <div>
               <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">Driver Board</div>
               <div className="mt-1 text-base font-bold text-white">
-                Picking for {activeSlot.toUpperCase()} {activeSlot === 'p1' ? 'winner' : activeSlot === 'p2' ? 'P2' : 'P3'}
+                {activeSlot.toUpperCase()} selected · choose {activeSlot === 'p1' ? 'the winner' : activeSlot === 'p2' ? 'second place' : 'third place'}
               </div>
             </div>
             <label className="flex items-center gap-2 rounded-full border border-white/10 bg-black/25 px-3 py-2 text-sm text-slate-300">
@@ -468,14 +473,14 @@ export default function PredictionForm({
       )}
 
       {!isLocked && (
-        <div className="sticky bottom-4 z-20">
-          <div className="rounded-3xl border border-white/10 bg-slate-950/95 p-3 shadow-2xl backdrop-blur-md">
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="sticky bottom-2 z-20 sm:bottom-4">
+          <div className="rounded-2xl border border-white/10 bg-slate-950/95 p-2.5 shadow-2xl backdrop-blur-md sm:rounded-3xl sm:p-3">
+            <div className="flex items-center justify-between gap-3">
               <div className="min-w-0">
-                <div className="text-sm font-semibold text-white">
-                  {isComplete ? 'Ready to submit' : 'Finish your podium'}
+                <div className="truncate text-sm font-semibold text-white">
+                  {submitResult?.success ? 'Saved until lock' : isComplete ? 'Ready to submit' : 'Finish your podium'}
                 </div>
-                <div className="mt-1 text-xs uppercase tracking-[0.2em] text-slate-500">
+                <div className="mt-0.5 truncate text-[11px] uppercase tracking-[0.16em] text-slate-500 sm:mt-1 sm:text-xs sm:tracking-[0.2em]">
                   {[p1, p2, p3].filter(Boolean).length}/3 picked
                   {bonusQuestions?.length ? ` · ${answeredBonusCount}/${bonusQuestions.length} bonus` : ''}
                 </div>
@@ -484,7 +489,7 @@ export default function PredictionForm({
               <button
                 type="submit"
                 disabled={!isComplete || isSubmitting}
-                className={`race-submit-shell w-full rounded-xl px-5 py-3 text-base font-black italic uppercase tracking-widest transition-all shadow-2xl sm:w-auto ${
+                className={`race-submit-shell shrink-0 rounded-xl px-4 py-3 text-sm font-black italic uppercase tracking-wider transition-all shadow-2xl sm:px-5 sm:text-base sm:tracking-widest ${
                   isComplete && !isSubmitting
                     ? 'bg-red-600 text-white shadow-[0_0_30px_rgba(239,68,68,0.5)] hover:bg-red-500'
                     : 'cursor-not-allowed border border-white/5 bg-slate-800 text-slate-500'

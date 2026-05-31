@@ -30,14 +30,13 @@ export async function GET(request: Request, context: RouteContext) {
     revalidatePath('/predictions')
     revalidatePath('/me/history')
 
-    const standingsUrl = new URL('/leaderboard', request.url)
-    standingsUrl.searchParams.set('view', 'tenant')
-    standingsUrl.searchParams.set(
+    const myRaceUrl = new URL('/predictions', request.url)
+    myRaceUrl.searchParams.set(
       result.status === 'already_member' ? 'message' : 'joined',
       result.tenantName || 'group'
     )
 
-    return NextResponse.redirect(standingsUrl)
+    return NextResponse.redirect(myRaceUrl)
   }
 
   if (result.status === 'auth_required') {

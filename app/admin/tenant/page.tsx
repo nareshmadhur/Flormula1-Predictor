@@ -27,6 +27,7 @@ import { TenantNotificationTimingPanel } from './notification-timing-panel'
 import {
   getPlatformNotificationTiming,
 } from '@/utils/notification-settings'
+import { formatAmsterdamDateTime } from '@/utils/amsterdam-time'
 
 export const revalidate = 0
 
@@ -234,6 +235,12 @@ export default async function TenantAdminPage() {
         new Date(right.race_start_at).getTime() - new Date(left.race_start_at).getTime()
     )[0] ||
     null
+  const featuredRaceReminderAt =
+    featuredRace && getEffectiveRaceStatus(featuredRace) === 'upcoming'
+      ? new Date(
+          new Date(featuredRace.prediction_lock_at).getTime() - defaultTenantLeadHours * 60 * 60 * 1000
+        ).toISOString()
+      : null
 
   const settledRaceIds = typedRaces
     .filter((race) => {
@@ -486,6 +493,12 @@ export default async function TenantAdminPage() {
             <p className="mt-2 text-sm text-red-100/80">
               {featuredRace.race_name} is the current group participation checkpoint. {coveragePercent}% of members have an entry saved.
             </p>
+            {featuredRaceReminderAt && (
+              <p className="mt-3 flex items-center gap-2 text-sm text-red-100/70">
+                <CalendarClock className="h-4 w-4 shrink-0" />
+                Reminder scheduled for {formatAmsterdamDateTime(featuredRaceReminderAt, { includeZone: true })}.
+              </p>
+            )}
             <div className="mt-5 flex flex-wrap gap-3">
               <PendingLink
                 href={`/race/${featuredRace.id}/predict`}

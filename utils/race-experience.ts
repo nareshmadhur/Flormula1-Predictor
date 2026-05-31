@@ -10,7 +10,7 @@ export function getRaceTone(status: RaceStatus): RaceTone {
 }
 
 export function getRaceStatusLabel(status: RaceStatus) {
-  if (status === 'upcoming') return 'Open now'
+  if (status === 'upcoming') return 'Open'
   if (status === 'locked') return 'Weekend live'
   if (status === 'completed') return 'Results pending'
   if (status === 'scored') return 'Scored'
@@ -31,7 +31,7 @@ export function getPublicRaceActionLabel(status: RaceStatus) {
 }
 
 export function getRaceParticipationLabel(status: RaceStatus, hasEntry: boolean) {
-  if (status === 'upcoming') return hasEntry ? 'Entry locked in' : 'No entry yet'
+  if (status === 'upcoming') return hasEntry ? 'Entry saved' : 'No entry yet'
   if (status === 'locked') return hasEntry ? 'Entry locked' : 'Closed without entry'
   if (status === 'completed') return hasEntry ? 'Waiting on scoring' : 'Missed weekend'
   if (status === 'scored') return hasEntry ? 'Scored' : 'No entry'

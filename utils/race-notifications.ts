@@ -11,6 +11,10 @@ import {
   getFallbackRaceReminderLeadHours,
   type EffectiveNotificationTiming,
 } from '@/utils/notification-settings'
+import {
+  getGroupRaceExperienceWithClient,
+  type GroupRaceExperience,
+} from '@/utils/group-race-experience'
 
 type NotificationKind = 'pre_lock_reminder' | 'score_recap'
 
@@ -462,6 +466,21 @@ function getUnsubscribeUrl(preference: NotificationPreference) {
   return getAbsoluteUrl(`/unsubscribe/${preference.unsubscribe_token}`)
 }
 
+async function getNotificationGroupCoverage(
+  supabase: NotificationClient,
+  tenantId: string | null | undefined,
+  raceId: string
+) {
+  if (!tenantId) return null
+
+  try {
+    return await getGroupRaceExperienceWithClient(supabase, tenantId, raceId)
+  } catch (error) {
+    console.error('Failed to load notification group coverage', error)
+    return null
+  }
+}
+
 function renderInfoGrid(items: Array<{ label: string; value: string; detail?: string }>) {
   return `
     <div style="margin:22px 0;border:1px solid rgba(148,163,184,0.12);border-radius:18px;background:#111827;padding:16px;">
@@ -488,12 +507,14 @@ function renderPreLockEmail({
   race,
   preference,
   leadHours,
+  groupCoverage,
   testRecipient,
   isTestSend,
 }: {
   race: NotificationRace
   preference: NotificationPreference
   leadHours: number
+  groupCoverage?: GroupRaceExperience | null
   testRecipient?: string | null
   isTestSend?: boolean
 }) {
@@ -535,6 +556,15 @@ function renderPreLockEmail({
           label: 'Race start',
           value: formatRaceDate(race.race_start_at, true),
         },
+        ...(groupCoverage
+          ? [
+              {
+                label: 'Group grid',
+                value: `${groupCoverage.submittedEntries} of ${groupCoverage.totalMembers} entries submitted`,
+                detail: 'Picks stay hidden until the deadline.',
+              },
+            ]
+          : []),
       ]),
   })
 }
@@ -646,6 +676,7 @@ function renderScoreRecapEmail({
   preference,
   score,
   position,
+  movement,
   testRecipient,
   isTestSend,
 }: {
@@ -653,12 +684,13 @@ function renderScoreRecapEmail({
   preference: NotificationPreference
   score: UserRaceScore
   position: RaceScorePosition
+  movement?: { global: string; group: string }
   testRecipient?: string | null
   isTestSend?: boolean
 }) {
   const profile = getProfile(preference)
-  const recapUrl = getAbsoluteUrl(`/race/${race.id}#top-scorers`)
-  const leaderboardUrl = getAbsoluteUrl('/leaderboard')
+  const recapUrl = getAbsoluteUrl(`/race/${race.id}/predict`)
+  const leaderboardUrl = getAbsoluteUrl('/leaderboard?view=tenant')
   const testNotice = isTestSend
     ? `
       <div style="margin:0 0 18px;border:1px solid rgba(251,191,36,0.2);border-radius:16px;background:rgba(251,191,36,0.08);padding:14px;color:#fde68a;font-size:13px;line-height:1.5;">
@@ -676,7 +708,7 @@ function renderScoreRecapEmail({
     title: `${score.total_points} pts at ${race.race_name}`,
     intro: `Hi ${getProfileDisplayName(profile?.display_name, profile?.email, 'there')}, the ${race.race_name} scores are published.`,
     actions: [
-      { label: 'View race recap', url: recapUrl },
+      { label: 'See my recap', url: recapUrl },
       { label: 'Open standings', url: leaderboardUrl, tone: 'secondary' },
     ],
     unsubscribeUrl: isTestSend ? null : getUnsubscribeUrl(preference),
@@ -688,9 +720,18 @@ function renderScoreRecapEmail({
           value: `${score.total_points} pts`,
           detail: getRaceScoreRankDetail(position),
         },
+        ...(movement
+          ? [
+              {
+                label: 'Group table',
+                value: movement.group,
+                detail: 'Your private standings movement is ready.',
+              },
+            ]
+          : []),
         {
           label: 'Full results',
-          value: 'Open the race recap',
+          value: 'Open your personal recap',
           detail: 'Score breakdown, top scorers, bonus answers, and leaderboard movement are waiting on the site.',
         },
       ]),
@@ -916,6 +957,8 @@ async function sendManualPredictionEmail({
   }
 
   const subject = `Prediction reminder: ${race.race_name}`
+  const profile = getProfile(preference)
+  const groupCoverage = await getNotificationGroupCoverage(supabase, profile?.tenant_id, race.id)
   const delivered = await sendClaimedEmail({
     supabase,
     event: claimed.event,
@@ -925,6 +968,7 @@ async function sendManualPredictionEmail({
       race,
       preference,
       leadHours,
+      groupCoverage,
     }),
     metadata: {
       leadHours,
@@ -1103,6 +1147,7 @@ async function sendManualResultsEmail({
       preference,
       score,
       position,
+      movement,
     }),
     metadata: {
       totalPoints: score.total_points,
@@ -1245,6 +1290,7 @@ export async function runPreLockReminderEmails(
     }
 
     const predictedUserIds = new Set((predictions || []).map((prediction) => prediction.user_id as string))
+    const groupCoverageByTenantId = new Map<string, GroupRaceExperience | null>()
     const raceLockTime = new Date(race.prediction_lock_at).getTime()
     const unsubmittedPreferences = preferences.filter((preference) => {
       if (predictedUserIds.has(preference.user_id)) return false
@@ -1289,6 +1335,17 @@ export async function runPreLockReminderEmails(
       }
 
       const profile = getProfile(preference)
+      const tenantId = profile?.tenant_id
+      let groupCoverage: GroupRaceExperience | null = null
+      if (tenantId) {
+        if (!groupCoverageByTenantId.has(tenantId)) {
+          groupCoverageByTenantId.set(
+            tenantId,
+            await getNotificationGroupCoverage(supabase, tenantId, race.id)
+          )
+        }
+        groupCoverage = groupCoverageByTenantId.get(tenantId) || null
+      }
       if (previews.length < previewLimit) {
         previews.push({
           eventType: 'pre_lock_reminder',
@@ -1331,6 +1388,7 @@ export async function runPreLockReminderEmails(
           race,
           preference,
           leadHours,
+          groupCoverage,
           testRecipient,
           isTestSend: isLimitedTestSend,
         }),
@@ -1540,6 +1598,7 @@ export async function runScoreRecapEmails(
           preference,
           score,
           position,
+          movement,
           testRecipient,
           isTestSend: isLimitedTestSend,
         }),

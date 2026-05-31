@@ -5,6 +5,8 @@ import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { rebuildLeaderboardForSeason } from '@/utils/leaderboard'
 import { assertPlatformAdmin } from '@/utils/admin-access'
 import { parseAmsterdamInputToIso } from '@/utils/amsterdam-time'
+import { invalidateRaceScores } from '@/utils/race-scoring'
+import { saveOfficialRaceResult } from '@/utils/result-pipeline'
 import {
   buildOpenF1ScheduleReview,
   fetchOpenF1SeasonSchedule,
@@ -220,10 +222,10 @@ export async function saveBatchOfficialResults(
   }
 
   try {
-    const { supabase, access } = await assertPlatformAdmin()
+    const { supabase } = await assertPlatformAdmin()
     const [{ data: races }, { data: bonusQuestions }] = await Promise.all([
       supabase.from('races').select('id, race_name, season').in('id', selectedRaceIds),
-      supabase.from('bonus_questions').select('id, race_id').in('race_id', selectedRaceIds),
+      supabase.from('bonus_questions').select('id, race_id').in('race_id', selectedRaceIds).eq('is_active', true),
     ])
 
     const raceById = new Map((races || []).map((race) => [race.id, race]))
@@ -279,56 +281,19 @@ export async function saveBatchOfficialResults(
         continue
       }
 
-      const { error: resultsError } = await supabase.from('race_results').upsert(
-        {
-          race_id: raceId,
-          p1_driver_id: p1,
-          p2_driver_id: p2,
-          p3_driver_id: p3,
-          entered_by: access.userId,
-        },
-        { onConflict: 'race_id' }
-      )
-
-      if (resultsError) {
+      try {
+        await saveOfficialRaceResult(supabase, {
+          raceId,
+          podium: { p1, p2, p3 },
+          bonusAnswers: bonusInserts.map((answer) => ({
+            questionId: answer.bonus_question_id,
+            optionId: answer.correct_bonus_option_id,
+          })),
+        })
+      } catch {
         return {
           status: 'error',
           message: `Could not save results for ${raceLabel}.`,
-        }
-      }
-
-      const { error: deleteBonusError } = await supabase
-        .from('race_bonus_answers')
-        .delete()
-        .eq('race_id', raceId)
-
-      if (deleteBonusError) {
-        return {
-          status: 'error',
-          message: `Could not clear bonus answers for ${raceLabel}.`,
-        }
-      }
-
-      if (bonusInserts.length > 0) {
-        const { error: bonusError } = await supabase.from('race_bonus_answers').insert(bonusInserts)
-
-        if (bonusError) {
-          return {
-            status: 'error',
-            message: `Could not save bonus answers for ${raceLabel}.`,
-          }
-        }
-      }
-
-      const { error: statusError } = await supabase
-        .from('races')
-        .update({ status: 'completed' })
-        .eq('id', raceId)
-
-      if (statusError) {
-        return {
-          status: 'error',
-          message: `Could not update the status for ${raceLabel}.`,
         }
       }
 
@@ -346,6 +311,7 @@ export async function saveBatchOfficialResults(
     revalidatePath('/season')
     revalidatePath('/leaderboard')
     revalidatePath('/predictions')
+    revalidatePath('/me/history')
 
     for (const raceId of selectedRaceIds) {
       revalidatePath(`/admin/races/${raceId}`)
@@ -481,10 +447,17 @@ export async function deleteBonusQuestion(formData: FormData) {
   
   if (!questionId) throw new Error('Missing question ID')
 
+  await invalidateRaceScores(supabase, raceId)
+
   const { error } = await supabase.from('bonus_questions').delete().eq('id', questionId)
   if (error) throw new Error('Failed to delete question')
 
   revalidatePath(`/admin/races/${raceId}`)
+  revalidatePath(`/race/${raceId}`)
+  revalidatePath(`/race/${raceId}/predict`)
+  revalidatePath('/leaderboard')
+  revalidatePath('/predictions')
+  revalidatePath('/me/history')
 }
 
 export async function updateBonusQuestion(formData: FormData) {
@@ -500,6 +473,8 @@ export async function updateBonusQuestion(formData: FormData) {
 
   if (!questionId) throw new Error('Missing question ID')
 
+  await invalidateRaceScores(supabase, raceId)
+
   const { error } = await supabase.from('bonus_questions').update({
     question_text: questionText,
     points
@@ -512,16 +487,24 @@ export async function updateBonusQuestion(formData: FormData) {
      const optId = optionIds[i]
      if (label.trim()) {
          if (optId) {
-             await supabase.from('bonus_options').update({ label }).eq('id', optId)
+             const { error: optionError } = await supabase.from('bonus_options').update({ label }).eq('id', optId)
+             if (optionError) throw new Error('Failed to update bonus option')
          } else {
-             await supabase.from('bonus_options').insert({ bonus_question_id: questionId, label, option_type: 'custom_text' })
+             const { error: optionError } = await supabase.from('bonus_options').insert({ bonus_question_id: questionId, label, option_type: 'custom_text' })
+             if (optionError) throw new Error('Failed to add bonus option')
          }
      } else if (optId) {
-         await supabase.from('bonus_options').delete().eq('id', optId)
+         const { error: optionError } = await supabase.from('bonus_options').delete().eq('id', optId)
+         if (optionError) throw new Error('Failed to delete bonus option')
      }
   }
 
   revalidatePath(`/admin/races/${raceId}`)
+  revalidatePath(`/race/${raceId}`)
+  revalidatePath(`/race/${raceId}/predict`)
+  revalidatePath('/leaderboard')
+  revalidatePath('/predictions')
+  revalidatePath('/me/history')
 }
 
 /**

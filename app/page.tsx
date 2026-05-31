@@ -7,7 +7,6 @@ import { getCurrentSeason } from '@/utils/season'
 import { getProfileDisplayName } from '@/utils/profile-name'
 import { PendingLink } from '@/components/ui/pending-link'
 import { getUserTenantContext } from '@/utils/tenant'
-import { getAdminAccessContext } from '@/utils/admin-access'
 import { getCompetitionRank, sortCompetitionStandings } from '@/utils/competition'
 import { getRoundLabel } from '@/utils/race-copy'
 import { SectionHeader } from '@/components/ui/section-header'
@@ -276,23 +275,17 @@ export default async function HomePage() {
     data: { user },
   } = await supabase.auth.getUser()
 
-  const [access, groupContext] = user
-    ? await Promise.all([
-        getAdminAccessContext(supabase),
-        getUserTenantContext(supabase, user.id),
-      ])
-    : [
-        null,
-        {
-          tenantId: null,
-          tenantName: null,
-          tenantSlug: null,
-          role: null,
-        },
-      ]
+  const groupContext = user
+    ? await getUserTenantContext(supabase, user.id)
+    : {
+        tenantId: null,
+        tenantName: null,
+        tenantSlug: null,
+        role: null,
+      }
 
   const hasGroup = Boolean(groupContext.tenantId)
-  const activeView = hasGroup && !access?.isPlatformAdmin ? 'group' : 'global'
+  const activeView = hasGroup ? 'group' : 'global'
 
   const { data: upcomingRaces } = await supabase
     .from('races')
@@ -450,7 +443,7 @@ export default async function HomePage() {
               {showLatestRecapFirst && latestScored ? (
                 <>
                   <PendingLink
-                    href={`/race/${latestScored.id}#top-scorers`}
+                    href={`/race/${latestScored.id}/predict`}
                     className="inline-flex items-center gap-1.5 rounded-lg bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
                   >
                     Latest recap
@@ -568,7 +561,7 @@ export default async function HomePage() {
 
               <div className="flex flex-wrap gap-4 pt-1">
                 <PendingLink
-                  href={`/race/${latestScored.id}#top-scorers`}
+                  href={user ? `/race/${latestScored.id}/predict` : `/race/${latestScored.id}#top-scorers`}
                   className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 font-bold text-white transition-colors hover:bg-white/10"
                 >
                   Recap

@@ -6,6 +6,7 @@ import { getProfileDisplayName } from '@/utils/profile-name'
 import { PendingLink } from '@/components/ui/pending-link'
 import { SignOutButton } from '@/components/ui/signout-button'
 import { ChevronDown } from 'lucide-react'
+import { NavbarLinks } from '@/components/ui/navbar-links'
 
 export default async function Navbar() {
   const supabase = await createClient()
@@ -113,17 +114,7 @@ export default async function Navbar() {
           </div>
         </div>
 
-        <div className="flex gap-2 overflow-x-auto pb-3 scrollbar-none">
-          {primaryLinks.map((link) => (
-            <PendingLink
-              key={link.href}
-              href={link.href}
-              className="inline-flex shrink-0 items-center rounded-full border border-white/10 bg-white/5 px-3 py-1.5 text-sm font-medium text-slate-200 transition-colors hover:bg-white/10 hover:text-white"
-            >
-              {link.label}
-            </PendingLink>
-          ))}
-        </div>
+        <NavbarLinks links={primaryLinks} />
       </div>
     </nav>
   )

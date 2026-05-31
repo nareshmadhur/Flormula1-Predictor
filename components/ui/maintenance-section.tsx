@@ -62,7 +62,7 @@ export function MaintenanceSection() {
     <div className="bg-card border border-white/5 p-6 rounded-2xl shadow-xl">
       <h2 className="text-xl font-bold mb-1">Repair derived data</h2>
       <p className="mb-4 text-sm text-slate-400">
-        Use these after schedule, result, or scoring corrections. Normal result publishing already runs scoring.
+        Use these after exceptional schedule, result, or scoring corrections. Normal result publishing keeps scoring as an explicit review step.
       </p>
 
       {message && (

@@ -1,5 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
-import { AlertCircle, Calendar, ChevronRight, Clock3, MapPin, Trophy } from 'lucide-react'
+import { AlertCircle, Calendar, ChevronRight, Clock3, Flag, MapPin, Trophy, Users } from 'lucide-react'
 import { differenceInCalendarDays, format, formatDistanceToNowStrict } from 'date-fns'
 import { redirect } from 'next/navigation'
 import { getRoundLabel } from '@/utils/race-copy'
@@ -12,6 +12,8 @@ import { RaceStatusPill } from '@/components/ui/race-status-pill'
 import { RaceMetaStrip } from '@/components/ui/race-meta-strip'
 import { SectionHeader } from '@/components/ui/section-header'
 import { getMemberRaceActionLabel, getRaceParticipationLabel, getRaceTone } from '@/utils/race-experience'
+import { getPrivateGroupRaceExperience } from '@/utils/group-race-experience'
+import { formatAmsterdamDateTime } from '@/utils/amsterdam-time'
 
 export const revalidate = 0
 
@@ -46,6 +48,7 @@ type SeasonFilterKey = 'action' | 'upcoming' | 'waiting' | 'scored' | 'missed'
 type SeasonDashboardPageProps = {
   searchParams: Promise<{
     tab?: string | string[] | undefined
+    joined?: string | string[] | undefined
   }>
 }
 
@@ -110,7 +113,7 @@ function getHeroContent({
       description: hasPredicted
         ? `Entries close ${formatDistanceToNowStrict(new Date(race.prediction_lock_at), { addSuffix: true })}.`
         : `Submit before entries close ${formatDistanceToNowStrict(new Date(race.prediction_lock_at), { addSuffix: true })}.`,
-      status: hasPredicted ? 'Entry locked in' : 'No entry yet',
+      status: hasPredicted ? 'Entry saved' : 'No entry yet',
     }
   }
 
@@ -205,7 +208,7 @@ function getActiveSectionCopy(tab: SeasonFilterKey) {
 }
 
 function formatRaceDateTime(value: string) {
-  return format(new Date(value), 'MMM d, p')
+  return formatAmsterdamDateTime(value, { includeWeekday: false }) || format(new Date(value), 'MMM d, p')
 }
 
 function RaceListCard({
@@ -229,7 +232,7 @@ function RaceListCard({
         ? 'View entry'
         : 'View race'
       : getMemberRaceActionLabel(status, hasPredicted)
-  const actionHref = status === 'scored' ? `/race/${race.id}#top-scorers` : `/race/${race.id}/predict`
+  const actionHref = `/race/${race.id}/predict`
 
   const frameClasses =
     tone === 'open'
@@ -404,6 +407,7 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
 
   const query = await searchParams
   const rawTab = Array.isArray(query.tab) ? query.tab[0] : query.tab
+  const joinedGroup = Array.isArray(query.joined) ? query.joined[0] : query.joined
 
   const { data: races } = await supabase
     .from('races')
@@ -428,6 +432,7 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
 
   const openRaces = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'upcoming')
   const nextOpenRace = openRaces[0] || null
+  const nextOpenRaceExperience = await getPrivateGroupRaceExperience(tenantContext.tenantId, nextOpenRace?.id)
   const actionableRaces = nextOpenRace && !predictedRaceIds.has(nextOpenRace.id) ? [nextOpenRace] : []
   const upcomingScheduleRaces = openRaces.filter((race) => race.id !== actionableRaces[0]?.id)
   const waitingRaces = typedRaces.filter((race) => {
@@ -463,25 +468,30 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
         : 'missed'
       : null
 
-  const defaultTab = postRaceDefaultTab || getDefaultTab({
-    actionCount: actionableRaces.length,
-    upcomingCount: upcomingScheduleRaces.length,
-    waitingCount: waitingRaces.length,
-    scoredCount: scoredRaces.length,
-    missedCount: missedRaces.length,
-  })
+  const defaultTab =
+    actionableRaces.length > 0
+      ? 'action'
+      : nextOpenRace
+        ? 'upcoming'
+        : postRaceDefaultTab || getDefaultTab({
+            actionCount: actionableRaces.length,
+            upcomingCount: upcomingScheduleRaces.length,
+            waitingCount: waitingRaces.length,
+            scoredCount: scoredRaces.length,
+            missedCount: missedRaces.length,
+          })
   const activeTab = resolveFilter(rawTab, defaultTab)
 
   const hero =
-    latestFinishedRace && latestFinishedIsRecent
-      ? {
-          kind: latestFinishedStatus === 'scored' ? 'scored' as const : 'waiting' as const,
-          race: latestFinishedRace,
-        }
-      : actionableRaces[0]
+    actionableRaces[0]
         ? { kind: 'action' as const, race: actionableRaces[0] }
         : nextOpenRace
           ? { kind: 'upcoming' as const, race: nextOpenRace }
+          : latestFinishedRace && latestFinishedIsRecent
+            ? {
+                kind: latestFinishedStatus === 'scored' ? 'scored' as const : 'waiting' as const,
+                race: latestFinishedRace,
+              }
       : waitingRaces[0]
         ? { kind: 'waiting' as const, race: waitingRaces[0] }
         : scoredRaces[0]
@@ -493,8 +503,7 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
   const heroHasPredicted = hero.race ? predictedRaceIds.has(hero.race.id) : false
   const heroScore = hero.race ? scoreByRaceId.get(hero.race.id) : undefined
   const heroStatus = hero.race ? getEffectiveRaceStatus(hero.race) : null
-  const heroHref =
-    hero.race && heroStatus === 'scored' ? `/race/${hero.race.id}#top-scorers` : hero.race ? `/race/${hero.race.id}/predict` : ''
+  const heroHref = hero.race ? `/race/${hero.race.id}/predict` : ''
   const heroContent = getHeroContent({
     kind: hero.kind,
     race: hero.race,
@@ -556,6 +565,21 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
+      {joinedGroup && (
+        <section className="rounded-3xl border border-emerald-500/20 bg-emerald-500/10 p-5 shadow-xl">
+          <div className="flex items-start gap-3">
+            <Flag className="mt-0.5 h-5 w-5 shrink-0 text-emerald-300" />
+            <div>
+              <div className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-200">Group joined</div>
+              <h1 className="mt-1 text-2xl font-black italic text-white">You joined {joinedGroup}</h1>
+              <p className="mt-2 text-sm leading-6 text-emerald-50/80">
+                Your private standings are ready. Start with the next race weekend below.
+              </p>
+            </div>
+          </div>
+        </section>
+      )}
+
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_21rem]">
         <div className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 to-black shadow-2xl">
           <div className="space-y-5 p-6 md:p-8">
@@ -607,6 +631,24 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
                   ]}
                 />
 
+                {hero.race.id === nextOpenRace?.id && nextOpenRaceExperience && (
+                  <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
+                      <Users className="h-4 w-4 text-red-300" />
+                      Group grid
+                    </div>
+                    <div className="mt-2 text-lg font-bold text-white">
+                      {nextOpenRaceExperience.submittedEntries} of {nextOpenRaceExperience.totalMembers} entries submitted
+                    </div>
+                    <p className="mt-1 text-sm text-slate-400">
+                      {nextOpenRaceExperience.totalMembers > 0 &&
+                      nextOpenRaceExperience.submittedEntries === nextOpenRaceExperience.totalMembers
+                        ? `Full grid. Everyone submitted for ${hero.race.race_name}.`
+                        : 'Picks stay hidden until the deadline.'}
+                    </p>
+                  </div>
+                )}
+
                 <div className="mt-4 flex items-center text-slate-400">
                   <MapPin className="mr-1.5 h-4 w-4 shrink-0 text-slate-500" />
                   <span>
@@ -629,6 +671,27 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
             ) : (
               <div className="rounded-2xl border border-white/10 bg-black/30 p-5 text-slate-400">
                 No races are currently scheduled for this season.
+              </div>
+            )}
+
+            {latestFinishedRace && latestFinishedRace.id !== hero.race?.id && (
+              <div className="border-t border-white/10 bg-black/20 px-6 py-4 md:px-8">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                  <div>
+                    <div className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Latest recap</div>
+                    <div className="mt-1 font-bold text-white">
+                      {latestFinishedRace.race_name}
+                      {!predictedRaceIds.has(latestFinishedRace.id) ? ' · No entry submitted' : ''}
+                    </div>
+                  </div>
+                  <PendingLink
+                    href={`/race/${latestFinishedRace.id}/predict`}
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-slate-200 transition-colors hover:bg-white/10"
+                  >
+                    Review weekend
+                    <ChevronRight className="h-4 w-4" />
+                  </PendingLink>
+                </div>
               </div>
             )}
           </div>

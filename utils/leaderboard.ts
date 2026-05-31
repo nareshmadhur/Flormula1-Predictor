@@ -26,6 +26,7 @@ export async function rebuildLeaderboardForSeason(supabase: LeaderboardClient, s
     .from('races')
     .select('id')
     .eq('season', season)
+    .eq('status', 'scored')
 
   if (racesError) {
     throw new Error(`Failed to load races for season ${season}`)

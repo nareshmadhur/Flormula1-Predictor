@@ -1,6 +1,7 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { CalendarClock, Trophy } from 'lucide-react'
+import { CalendarClock, ChevronDown, Trophy } from 'lucide-react'
+import { format } from 'date-fns'
 import { getCurrentSeason } from '@/utils/season'
 import { getRoundLabel } from '@/utils/race-copy'
 import { getEffectiveRaceStatus, type RaceStatus } from '@/utils/race-status'
@@ -12,6 +13,7 @@ import { PageBackLink } from '@/components/ui/page-back-link'
 import { RaceStatusPill } from '@/components/ui/race-status-pill'
 import { SectionHeader } from '@/components/ui/section-header'
 import { getMemberRaceActionLabel } from '@/utils/race-experience'
+import { getRaceWeekendConsistency } from '@/utils/group-race-experience'
 
 export const revalidate = 0
 
@@ -282,6 +284,19 @@ export default async function UserHistoryPage() {
   const missedCount = entries.filter((entry) => entry.category === 'missed').length
   const totalPoints = Array.from(scoreByRaceId.values()).reduce((sum, score) => sum + score.total_points, 0)
   const exactHits = Array.from(scoreByRaceId.values()).reduce((sum, score) => sum + score.exact_hits, 0)
+  const consistency = getRaceWeekendConsistency(
+    typedRaces.map((race) => ({
+      id: race.id,
+      status: getEffectiveRaceStatus(race),
+      race_start_at: race.race_start_at,
+    })),
+    predictedRaceIds
+  )
+  const upcomingEntries = groupedEntries
+    .filter((entry) => entry.category === 'upcoming')
+    .sort((left, right) => new Date(left.race.race_start_at).getTime() - new Date(right.race.race_start_at).getTime())
+  const nextUpcomingEntry = upcomingEntries[0] || null
+  const futureCalendarEntries = upcomingEntries.slice(1)
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -292,7 +307,7 @@ export default async function UserHistoryPage() {
         aside={<TenantContextBanner tenantName={tenantContext.tenantName} label="Playing in" />}
       />
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
         <div className="rounded-2xl border border-white/5 bg-card p-4 shadow-xl">
           <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Entered</div>
           <div className="mt-2 text-3xl font-black italic text-white">{enteredCount}</div>
@@ -309,7 +324,20 @@ export default async function UserHistoryPage() {
           <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Exact</div>
           <div className="mt-2 text-3xl font-black italic text-white">{exactHits}</div>
         </div>
+        <div className="rounded-2xl border border-white/5 bg-card p-4 shadow-xl">
+          <div className="text-[11px] font-bold uppercase tracking-[0.2em] text-slate-500">Current run</div>
+          <div className="mt-2 text-3xl font-black italic text-white">{consistency.currentRun}</div>
+        </div>
       </div>
+
+      {missedCount > 0 && nextUpcomingEntry && (
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm leading-6 text-amber-100">
+          You missed {missedCount === 1 ? 'a race weekend' : `${missedCount} race weekends`}, but your season continues.
+          {nextUpcomingEntry.hasPredicted
+            ? ` Your ${nextUpcomingEntry.race.race_name} entry is already saved.`
+            : ` ${nextUpcomingEntry.race.race_name} is your next chance to continue.`}
+        </div>
+      )}
 
       <div className="space-y-6">
         {groupedEntries.length === 0 ? (
@@ -318,7 +346,12 @@ export default async function UserHistoryPage() {
           </div>
         ) : (
           (['awaiting', 'scored', 'missed', 'upcoming'] as const).map((category) => {
-            const sectionEntries = groupedEntries.filter((entry) => entry.category === category)
+            const sectionEntries =
+              category === 'upcoming'
+                ? nextUpcomingEntry
+                  ? [nextUpcomingEntry]
+                  : []
+                : groupedEntries.filter((entry) => entry.category === category)
             if (sectionEntries.length === 0) return null
 
             return (
@@ -423,7 +456,7 @@ export default async function UserHistoryPage() {
 
                       <div className="shrink-0">
                         <PendingLink
-                          href={entry.status === 'scored' ? `/race/${entry.race.id}#top-scorers` : `/race/${entry.race.id}/predict`}
+                          href={`/race/${entry.race.id}/predict`}
                           className="inline-flex items-center gap-1.5 font-bold text-red-400 transition-colors hover:text-red-300"
                         >
                           {getActionLabel(entry)}
@@ -435,6 +468,35 @@ export default async function UserHistoryPage() {
               </section>
             )
           })
+        )}
+
+        {futureCalendarEntries.length > 0 && (
+          <details className="rounded-2xl border border-white/10 bg-card shadow-xl">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-4">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Future calendar</div>
+                <div className="mt-1 font-bold text-white">{futureCalendarEntries.length} later race weekends</div>
+              </div>
+              <ChevronDown className="h-5 w-5 text-slate-500" />
+            </summary>
+            <div className="grid gap-2 border-t border-white/5 p-4 md:grid-cols-2">
+              {futureCalendarEntries.map((entry) => (
+                <PendingLink
+                  key={entry.race.id}
+                  href={`/race/${entry.race.id}/predict`}
+                  className="rounded-xl border border-white/5 bg-black/25 px-4 py-3 transition-colors hover:bg-white/[0.03]"
+                >
+                  <div className="text-xs font-bold uppercase tracking-widest text-red-400">
+                    {getRoundLabel(entry.race.round)}
+                  </div>
+                  <div className="mt-1 font-semibold text-white">{entry.race.race_name}</div>
+                  <div className="mt-1 text-xs text-slate-500">
+                    {format(new Date(entry.race.race_start_at), 'MMM d, yyyy')}
+                  </div>
+                </PendingLink>
+              ))}
+            </div>
+          </details>
         )}
       </div>
     </div>

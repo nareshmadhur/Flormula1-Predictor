@@ -305,7 +305,7 @@ export async function acceptGroupInvite(
     revalidatePath('/leaderboard')
     revalidatePath('/predictions')
     revalidatePath('/me/history')
-    redirect('/leaderboard?view=tenant')
+    redirect(`/predictions?joined=${encodeURIComponent(result.tenantName || 'your group')}`)
   }
 
   return {
