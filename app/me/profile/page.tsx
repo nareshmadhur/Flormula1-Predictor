@@ -1,11 +1,12 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { IdCard, UserRound } from 'lucide-react'
+import { ArrowRight, IdCard, UserRound, UsersRound } from 'lucide-react'
 import { getProfileDisplayName } from '@/utils/profile-name'
 import { getUserTenantContext } from '@/utils/tenant'
 import { TenantContextBanner } from '@/components/ui/tenant-context-banner'
 import { PageBackLink } from '@/components/ui/page-back-link'
 import { ProfileForm } from './profile-form'
+import { PendingLink } from '@/components/ui/pending-link'
 
 export const revalidate = 0
 
@@ -92,6 +93,25 @@ export default async function ProfilePage() {
           </div>
         </section>
       </div>
+
+      <section className="flex flex-col gap-4 rounded-3xl border border-white/10 bg-card p-6 shadow-xl sm:flex-row sm:items-center sm:justify-between md:p-8">
+        <div className="flex items-start gap-3">
+          <UsersRound className="mt-1 h-6 w-6 shrink-0 text-red-400" />
+          <div>
+            <h2 className="text-xl font-black italic tracking-tight text-white">Organizing a private pool?</h2>
+            <p className="mt-1 max-w-2xl text-sm leading-6 text-slate-400">
+              Request a group for friends, family, or colleagues. You keep playing in {tenantContext.tenantName || 'your current group'} until a platform admin approves it.
+            </p>
+          </div>
+        </div>
+        <PendingLink
+          href="/groups/request"
+          className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-3 font-bold text-white transition-colors hover:bg-red-500"
+        >
+          Start a private group
+          <ArrowRight className="h-4 w-4" />
+        </PendingLink>
+      </section>
     </div>
   )
 }

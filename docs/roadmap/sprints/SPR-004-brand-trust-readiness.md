@@ -2,7 +2,7 @@
 
 ## Goal
 
-Prepare the product for public use on `flormula1.nl` with trust pages, disclaimers, contact paths, and launch-readiness documentation.
+Prepare the product for public use under a cleared commercial brand and domain with trust pages, disclaimers, contact paths, and launch-readiness documentation.
 
 ## Status
 
@@ -31,7 +31,7 @@ This sprint does not directly monetize the product, but it is a paid-launch gate
 - `/terms`
 - `/contact`
 - sitemap coverage
-- domain/metadata checklist for `flormula1.nl`
+- commercial brand clearance and domain/metadata migration checklist
 
 ## Test Plan
 

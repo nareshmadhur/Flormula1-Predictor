@@ -1,5 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
-import { ChevronDown, Medal, Trophy } from 'lucide-react'
+import { ArrowRight, ChevronDown, Medal, Trophy, UsersRound } from 'lucide-react'
 import { format } from 'date-fns'
 import { getRoundLabel } from '@/utils/race-copy'
 import { getCurrentSeason } from '@/utils/season'
@@ -387,6 +387,27 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
           </span>
         )}
       </div>
+
+      {user && groupContext.role === 'user' && groupContext.tenantSlug === 'main' && (
+        <section className="flex flex-col gap-3 rounded-2xl border border-red-500/15 bg-red-500/8 p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex items-start gap-3">
+            <UsersRound className="mt-0.5 h-5 w-5 shrink-0 text-red-300" />
+            <div>
+              <div className="font-bold text-white">Want a private standings table?</div>
+              <p className="mt-1 text-sm leading-6 text-red-100/75">
+                Request a group, then invite people after a platform admin approves it.
+              </p>
+            </div>
+          </div>
+          <PendingLink
+            href="/groups/request"
+            className="inline-flex shrink-0 items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-500"
+          >
+            Start a private group
+            <ArrowRight className="h-4 w-4" />
+          </PendingLink>
+        </section>
+      )}
 
       {sortedVisibleLeaderboard.length > 0 && (
         <div className="text-xs text-slate-500">Click a player to inspect scored weekends.</div>

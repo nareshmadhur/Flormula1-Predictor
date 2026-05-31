@@ -72,7 +72,7 @@ Detailed execution tracking lives in [docs/roadmap/README.md](</Users/nareshmadh
 ### User
 1. Sign up and confirm email.
 2. While waiting for tenant assignment, browse the public leaderboard and set a public display name in `/me/profile`.
-3. Get assigned to a tenant by a platform admin.
+3. Keep playing in Main Group, accept an invite to join an existing private group, or request a new private group from `/groups/request`.
 4. Sign in and land on the season dashboard at `/predictions`.
 5. Open the next race and submit podium picks plus bonus answers.
 6. Revisit the same race after lock to see the submitted entry.
@@ -82,7 +82,7 @@ Detailed execution tracking lives in [docs/roadmap/README.md](</Users/nareshmadh
 ### Platform Admin
 1. Sign in as a platform admin.
 2. Open `Admin` from the main navigation.
-3. Open `/admin/tenants` to create tenants and set each account's role, admin scope, and tenant assignment.
+3. Open `/admin/tenants` to review private-group requests, create tenants directly, and set each account's role, admin scope, and tenant assignment.
 4. Mark test groups/accounts in `/admin/tenants` when validating signup, invites, or scoring flows.
 5. Create or update races for the season.
 6. Add bonus questions and official answers.

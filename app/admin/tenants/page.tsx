@@ -6,6 +6,7 @@ import { CreateTenantForm } from './create-tenant-form'
 import { AccessWorkspace } from './access-workspace'
 import { TestModeToggleButton } from './test-mode-toggle-button'
 import { PageBackLink } from '@/components/ui/page-back-link'
+import { GroupRequestReviewPanel } from './group-request-review-panel'
 
 type Tenant = {
   id: string
@@ -22,6 +23,17 @@ type Profile = {
   admin_scope?: AdminScope | null
   tenant_id?: string | null
   is_test?: boolean | null
+}
+
+type GroupRequest = {
+  id: string
+  requested_by: string
+  source_tenant_id?: string | null
+  requested_name: string
+  description?: string | null
+  expected_player_count: number
+  move_acknowledged_at: string
+  created_at: string
 }
 
 export const revalidate = 0
@@ -53,6 +65,12 @@ export default async function AdminTenantsPage() {
     .select('id, display_name, email, role, tenant_id, admin_scope, is_test')
     .order('display_name')
 
+  const pendingGroupRequestsResult = await supabase
+    .from('group_requests')
+    .select('id, requested_by, source_tenant_id, requested_name, description, expected_player_count, move_acknowledged_at, created_at')
+    .eq('status', 'pending')
+    .order('created_at', { ascending: true })
+
   let rawProfiles: Profile[] = []
 
   if (
@@ -79,6 +97,12 @@ export default async function AdminTenantsPage() {
     is_test: profile.is_test ?? false,
   }))
   const testModeAvailable = !tenantsWithTestMode.error && !profilesWithScope.error
+  const groupRequestSetupMessage = pendingGroupRequestsResult.error
+    ? 'Group requests are not ready in this database yet. Run the latest group-request migration, then come back here.'
+    : null
+  const pendingGroupRequests = pendingGroupRequestsResult.error
+    ? []
+    : (pendingGroupRequestsResult.data || []) as GroupRequest[]
   const memberCountByTenant = new Map<string, number>()
   const adminCountByTenant = new Map<string, number>()
 
@@ -104,6 +128,13 @@ export default async function AdminTenantsPage() {
           </p>
         </div>
       </div>
+
+      <GroupRequestReviewPanel
+        requests={pendingGroupRequests}
+        profiles={typedProfiles}
+        tenants={typedTenants}
+        setupMessage={groupRequestSetupMessage}
+      />
 
       <AccessWorkspace
         profiles={typedProfiles}

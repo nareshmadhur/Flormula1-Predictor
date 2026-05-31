@@ -55,6 +55,9 @@ export default function SignupPage({
         <p className="mb-6 text-center text-sm text-slate-400">
           Create your account and start in Main Group automatically. Private invites can move you into a group later.
         </p>
+        <p className="-mt-3 mb-6 text-center text-xs leading-5 text-slate-500">
+          Organizing your own pool? Request a private group from your profile after signing in.
+        </p>
         
         <SignupForm formAction={formAction} pending={pending} error={state.error} next={next} />
       </div>

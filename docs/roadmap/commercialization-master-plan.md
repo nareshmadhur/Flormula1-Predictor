@@ -6,13 +6,17 @@ Turn FLORMULA1 Predictor from a polished private predictor into a commercially v
 
 This is a planning document, not legal advice. Before taking money publicly, especially for contests, prizes, or F1-adjacent branding, get legal review.
 
-## Domain Update
+## Working Domain And Commercial Brand
 
-The intended commercial domain is:
+The current private-beta and technical domain is:
 
 - `flormula1.nl`
 
-This makes `Flormula1` the recommended commercial brand direction. Keep the product clearly independent and avoid official F1 branding, imagery, logos, or typography unless permission is obtained.
+Do not treat this as the cleared commercial brand or the recommended paid-launch domain.
+
+Formula 1's official guidelines explicitly say that its marks, including variants, misspellings, and derivatives, cannot be used to create a brand identity. They also say that permitted word marks cannot be incorporated into domain names for commercialized websites. `Flormula1` is close enough to `Formula 1` that the working commercial assumption should be that it is high risk unless specialist legal review says otherwise.
+
+Keep the product clearly independent and avoid official F1 branding, imagery, logos, or typography unless permission is obtained. Before public paid launch, select and clear a distinctive commercial brand and matching domain that do not depend on an `F1` or `Formula 1` variation.
 
 ## Executive Recommendation
 
@@ -50,20 +54,23 @@ So the safer first commercial package is:
 
 ## IP And Brand Readiness
 
-Formula 1's official guidelines are strict. They allow some editorial/fan usage, but Formula 1 marks should not be used to brand games or competitions, logos require written permission, and unofficial sites should be clear that they are not associated with Formula 1. Source: [Formula 1 Guidelines](https://www.formula1.com/en/information/guidelines.4EOKE9RRqevL4niTK9kWyt).
+Formula 1's official guidelines are strict. They allow some editorial/fan usage, but Formula 1 marks should not be used to brand games or competitions, logos require written permission, commercialized domain names cannot incorporate the permitted word marks, and variants, misspellings, or derivatives cannot be used to create a brand identity. Unofficial sites should also be clear that they are not associated with Formula 1. Source: [Formula 1 Guidelines](https://www.formula1.com/en/information/guidelines.4EOKE9RRqevL4niTK9kWyt).
 
 Before commercial launch:
 
 - do not use official F1 logos, official typography, official artwork, circuit outlines, broadcast stills, or official imagery
 - keep race references informational, not brand-defining
 - add an unofficial disclaimer to the public footer
-- review whether `FLORMULA1` is too close to protected marks for a commercial product
-- consider a safer commercial brand like `Flormula`, `Pitwall Picks`, `Podium Pool`, or `Apex Picks`
+- treat `Flormula1` and `flormula1.nl` as private-beta working identifiers, not cleared commercial identifiers
+- choose a distinctive commercial name and matching primary domain that do not depend on an `F1` or `Formula 1` variation
+- screen the short list through the [BOIP Trademarks Register](https://www.boip.int/en/trademarks-register) and [EUIPO TMview](https://www.tmdn.org/tmview/) before committing
+- ask a Benelux/EU trademark professional to clear the final candidate and advise whether the current domain should be retired, retained defensively, or redirected
 
 Recommended near-term decision:
 
-- keep `FLORMULA1 Predictor` during private beta
-- rebrand before taking public paid subscriptions unless legal review says the current name is acceptable
+- keep `Flormula1` during private beta while the current auth, email, and deployment configuration still uses it
+- rebrand before taking public paid season-pass payments unless specialist legal review says the current name and domain are acceptable
+- use Formula racing references editorially in page copy, not as the product identity
 
 ## Data Dependency Readiness
 
@@ -135,9 +142,9 @@ Why it works:
 Initial pricing experiments:
 
 - free private beta
-- founder season pass per group
-- monthly organizer subscription
-- company/team package for office groups
+- `€10` founder season pass per group
+- `€25` standard season pass per group
+- company/team package for larger office groups later
 
 ### Path B: Concierge Office Leagues
 
@@ -222,7 +229,7 @@ Add a parallel `C` track after P2 retention starts.
 | --- | --- | --- | --- |
 | `C0` | Brand, legal, and trust readiness | Prevents avoidable launch risk | 1 |
 | `C1` | Invite and join group flow | Removes manual assignment bottleneck | 2 |
-| `C2` | Organizer-paid subscription | Creates first revenue path | 3 |
+| `C2` | Organizer-paid season pass | Creates first revenue path | 3 |
 | `C3` | Reminder and recap conversion loops | Improves usage and retention | 4 |
 | `C4` | Product analytics and commercial metrics | Measures if commercialization works | 5 |
 | `C5` | Public share cards and referral loops | Helps groups grow | 6 |
@@ -314,26 +321,27 @@ Core behavior:
 - confirmed users get assigned automatically
 - platform admins can still manually adjust access
 
-### C2 Billing And Entitlements
+### C2 Season-Pass Billing And Entitlements
 
 Data model:
 
 - `plans`
-- `subscriptions`
-- `subscription_events`
+- `group_season_passes`
+- `payment_events`
 - `group_entitlements`
 
 Integration:
 
 - Stripe Checkout or Payment Links for early launch
-- Stripe webhooks for subscription status
+- Stripe webhooks for completed and refunded payments
 - entitlement checks around premium features
 
 Early pricing model:
 
 - free group tier
-- premium group tier
-- concierge/team package
+- `€10` founder season pass per group
+- `€25` standard season pass per group
+- concierge/team package for larger office groups later
 
 ### C3 Reminder And Recap Loops
 
@@ -366,7 +374,7 @@ Track:
 - reminder clicks
 - scored-race return
 - organizer upgrade starts
-- subscription conversion
+- season-pass conversion
 
 ## Success Metrics
 
@@ -389,8 +397,8 @@ Track:
 - groups created
 - organizers active
 - premium conversion
-- monthly recurring revenue
-- churn by group
+- season-pass revenue
+- paid-group renewal by season
 - support burden per paid group
 
 ## Recommended Next Sequence
@@ -399,7 +407,7 @@ Track:
 2. Add footer disclaimer and commercial-safe terms/privacy placeholders.
 3. Build invite/join group flow.
 4. Run 5-10 private beta groups manually.
-5. Add organizer-paid Stripe flow only after beta shows repeated usage.
+5. Add organizer-paid seasonal Stripe flow only after beta shows repeated usage.
 6. Decide brand/legal posture before public paid launch.
 7. Add public share cards and referral loops.
 

@@ -13,23 +13,23 @@ The product should feel like:
 - public season context for discovery
 - commercial-ready trust, privacy, and compliance
 
-## Domain And Brand Direction
+## Working Domain And Commercial Brand Direction
 
-The commercial home is planned around:
+The current private-beta and technical home is:
 
 - `flormula1.nl`
 
 Recommended brand direction:
 
-- use `Flormula1` as the commercial brand
-- keep `FLORMULA1 Predictor` as private-beta/product copy only if needed
+- use `Flormula1` as a private-beta working brand only
+- select a distinctive commercial name and matching domain before taking public payments
 - avoid official F1 marks, logos, imagery, and brand styling
 - add a public disclaimer before any paid launch
 
 Reasoning:
 
-- Formula 1's own guidelines say Formula 1 marks should not be used to brand games or competitions without permission, and unofficial sites should not imply association. See [Formula 1 Guidelines](https://www.formula1.com/en/information/guidelines.4EOKE9RRqevL4niTK9kWyt).
-- `flormula1.nl` is the owned commercial domain, so the launch path should consistently use `Flormula1` while staying clearly unofficial.
+- Formula 1's own guidelines say Formula 1 marks should not be used to brand games or competitions without permission, permitted marks cannot be incorporated into commercialized domain names, and variants, misspellings, or derivatives cannot be used to create a brand identity. See [Formula 1 Guidelines](https://www.formula1.com/en/information/guidelines.4EOKE9RRqevL4niTK9kWyt).
+- `flormula1.nl` remains useful for the private beta and current technical configuration, but it should not be assumed safe for public commercialization.
 - A `.nl` domain makes the Netherlands/EU compliance story more important, especially privacy, email, commercial identity, and any prize/contest mechanics.
 
 ## Product North Star
@@ -62,9 +62,9 @@ Each roadmap component should be labeled with its commercial intent:
 | Foundation | [P0-001 Tenant foundation and safety](./increments/P0-001-tenant-foundation-and-safety.md) | Completed | Foundation, Trust | Safe group boundaries, role model, and platform-admin controls. |
 | Product | [P1-001 Tenant product experience](./increments/P1-001-tenant-product-experience.md) | Completed | Foundation, Engagement | Useful member, group-admin, and leaderboard experience. |
 | Visibility | [P2-001 Visibility and automation](./increments/P2-001-visibility-and-automation.md) | In progress | Acquisition, Engagement, Trust | Public season journey, OpenF1 schedule import, and upcoming reminder loops. |
-| Commercial | [C0-001 Brand and trust readiness](./increments/C0-001-brand-and-trust-readiness.md) | Planned | Trust | Prepare `flormula1.nl`, disclaimers, privacy, terms, and commercial-safe brand posture. |
+| Commercial | [C0-001 Brand and trust readiness](./increments/C0-001-brand-and-trust-readiness.md) | Planned | Trust | Clear a commercial brand and domain, then prepare disclaimers, privacy, terms, and migration. |
 | Commercial | [C1-001 Invite and join groups](./increments/C1-001-invite-and-join-groups.md) | Planned | Acquisition, Revenue | Remove manual assignment by letting organizers invite members directly. |
-| Commercial | [C2-001 Organizer-paid subscriptions](./increments/C2-001-organizer-paid-subscriptions.md) | Planned | Revenue, Trust | Add paid group plans and entitlement checks. |
+| Commercial | [C2-001 Organizer-paid season passes](./increments/C2-001-organizer-paid-subscriptions.md) | Planned | Revenue, Trust | Add paid group season passes and entitlement checks. |
 | Commercial | [C3-001 Reminder and recap loops](./increments/C3-001-reminder-and-recap-loops.md) | Planned | Engagement, Revenue | Improve race-weekend retention and create premium-worthy automation. |
 | Commercial | [C4-001 Analytics and commercial metrics](./increments/C4-001-analytics-and-commercial-metrics.md) | Planned | Revenue, Trust | Measure activation, retention, conversion, and operational health. |
 | Commercial | [C5-001 Share and referral loops](./increments/C5-001-share-and-referral-loops.md) | Planned | Acquisition, Revenue | Let groups grow through shareable standings, recaps, and invite paths. |
@@ -120,7 +120,7 @@ Netherlands-specific caution:
 
 ### Organizer
 
-1. Lands on `flormula1.nl`.
+1. Lands on the cleared commercial domain.
 2. Sees how group prediction leagues work.
 3. Starts a group.
 4. Invites members with a link.
@@ -149,17 +149,17 @@ Netherlands-specific caution:
 ## Suggested Execution Sequence
 
 1. Complete P2 reminder and retention foundations.
-2. Ship C0 brand/trust readiness around `flormula1.nl`.
+2. Ship C0 brand/trust readiness and the commercial-domain migration plan.
 3. Ship C1 invite and join groups.
 4. Run a private beta with manually selected groups.
 5. Ship C4 analytics before billing, so conversion can be measured.
-6. Ship C2 organizer-paid subscriptions.
+6. Ship C2 organizer-paid season passes.
 7. Ship C5 share/referral loops.
 8. Explore prize/contest mechanics only after legal review.
 
 ## Launch Gates For Paid Public Launch
 
-- `flormula1.nl` configured and verified
+- cleared commercial brand and domain configured and verified
 - commercial-safe brand decision made
 - unofficial disclaimer live
 - privacy policy and terms live

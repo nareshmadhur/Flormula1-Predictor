@@ -2,7 +2,7 @@
 
 ## Objective
 
-Prepare the product for public commercial use on `flormula1.nl` without avoidable brand, legal, privacy, or trust risk.
+Prepare the product for public commercial use under a cleared brand and domain without avoidable brand, legal, privacy, or trust risk.
 
 ## Commercial Intent
 
@@ -18,7 +18,8 @@ This increment does not directly create revenue, but it is a gate before chargin
 
 ## Functional Components Embedded
 
-- `flormula1.nl` domain configuration plan
+- private-beta `flormula1.nl` migration plan
+- commercial brand and domain clearance checkpoint
 - unofficial motorsport/F1 disclaimer
 - privacy policy page
 - terms page
@@ -36,7 +37,7 @@ This increment does not directly create revenue, but it is a gate before chargin
 
 ## User Journey Impact
 
-- A visitor lands on `flormula1.nl` and understands what the product is.
+- A visitor lands on the cleared commercial domain and understands what the product is.
 - A visitor can see trust/legal links in the footer.
 - An organizer has enough confidence to start or request a group.
 
@@ -46,7 +47,7 @@ This increment does not directly create revenue, but it is a gate before chargin
 - Add privacy and terms placeholder pages.
 - Add unofficial disclaimer.
 - Document OpenF1 and data-source dependencies.
-- Prepare deployment/domain checklist for `flormula1.nl`.
+- Prepare the commercial brand shortlist, clearance step, and deployment/domain migration checklist.
 - Add a lightweight test-mode foundation before broader invite testing.
 
 ## Out Of Scope
@@ -61,7 +62,7 @@ This increment does not directly create revenue, but it is a gate before chargin
 - public trust pages
 - footer/navigation links
 - site URL/domain environment configuration
-- metadata updates for `flormula1.nl`
+- metadata and environment updates for the cleared commercial domain
 - `is_test` flags for groups and profiles
 - admin test-mode toggles
 - public/global leaderboard filtering for test data
@@ -74,14 +75,14 @@ This increment does not directly create revenue, but it is a gate before chargin
 ## Test Plan
 
 - Verify footer links are visible on public pages.
-- Verify metadata and canonical URLs use the configured commercial domain.
+- Verify metadata and canonical URLs use the cleared commercial domain.
 - Verify disclaimers are present before paid launch.
 - Verify test groups/accounts are hidden from public/global standings but still work inside their own group.
 
 ## Dependencies
 
 - commercial brand decision
-- access to DNS/domain configuration for `flormula1.nl`
+- access to DNS/domain configuration for the cleared commercial domain
 
 ## Status
 

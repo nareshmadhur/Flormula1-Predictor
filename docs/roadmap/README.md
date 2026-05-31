@@ -38,7 +38,7 @@ This folder is the working execution board for product and engineering increment
 | --- | --- | --- | --- |
 | [C0-001](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/increments/C0-001-brand-and-trust-readiness.md>) | Trust | Brand and trust readiness | In progress |
 | [C1-001](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/increments/C1-001-invite-and-join-groups.md>) | Acquisition, Revenue | Invite and join groups | In progress |
-| [C2-001](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/increments/C2-001-organizer-paid-subscriptions.md>) | Revenue, Trust | Organizer-paid subscriptions | Planned |
+| [C2-001](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/increments/C2-001-organizer-paid-subscriptions.md>) | Revenue, Trust | Organizer-paid season passes | Planned |
 | [C3-001](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/increments/C3-001-reminder-and-recap-loops.md>) | Engagement, Revenue | Reminder and recap loops | Planned |
 | [C4-001](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/increments/C4-001-analytics-and-commercial-metrics.md>) | Revenue, Trust | Analytics and commercial metrics | Planned |
 | [C5-001](</Users/nareshmadhur/Tech Projects/Flormula1-Predictor/docs/roadmap/increments/C5-001-share-and-referral-loops.md>) | Acquisition, Revenue | Share and referral loops | Planned |
@@ -51,7 +51,7 @@ Recommended commercial sequence:
 
 - `C0`: brand, legal, and trust readiness
 - `C1`: invite and join group flow
-- `C2`: organizer-paid subscription
+- `C2`: organizer-paid season pass
 - `C3`: reminder and recap conversion loops
 - `C4`: product analytics and commercial metrics
 - `C5`: public share cards and referral loops
