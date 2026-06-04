@@ -151,8 +151,8 @@ export default async function AdminResultsPage() {
         <PageBackLink href="/admin" label="Back to Admin" />
         <SectionHeader
           eyebrow="Admin"
-          title="Results desk"
-          description="Save official podiums and bonus answers across multiple weekends without hopping through one race at a time."
+          title="Results"
+          description="Save official podiums and bonus answers across multiple races."
           aside={<ClipboardCheck className="h-8 w-8 text-red-500" />}
         />
       </div>
@@ -160,20 +160,20 @@ export default async function AdminResultsPage() {
       <div className="grid gap-4 md:grid-cols-3">
         <div className="rounded-3xl border border-red-500/20 bg-red-500/10 p-5 shadow-xl">
           <div className="text-xs font-bold uppercase tracking-[0.22em] text-red-100">Need results</div>
-          <div className="mt-3 text-3xl font-black italic text-white">{pendingResultsCount}</div>
-          <p className="mt-2 text-sm text-red-100/80">Weekends still waiting for an official podium save.</p>
+          <div className="mt-3 text-3xl font-bold text-white">{pendingResultsCount}</div>
+          <p className="mt-2 text-sm text-red-100/80">Races still waiting for an official podium.</p>
         </div>
 
         <div className="rounded-3xl border border-amber-500/20 bg-amber-500/10 p-5 shadow-xl">
           <div className="text-xs font-bold uppercase tracking-[0.22em] text-amber-100">Needs scoring</div>
-          <div className="mt-3 text-3xl font-black italic text-white">{readyToRescoreCount}</div>
+          <div className="mt-3 text-3xl font-bold text-white">{readyToRescoreCount}</div>
           <p className="mt-2 text-sm text-amber-100/80">Saved results that are ready for a scoring rerun.</p>
         </div>
 
         <div className="rounded-3xl border border-emerald-500/20 bg-emerald-500/10 p-5 shadow-xl">
           <div className="text-xs font-bold uppercase tracking-[0.22em] text-emerald-100">Already scored</div>
-          <div className="mt-3 text-3xl font-black italic text-white">{scoredCount}</div>
-          <p className="mt-2 text-sm text-emerald-100/80">Published weekends you can still correct if needed.</p>
+          <div className="mt-3 text-3xl font-bold text-white">{scoredCount}</div>
+          <p className="mt-2 text-sm text-emerald-100/80">Published races you can still correct if needed.</p>
         </div>
       </div>
 
@@ -187,12 +187,12 @@ export default async function AdminResultsPage() {
                 <Flag className="h-3.5 w-3.5 text-red-400" />
                 Nothing to publish right now
               </div>
-              <h2 className="text-2xl font-black italic tracking-tight text-white">
-                Official results will appear here after a weekend ends.
+              <h2 className="text-2xl font-bold tracking-tight text-white">
+                Official results will appear here after a race ends.
               </h2>
               <p className="max-w-2xl text-sm leading-6 text-slate-400">
-                When a weekend moves past race start, this desk becomes the fastest way to save the podium and
-                bonus answers. Until then, schedule sync and race setup live in the control room.
+                When a race moves past start time, use this page to save the podium and bonus answers.
+                Until then, use schedule sync and race setup from Admin.
               </p>
             </div>
 

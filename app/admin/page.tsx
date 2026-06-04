@@ -94,8 +94,8 @@ export default async function AdminDashboardPage() {
     <div className="space-y-7 animate-in fade-in duration-500">
       <SectionHeader
         eyebrow="Admin"
-        title="Control room"
-        description="One primary queue, then the few places an admin actually needs during a race week."
+        title="Admin"
+        description="Handle race setup, results, groups, and emails from one place."
         aside={<Settings className="h-8 w-8 text-red-500" />}
       />
 
@@ -113,14 +113,14 @@ export default async function AdminDashboardPage() {
           >
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold uppercase leading-5 tracking-[0.18em] text-red-100 sm:tracking-[0.22em]">
               <ClipboardCheck className="h-4 w-4 shrink-0" />
-              Results desk
+              Results
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end">
-              <div className="text-5xl font-black italic leading-none text-white">{resultsCount}</div>
+              <div className="text-5xl font-bold leading-none text-white">{resultsCount}</div>
               <div className="min-w-0">
-                <h2 className="break-words text-xl font-black italic tracking-tight text-white">Finished races need results</h2>
+                <h2 className="break-words text-xl font-bold tracking-tight text-white">Races waiting for results</h2>
                 <p className="mt-1 break-words text-sm text-red-100/80">
-                  Publish podiums and bonus answers here. This is the normal path for scoring.
+                  Enter podiums and bonus answers before scoring.
                 </p>
               </div>
             </div>
@@ -136,9 +136,9 @@ export default async function AdminDashboardPage() {
               className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-amber-500/15 bg-amber-500/8 p-4 transition-colors hover:bg-amber-500/12"
             >
               <div className="min-w-0">
-                <div className="break-words text-xs font-bold uppercase leading-5 tracking-[0.16em] text-amber-100 sm:tracking-[0.2em]">Live weekends</div>
-                <div className="mt-1 text-2xl font-black italic text-white">{liveCount}</div>
-                <p className="mt-1 break-words text-sm text-amber-100/75">Locked races currently in motion.</p>
+                <div className="break-words text-xs font-bold uppercase leading-5 tracking-[0.16em] text-amber-100 sm:tracking-[0.2em]">Locked races</div>
+                <div className="mt-1 text-2xl font-bold text-white">{liveCount}</div>
+                <p className="mt-1 break-words text-sm text-amber-100/75">Prediction windows are closed.</p>
               </div>
               <ChevronRight className="h-5 w-5 shrink-0 text-amber-100/70 transition-colors group-hover:text-white" />
             </PendingLink>
@@ -148,10 +148,10 @@ export default async function AdminDashboardPage() {
               className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-sky-500/15 bg-sky-500/8 p-4 transition-colors hover:bg-sky-500/12"
             >
               <div className="min-w-0">
-                <div className="break-words text-xs font-bold uppercase leading-5 tracking-[0.16em] text-sky-100 sm:tracking-[0.2em]">Setup gaps</div>
-                <div className="mt-1 text-2xl font-black italic text-white">{unassignedCount}</div>
+                <div className="break-words text-xs font-bold uppercase leading-5 tracking-[0.16em] text-sky-100 sm:tracking-[0.2em]">Unassigned users</div>
+                <div className="mt-1 text-2xl font-bold text-white">{unassignedCount}</div>
                 <p className="mt-1 break-words text-sm text-sky-100/75">
-                  Should stay at zero once Main Group defaulting is live.
+                  People who are not in a group yet.
                 </p>
               </div>
               <ChevronRight className="h-5 w-5 shrink-0 text-sky-100/70 transition-colors group-hover:text-white" />
@@ -163,14 +163,14 @@ export default async function AdminDashboardPage() {
       <section className="rounded-3xl border border-red-500/20 bg-red-500/8 p-5 shadow-xl md:p-6">
         <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
           <div>
-            <div className="text-xs font-bold uppercase tracking-[0.24em] text-red-200">Race setup shortcut</div>
-            <h2 className="mt-2 text-2xl font-black italic tracking-tight text-white">
+            <div className="text-xs font-bold uppercase tracking-[0.2em] text-red-200">Next race setup</div>
+            <h2 className="mt-2 text-2xl font-bold tracking-tight text-white">
               {nextSetupRace ? nextSetupRace.race_name : 'No open race to set up'}
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-red-100/80">
               {nextSetupRace
-                ? `Add or review bonus questions before members submit picks. ${nextSetupBonusCount || 0} live question${nextSetupBonusCount === 1 ? '' : 's'} currently configured.`
-                : 'Use schedule sync to create or open the next race before adding race-week setup details.'}
+                ? `Add or review bonus questions before entries close. ${nextSetupBonusCount || 0} active question${nextSetupBonusCount === 1 ? '' : 's'} configured.`
+                : 'Use schedule sync to create or open the next race first.'}
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
@@ -178,7 +178,7 @@ export default async function AdminDashboardPage() {
               href={raceSetupHref}
               className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
             >
-              {nextSetupRace ? 'Open bonus setup' : 'Open schedule sync'}
+              {nextSetupRace ? 'Open setup' : 'Open schedule sync'}
               <ChevronRight className="h-4 w-4" />
             </PendingLink>
             {nextSetupRace && (
@@ -186,7 +186,7 @@ export default async function AdminDashboardPage() {
                 href={`/admin/races/${nextSetupRace.id}#official-results`}
                 className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/25 px-5 py-3 font-bold text-red-50 transition-colors hover:bg-white/10"
               >
-                Result entry
+                Enter results
               </PendingLink>
             )}
           </div>
@@ -195,9 +195,9 @@ export default async function AdminDashboardPage() {
 
       <section className="space-y-4">
         <SectionHeader
-          eyebrow="Routes"
-          title="Where to go next"
-          description="The remaining recurring admin jobs are grouped by intent."
+          eyebrow="Sections"
+          title="Admin sections"
+          description="Choose the area you need."
         />
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -210,9 +210,9 @@ export default async function AdminDashboardPage() {
                 <CalendarSync className="h-3.5 w-3.5 shrink-0 text-red-400" />
                 Race setup
               </div>
-              <h2 className="text-base font-bold leading-tight text-white">Setup & bonus</h2>
+              <h2 className="text-base font-bold leading-tight text-white">Race setup</h2>
               <p className="mt-1 break-words text-sm text-slate-400">
-                Add bonus questions for the next race, then sync timing when needed.
+                Add bonus questions or update race timing.
               </p>
             </div>
             <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
@@ -255,10 +255,10 @@ export default async function AdminDashboardPage() {
             <div className="min-w-0">
               <div className="mb-2 inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase leading-5 tracking-[0.14em] text-slate-300 sm:tracking-[0.18em]">
                 <ClipboardCheck className="h-3.5 w-3.5 shrink-0 text-red-400" />
-                Group ops
+                Group admin
               </div>
-              <h2 className="text-base font-bold leading-tight text-white">Coverage & invites</h2>
-              <p className="mt-1 break-words text-sm text-slate-400">Submissions and private-group invite links.</p>
+              <h2 className="text-base font-bold leading-tight text-white">Invites and entries</h2>
+              <p className="mt-1 break-words text-sm text-slate-400">Manage invite links and group race entries.</p>
             </div>
             <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
           </PendingLink>
@@ -269,8 +269,8 @@ export default async function AdminDashboardPage() {
         <section className="space-y-4">
           <SectionHeader
             eyebrow="Current races"
-            title="Inspect active weekends"
-            description="Only races that are live or waiting for results appear here."
+            title="Races to review"
+            description="Only locked races or races waiting for results appear here."
           />
 
           <div className="overflow-hidden rounded-2xl border border-white/5 bg-card shadow-xl">
@@ -311,9 +311,9 @@ export default async function AdminDashboardPage() {
               <PlusCircle className="h-3.5 w-3.5 shrink-0 text-amber-300" />
               Advanced
             </div>
-            <h2 className="text-lg font-bold leading-tight text-white">Repair and fallback tools</h2>
+            <h2 className="text-lg font-bold leading-tight text-white">Maintenance tools</h2>
             <p className="mt-1 max-w-2xl text-sm text-slate-400">
-              Use these when source sync, historic corrections, or manual data fixes require admin intervention.
+              Use these for source sync issues, historic corrections, or manual data fixes.
             </p>
           </div>
           <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-slate-500 transition-transform group-open:rotate-90" />

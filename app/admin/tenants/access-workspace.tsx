@@ -127,11 +127,11 @@ export function AccessWorkspace({
   }> = [
     {
       id: 'needs-assignment',
-      label: 'Setup gaps',
+      label: 'Needs group',
       count: needsAssignmentCount,
       tone: 'border-amber-500/20 bg-amber-500/10 text-amber-200',
       icon: AlertTriangle,
-      helper: 'Accounts missing Main Group or a private group. This should be rare.',
+      helper: 'Accounts missing Main Group or a private group.',
     },
     {
       id: 'members',
@@ -218,7 +218,7 @@ export function AccessWorkspace({
                     <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-black/20">
                       <Icon className="h-5 w-5" />
                     </div>
-                    <div className="text-3xl font-black italic">{card.count}</div>
+                    <div className="text-3xl font-bold">{card.count}</div>
                   </div>
                   <div className="mt-3 font-semibold">{card.label}</div>
                   <p className="mt-1 text-sm text-slate-400">{card.helper}</p>

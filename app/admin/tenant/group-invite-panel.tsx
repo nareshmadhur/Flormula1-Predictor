@@ -157,9 +157,9 @@ export function GroupInvitePanel({ groupName, invites, setupMessage, migrationNo
         <div>
           <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-red-200">
             <Link2 className="h-3.5 w-3.5" />
-            Group Invites
+            Group invites
           </div>
-          <h2 className="text-2xl font-black italic tracking-tighter text-white">Share {groupName}</h2>
+          <h2 className="text-2xl font-bold tracking-tight text-white">Invite people to {groupName}</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
             Create a link for people who should move from Main Group into this private group after signing in.
           </p>
@@ -168,11 +168,11 @@ export function GroupInvitePanel({ groupName, invites, setupMessage, migrationNo
         <div className="grid grid-cols-2 gap-3 sm:min-w-64">
           <div className="rounded-2xl border border-white/5 bg-black/30 p-4">
             <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Active</div>
-            <div className="mt-2 text-3xl font-black italic text-white">{activeInviteCount}</div>
+            <div className="mt-2 text-3xl font-bold text-white">{activeInviteCount}</div>
           </div>
           <div className="rounded-2xl border border-white/5 bg-black/30 p-4">
             <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Joined</div>
-            <div className="mt-2 text-3xl font-black italic text-white">
+            <div className="mt-2 text-3xl font-bold text-white">
               {invites.reduce((total, invite) => total + invite.accepted_count, 0)}
             </div>
           </div>
@@ -225,7 +225,7 @@ export function GroupInvitePanel({ groupName, invites, setupMessage, migrationNo
                 </label>
               </div>
 
-              <FormActionButton idleLabel="Create Invite Link" pendingLabel="Creating..." />
+              <FormActionButton idleLabel="Create invite link" pendingLabel="Creating..." />
             </form>
 
             {state.message && (

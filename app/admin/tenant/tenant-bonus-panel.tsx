@@ -1,4 +1,4 @@
-import { CheckCircle2, HelpCircle, Lock, Sparkles } from 'lucide-react'
+import { CheckCircle2, HelpCircle, Lock } from 'lucide-react'
 import { FormActionButton } from '@/components/ui/form-action-button'
 import { RaceStatusPill } from '@/components/ui/race-status-pill'
 import { getRoundLabel } from '@/utils/race-copy'
@@ -44,10 +44,10 @@ type TenantBonusPanelProps = {
 }
 
 function getBonusStatusCopy(status: RaceStatus) {
-  if (status === 'upcoming') return 'Create or tune group questions before members lock their entries.'
-  if (status === 'locked') return 'Predictions are locked. Set answers when the real-world outcome is known.'
-  if (status === 'completed') return 'Official podium may be saved. Group bonus answers are needed before scoring.'
-  if (status === 'scored') return 'Changing answers will move scores back to completed until platform scoring reruns.'
+  if (status === 'upcoming') return 'Add or edit questions before entries close.'
+  if (status === 'locked') return 'Entries are locked. Set answers after the race.'
+  if (status === 'completed') return 'Set answers before scores are published.'
+  if (status === 'scored') return 'Scores are published. Changing answers requires rescoring.'
   return 'Cancelled races do not need bonus management.'
 }
 
@@ -88,35 +88,34 @@ export function TenantBonusPanel({
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-red-200">
-            <Sparkles className="h-4 w-4" />
-            Group bonus
+            <HelpCircle className="h-4 w-4" />
+            Bonus questions
           </div>
-          <h2 className="mt-2 text-2xl font-black italic tracking-tight text-white">
-            {groupName} questions and answers
+          <h2 className="mt-2 text-2xl font-bold tracking-tight text-white">
+            Group bonus questions
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-            Platform admins still own global/default bonus questions. Group admins can add their own race-week
-            prompts here, and those questions only appear to members of this group.
+            Add questions for {groupName} before entries close. After the race, set the correct answers here.
           </p>
         </div>
 
         <div className="rounded-2xl border border-white/10 bg-black/25 p-4 text-sm text-slate-300">
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
             <CheckCircle2 className="h-3.5 w-3.5 text-emerald-300" />
-            Answer safety
+            Answers
           </div>
           <div className="mt-2 font-semibold text-white">
-            {unansweredCount === 0 ? 'All group answers saved' : `${unansweredCount} answer${unansweredCount === 1 ? '' : 's'} pending`}
+            {unansweredCount === 0 ? 'All answers saved' : `${unansweredCount} answer${unansweredCount === 1 ? '' : 's'} pending`}
           </div>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            Scoring will not publish until every active global and group bonus question has a correct answer.
+            Scoring needs an answer for each active bonus question.
           </p>
         </div>
       </div>
 
       {highlightedRaces.length === 0 ? (
         <div className="mt-6 rounded-2xl border border-white/5 bg-black/25 p-5 text-sm text-slate-400">
-          No current-season races are available for group bonus setup.
+          No races need group bonus questions right now.
         </div>
       ) : (
         <div className="mt-6 grid gap-4">
@@ -135,7 +134,7 @@ export function TenantBonusPanel({
                       </span>
                       <RaceStatusPill status={race.effectiveStatus} size="xs" />
                     </div>
-                    <h3 className="mt-2 text-xl font-black italic tracking-tight text-white">{race.race_name}</h3>
+                    <h3 className="mt-2 text-xl font-bold tracking-tight text-white">{race.race_name}</h3>
                     <p className="mt-1 text-sm text-slate-400">{getBonusStatusCopy(race.effectiveStatus)}</p>
                   </div>
 
@@ -162,8 +161,8 @@ export function TenantBonusPanel({
                   <form action={addTenantBonusQuestion} className="mt-4 space-y-3 rounded-xl border border-white/10 bg-black/25 p-4">
                     <input type="hidden" name="race_id" value={race.id} />
                     <div>
-                      <h4 className="text-sm font-bold text-slate-200">Add group question</h4>
-                      <p className="mt-1 text-xs text-slate-500">Members in {groupName} will see this alongside global bonus questions.</p>
+                      <h4 className="text-sm font-bold text-slate-200">Add question</h4>
+                      <p className="mt-1 text-xs text-slate-500">Only members of {groupName} will see it.</p>
                     </div>
                     <input
                       name="question_text"
@@ -186,7 +185,7 @@ export function TenantBonusPanel({
                       <input name="options" placeholder="Option C (optional)" className="rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-sm" />
                       <input name="options" placeholder="Option D (optional)" className="rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-sm" />
                     </div>
-                    <FormActionButton idleLabel="Save group question" pendingLabel="Saving question..." tone="amber" />
+                    <FormActionButton idleLabel="Save question" pendingLabel="Saving question..." tone="amber" />
                   </form>
                 )}
 
@@ -194,9 +193,9 @@ export function TenantBonusPanel({
                   <form action={saveTenantBonusAnswers} className="mt-4 space-y-3 rounded-xl border border-emerald-500/15 bg-emerald-500/8 p-4">
                     <input type="hidden" name="race_id" value={race.id} />
                     <div>
-                      <h4 className="text-sm font-bold text-emerald-100">Set correct group answers</h4>
+                      <h4 className="text-sm font-bold text-emerald-100">Set answers</h4>
                       <p className="mt-1 text-xs text-emerald-100/70">
-                        These answers affect only {groupName} members and are audited separately.
+                        These answers apply only to {groupName}.
                       </p>
                     </div>
                     {raceQuestions.map((question) => (

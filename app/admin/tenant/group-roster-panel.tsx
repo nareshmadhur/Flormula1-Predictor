@@ -145,19 +145,19 @@ export function GroupRosterPanel({
             <UserCheck className="h-3.5 w-3.5 text-red-400" />
             Roster
           </div>
-          <h2 className="text-2xl font-black italic tracking-tighter text-white">Group members and access</h2>
+          <h2 className="text-2xl font-bold tracking-tight text-white">Group members and access</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
-            Promote trusted members, move people back to Main Group, and keep race-week participation visible in one place.
+            Promote trusted members, move people back to Main Group, and check race entries in one place.
           </p>
         </div>
         <div className="grid grid-cols-2 gap-3 sm:min-w-64">
           <div className="rounded-2xl border border-white/5 bg-black/25 p-4">
             <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Members</div>
-            <div className="mt-2 text-3xl font-black italic text-white">{roster.length}</div>
+            <div className="mt-2 text-3xl font-bold text-white">{roster.length}</div>
           </div>
           <div className="rounded-2xl border border-white/5 bg-black/25 p-4">
             <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Admins</div>
-            <div className="mt-2 text-3xl font-black italic text-white">{tenantAdminCount}</div>
+            <div className="mt-2 text-3xl font-bold text-white">{tenantAdminCount}</div>
           </div>
         </div>
       </div>
@@ -217,7 +217,7 @@ export function GroupRosterPanel({
                       )}
                     </td>
                     <td className="p-4 text-right">
-                      <div className="text-xl font-black italic text-red-500">{standing?.total_points ?? 0}</div>
+                      <div className="text-xl font-bold text-red-500">{standing?.total_points ?? 0}</div>
                       <div className="text-xs text-slate-500">
                         {standing?.exact_hits ?? 0} exact · {standing?.races_scored ?? 0} races
                       </div>

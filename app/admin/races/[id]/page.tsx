@@ -306,20 +306,20 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
       eyebrow: 'Before lock',
       title: 'Bonus questions',
       detail: bonusQuestionCount > 0
-        ? `${bonusQuestionCount} live question${bonusQuestionCount === 1 ? '' : 's'} for this weekend.`
-        : 'Add optional race-week questions before members submit picks.',
+        ? `${bonusQuestionCount} active question${bonusQuestionCount === 1 ? '' : 's'} for this race.`
+        : 'Add optional questions before entries close.',
     },
     {
       href: '#openf1-sync',
       eyebrow: 'Timing',
       title: 'Sync schedule',
       detail: typedRace.external_race_key
-        ? 'Refresh FP1, race timing, and source metadata from OpenF1.'
+        ? 'Refresh FP1, race timing, and OpenF1 details.'
         : 'Link this race through season sync before using one-click refresh.',
     },
     {
       href: '#official-results',
-      eyebrow: 'After race',
+      eyebrow: 'Results',
       title: 'Official results',
       detail: typedExistingResult ? 'Podium is saved. Review before rescoring if needed.' : 'Save the podium and bonus answers once the race is complete.',
     },
@@ -339,7 +339,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
         <div className="flex justify-between items-start">
           <div>
             <div className="text-red-500 font-bold tracking-widest uppercase mb-1">Round {typedRace.round}</div>
-            <h1 className="text-3xl font-black italic tracking-tighter">Manage {typedRace.race_name}</h1>
+            <h1 className="text-3xl font-bold tracking-tight">Manage {typedRace.race_name}</h1>
             <div className="flex items-center space-x-4 mt-2">
               <span className={`px-3 py-1 rounded-lg text-sm font-bold border ${getAdminRaceStatusBadgeClasses(effectiveStatus)}`}>
                 Status: {getAdminRaceStatusLabel(effectiveStatus)}
@@ -361,9 +361,9 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
         <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
           <div>
             <div className="text-xs font-bold uppercase tracking-[0.24em] text-slate-500">Race setup</div>
-            <h2 className="mt-2 text-2xl font-black italic tracking-tight text-white">Set the weekend up in order</h2>
+            <h2 className="mt-2 text-2xl font-bold tracking-tight text-white">Race setup</h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-              Bonus questions belong with pre-lock setup, not hidden behind result entry. Use this checklist to jump to the task you came for.
+              Use these shortcuts for the common tasks on this race.
             </p>
           </div>
           <PendingLink
@@ -382,7 +382,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
               className="group rounded-2xl border border-white/5 bg-black/25 p-4 transition-colors hover:border-red-500/25 hover:bg-red-500/8"
             >
               <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-red-300">{task.eyebrow}</div>
-              <div className="mt-2 text-lg font-black italic text-white">{task.title}</div>
+              <div className="mt-2 text-lg font-bold text-white">{task.title}</div>
               <p className="mt-1 text-sm leading-6 text-slate-400">{task.detail}</p>
             </a>
           ))}
@@ -393,20 +393,20 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
         
         <div className="space-y-6">
           <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-5 shadow-xl">
-            <div className="text-xs font-bold uppercase tracking-[0.22em] text-red-100">Recommended flow</div>
+            <div className="text-xs font-bold uppercase tracking-[0.2em] text-red-100">Basic order</div>
             <div className="mt-3 grid gap-3 lg:grid-cols-3">
               <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">1. Before lock</div>
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">1. Before entries close</div>
                 <div className="mt-2 font-semibold text-white">Set bonus questions</div>
-                <div className="mt-1 text-slate-400">Add race-week questions before members submit predictions.</div>
+                <div className="mt-1 text-slate-400">Add questions before members enter predictions.</div>
               </div>
               <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">2. Source timing</div>
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">2. Race timing</div>
                 <div className="mt-2 font-semibold text-white">Use OpenF1 first</div>
-                <div className="mt-1 text-slate-400">Pull timing, race name, and circuit match from the source.</div>
+                <div className="mt-1 text-slate-400">Update timing, race name, and circuit match from OpenF1.</div>
               </div>
               <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">3. After race</div>
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">3. After the race</div>
                 <div className="mt-2 font-semibold text-white">
                   Save podium{bonusQuestionCount > 0 ? ` + ${bonusQuestionCount} bonus answer${bonusQuestionCount === 1 ? '' : 's'}` : ''}
                 </div>
@@ -419,13 +419,13 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
              <div className="mb-4 flex flex-col gap-3 border-b border-white/10 pb-4 sm:flex-row sm:items-start sm:justify-between">
                <div>
                  <div className="text-xs font-bold uppercase tracking-[0.22em] text-red-300">Before lock</div>
-                 <h2 className="mt-1 text-xl font-bold flex items-center"><AlertCircle className="w-5 h-5 mr-2 text-red-500" /> Bonus Questions</h2>
+                 <h2 className="mt-1 text-xl font-bold flex items-center"><AlertCircle className="w-5 h-5 mr-2 text-red-500" /> Bonus questions</h2>
                  <p className="mt-2 text-sm leading-6 text-slate-400">
-                   Add these before members submit predictions. They appear in the picker and can be answered alongside podium picks.
+                   Add global questions before entries close. Everyone sees these questions.
                  </p>
                </div>
                <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-300">
-                 {bonusQuestionCount} live
+                 {bonusQuestionCount} active
                </span>
              </div>
 
@@ -457,7 +457,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
                   <input name="options" placeholder="Option C (optional)" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm" />
                   <input name="options" placeholder="Option D (optional)" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm" />
                 </div>
-                <FormActionButton idleLabel="Save question" pendingLabel="Saving question..." tone="amber" className="mt-4 text-lg italic tracking-wider" />
+                <FormActionButton idleLabel="Save question" pendingLabel="Saving question..." tone="amber" className="mt-4" />
              </form>
           </div>
 
@@ -466,10 +466,10 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
               <div>
                 <h2 className="text-xl font-bold mb-2 flex items-center">
                   <CalendarSync className="w-5 h-5 mr-2 text-red-500" />
-                  Auto Sync from OpenF1
+                  Sync from OpenF1
                 </h2>
                 <p className="text-sm text-slate-400">
-                  Start here. OpenF1 is the primary source for weekend timing, race naming, and circuit matching.
+                  Start here. OpenF1 is the main source for race timing, race names, and circuit matching.
                   Official results still stay manual, but the podium form below is prefilled whenever OpenF1
                   already has classified results.
                 </p>
@@ -636,7 +636,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
           <details id="manual-schedule" className="group bg-card border border-amber-500/10 rounded-2xl p-6 shadow-xl scroll-mt-24">
              <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
                <div>
-                 <h2 className="text-xl font-bold flex items-center"><Settings className="w-5 h-5 mr-2 text-amber-300" /> Manual schedule override</h2>
+                 <h2 className="text-xl font-bold flex items-center"><Settings className="w-5 h-5 mr-2 text-amber-300" /> Manual schedule edit</h2>
                  <p className="mt-2 text-sm text-slate-400">Open this only when OpenF1 is missing, outdated, or linked to the wrong weekend.</p>
                </div>
                <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-amber-100">
@@ -699,7 +699,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
         <div className="space-y-6">
 
           <div id="official-results" className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl scroll-mt-28">
-             <h2 className="text-xl font-bold mb-4 flex items-center"><CheckCircle className="w-5 h-5 mr-2 text-red-500" /> Official Results{bonusQuestionCount > 0 ? ' & Bonus Answers' : ''}</h2>
+             <h2 className="text-xl font-bold mb-4 flex items-center"><CheckCircle className="w-5 h-5 mr-2 text-red-500" /> Official results{bonusQuestionCount > 0 ? ' and bonus answers' : ''}</h2>
              <p className="mb-4 text-sm text-slate-400">
                Save the published podium here{bonusQuestionCount > 0 ? ` and set ${bonusQuestionCount} bonus answer${bonusQuestionCount === 1 ? '' : 's'} in the same card` : ''}. When OpenF1 has classified results, matching drivers are suggested automatically before you save.
              </p>
@@ -733,7 +733,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
                   pendingLabel="Recalculating scores..."
                   tone="light"
                   disabled={!typedExistingResult}
-                  className="text-lg italic tracking-widest disabled:opacity-50"
+                  className="disabled:opacity-50"
                 />
              </form>
           </div>
@@ -742,7 +742,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
           <details className="group bg-card border border-amber-500/10 rounded-2xl p-6 shadow-xl">
              <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
                <div>
-                 <h2 className="text-xl font-bold flex items-center"><Plus className="w-5 h-5 mr-2 text-amber-300" /> Log Historic Prediction</h2>
+                 <h2 className="text-xl font-bold flex items-center"><Plus className="w-5 h-5 mr-2 text-amber-300" /> Log historic prediction</h2>
 	                 <p className="mt-2 text-sm text-slate-400">Use this for backfills or corrections, not normal race-week submissions. Saved official races are rescored automatically.</p>
                </div>
                <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-amber-100">
