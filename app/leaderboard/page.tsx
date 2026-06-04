@@ -86,6 +86,7 @@ type DriverRow = {
 type BonusQuestionRow = {
   id: string
   race_id: string
+  tenant_id?: string | null
   question_text: string
   display_order?: number | null
   bonus_options?: Array<{
@@ -253,8 +254,9 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
         .in('race_id', scoredRaceIds),
       supabase
         .from('bonus_questions')
-        .select('id, race_id, question_text, display_order, bonus_options(id, label)')
+        .select('id, race_id, tenant_id, question_text, display_order, bonus_options(id, label)')
         .in('race_id', scoredRaceIds)
+        .eq('is_active', true)
         .order('display_order', { ascending: true }),
       supabase
         .from('race_bonus_answers')
@@ -312,6 +314,9 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
   const driversById = new Map(
     ((drivers || []) as DriverRow[]).map((driver) => [driver.id, { code: driver.code, emoji: driver.emoji }])
   )
+  const userTenantById = new Map(
+    sortedVisibleLeaderboard.map((entry) => [entry.user_id, getLeaderboardProfile(entry)?.tenant_id || null])
+  )
 
   const breakdownByUserId = buildUserLeaderboardBreakdowns({
     races: (scoredRaces || []) as ScoredRace[],
@@ -322,6 +327,7 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
     predictionBonusAnswers: predictionBonusAnswerRows,
     raceBonusAnswers: raceBonusAnswerRows,
     driversById,
+    userTenantById,
   })
   const nextReachableEntry =
     currentUserRank && currentUserRank > 1

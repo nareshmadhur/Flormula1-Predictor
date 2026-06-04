@@ -106,6 +106,7 @@ export const getPublicRacePageData = cache(async (raceId: string) => {
         .from('bonus_questions')
         .select('id, question_text, points, bonus_options(id, label)')
         .eq('race_id', raceId)
+        .is('tenant_id', null)
         .eq('is_active', true)
         .order('display_order'),
       supabase

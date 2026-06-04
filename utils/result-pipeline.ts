@@ -45,6 +45,21 @@ export async function saveOfficialRaceResult(
   throwPipelineError(error, 'Could not save official results.')
 }
 
+export async function saveTenantRaceBonusAnswers(
+  supabase: ResultPipelineClient,
+  input: {
+    raceId: string
+    bonusAnswers: BonusAnswer[]
+  }
+) {
+  const { error } = await supabase.rpc('save_tenant_race_bonus_answers', {
+    p_race_id: input.raceId,
+    ...getBonusArrays(input.bonusAnswers),
+  })
+
+  throwPipelineError(error, 'Could not save group bonus answers.')
+}
+
 export async function saveHistoricPrediction(
   supabase: ResultPipelineClient,
   input: {

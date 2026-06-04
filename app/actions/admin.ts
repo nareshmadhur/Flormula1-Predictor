@@ -225,7 +225,12 @@ export async function saveBatchOfficialResults(
     const { supabase } = await assertPlatformAdmin()
     const [{ data: races }, { data: bonusQuestions }] = await Promise.all([
       supabase.from('races').select('id, race_name, season').in('id', selectedRaceIds),
-      supabase.from('bonus_questions').select('id, race_id').in('race_id', selectedRaceIds).eq('is_active', true),
+      supabase
+        .from('bonus_questions')
+        .select('id, race_id')
+        .in('race_id', selectedRaceIds)
+        .is('tenant_id', null)
+        .eq('is_active', true),
     ])
 
     const raceById = new Map((races || []).map((race) => [race.id, race]))

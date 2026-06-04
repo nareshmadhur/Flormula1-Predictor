@@ -9,6 +9,10 @@ type SubmittedBonusAnswer = {
   option_id: string
 }
 
+type ProfileTenantRow = {
+  tenant_id?: string | null
+}
+
 export async function submitPrediction(formData: FormData) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
@@ -45,6 +49,17 @@ export async function submitPrediction(formData: FormData) {
     return { error: 'Predictions for this race are not available.' }
   }
 
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('tenant_id')
+    .eq('id', user.id)
+    .maybeSingle()
+  const tenantId = (profile as ProfileTenantRow | null)?.tenant_id || null
+
+  if (!tenantId) {
+    return { error: 'Join a group before submitting predictions.' }
+  }
+
   // UPSERT the prediction
   const { data: prediction, error: predError } = await supabase
     .from('predictions')
@@ -79,6 +94,7 @@ export async function submitPrediction(formData: FormData) {
         .from('bonus_questions')
         .select('id, bonus_options(id)')
         .eq('race_id', raceId)
+        .or(`tenant_id.is.null,tenant_id.eq.${tenantId}`)
         .eq('is_active', true)
 
       if (questionsError) {

@@ -93,6 +93,7 @@ export default async function AdminResultsPage() {
             .from('bonus_questions')
             .select('id, race_id, question_text, points, bonus_options(id, label)')
             .in('race_id', eligibleRaceIds)
+            .is('tenant_id', null)
             .eq('is_active', true)
             .order('points', { ascending: false }),
           supabase

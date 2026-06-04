@@ -31,6 +31,7 @@ type RaceScore = {
 type BonusQuestion = {
   id: string
   race_id: string
+  tenant_id?: string | null
   question_text: string
   display_order?: number | null
   bonus_options?: Array<{
@@ -127,6 +128,7 @@ export function buildUserLeaderboardBreakdowns({
   predictionBonusAnswers,
   raceBonusAnswers,
   driversById,
+  userTenantById,
 }: {
   races: ScoredRace[]
   predictions: PodiumPrediction[]
@@ -136,6 +138,7 @@ export function buildUserLeaderboardBreakdowns({
   predictionBonusAnswers: PredictionBonusAnswer[]
   raceBonusAnswers: RaceBonusAnswer[]
   driversById: Map<string, DriverRecord>
+  userTenantById?: Map<string, string | null>
 }) {
   const raceById = new Map(races.map((race) => [race.id, race]))
   const resultByRaceId = new Map(raceResults.map((result) => [result.race_id, result]))
@@ -205,7 +208,10 @@ export function buildUserLeaderboardBreakdowns({
       }
     })
 
-    const raceQuestions = questionsByRaceId.get(prediction.race_id) || []
+    const predictionTenantId = userTenantById?.get(prediction.user_id) || null
+    const raceQuestions = (questionsByRaceId.get(prediction.race_id) || []).filter(
+      (question) => !question.tenant_id || question.tenant_id === predictionTenantId
+    )
     const bonusItems: BonusBreakdownItem[] = raceQuestions.map((question) => {
       const selectedOptionId = bonusAnswerByPredictionQuestion.get(`${prediction.id}:${question.id}`)
       const correctOptionId = correctBonusByRaceQuestion.get(`${prediction.race_id}:${question.id}`)

@@ -174,6 +174,7 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
     .from('bonus_questions')
     .select('*, bonus_options(*)')
     .eq('race_id', id)
+    .or(`tenant_id.is.null,tenant_id.eq.${tenantContext.tenantId}`)
     .eq('is_active', true)
     .order('display_order')
 

@@ -108,6 +108,7 @@ async function addBonusQuestion(formData: FormData) {
 
   const { data: question, error: questionError } = await supabase.from('bonus_questions').insert({
     race_id: raceId,
+    tenant_id: null,
     question_text: questionText,
     points
   }).select().single()
@@ -232,7 +233,12 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
 
   const { data: drivers } = await supabase.from('drivers').select('*').order('full_name')
   const { data: circuits } = await supabase.from('circuits').select('*').order('name')
-  const { data: bonusQuestions } = await supabase.from('bonus_questions').select('*, bonus_options(*)').eq('race_id', id).eq('is_active', true)
+  const { data: bonusQuestions } = await supabase
+    .from('bonus_questions')
+    .select('*, bonus_options(*)')
+    .eq('race_id', id)
+    .is('tenant_id', null)
+    .eq('is_active', true)
   const { data: existingResult } = await supabase.from('race_results').select('*').eq('race_id', id).single()
   const { data: existingBonusAnswers } = await supabase.from('race_bonus_answers').select('*').eq('race_id', id)
   const { data: profiles } = await supabase.from('profiles').select('*').order('display_name')
@@ -294,6 +300,36 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
 
   const { count: totalUsers } = await supabase.from('profiles').select('*', { count: 'exact', head: true })
   const { count: predictionsCount } = await supabase.from('predictions').select('*', { count: 'exact', head: true }).eq('race_id', id)
+  const setupTasks = [
+    {
+      href: '#bonus-questions',
+      eyebrow: 'Before lock',
+      title: 'Bonus questions',
+      detail: bonusQuestionCount > 0
+        ? `${bonusQuestionCount} live question${bonusQuestionCount === 1 ? '' : 's'} for this weekend.`
+        : 'Add optional race-week questions before members submit picks.',
+    },
+    {
+      href: '#openf1-sync',
+      eyebrow: 'Timing',
+      title: 'Sync schedule',
+      detail: typedRace.external_race_key
+        ? 'Refresh FP1, race timing, and source metadata from OpenF1.'
+        : 'Link this race through season sync before using one-click refresh.',
+    },
+    {
+      href: '#official-results',
+      eyebrow: 'After race',
+      title: 'Official results',
+      detail: typedExistingResult ? 'Podium is saved. Review before rescoring if needed.' : 'Save the podium and bonus answers once the race is complete.',
+    },
+    {
+      href: '#scoring',
+      eyebrow: 'Publish',
+      title: 'Scoring',
+      detail: typedExistingResult ? 'Recalculate from saved results and current predictions.' : 'Scoring unlocks after official results are saved.',
+    },
+  ]
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -321,6 +357,38 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
         </div>
       </div>
 
+      <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-2xl md:p-6">
+        <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.24em] text-slate-500">Race setup</div>
+            <h2 className="mt-2 text-2xl font-black italic tracking-tight text-white">Set the weekend up in order</h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
+              Bonus questions belong with pre-lock setup, not hidden behind result entry. Use this checklist to jump to the task you came for.
+            </p>
+          </div>
+          <PendingLink
+            href="/admin/results"
+            className="inline-flex items-center justify-center rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-slate-100 transition-colors hover:bg-white/10"
+          >
+            Batch results
+          </PendingLink>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+          {setupTasks.map((task) => (
+            <a
+              key={task.href}
+              href={task.href}
+              className="group rounded-2xl border border-white/5 bg-black/25 p-4 transition-colors hover:border-red-500/25 hover:bg-red-500/8"
+            >
+              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-red-300">{task.eyebrow}</div>
+              <div className="mt-2 text-lg font-black italic text-white">{task.title}</div>
+              <p className="mt-1 text-sm leading-6 text-slate-400">{task.detail}</p>
+            </a>
+          ))}
+        </div>
+      </section>
+
       <div className="grid md:grid-cols-2 gap-8">
         
         <div className="space-y-6">
@@ -328,26 +396,72 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
             <div className="text-xs font-bold uppercase tracking-[0.22em] text-red-100">Recommended flow</div>
             <div className="mt-3 grid gap-3 lg:grid-cols-3">
               <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">1. Auto sync</div>
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">1. Before lock</div>
+                <div className="mt-2 font-semibold text-white">Set bonus questions</div>
+                <div className="mt-1 text-slate-400">Add race-week questions before members submit predictions.</div>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">2. Source timing</div>
                 <div className="mt-2 font-semibold text-white">Use OpenF1 first</div>
                 <div className="mt-1 text-slate-400">Pull timing, race name, and circuit match from the source.</div>
               </div>
               <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">2. Publish result</div>
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">3. After race</div>
                 <div className="mt-2 font-semibold text-white">
                   Save podium{bonusQuestionCount > 0 ? ` + ${bonusQuestionCount} bonus answer${bonusQuestionCount === 1 ? '' : 's'}` : ''}
                 </div>
                 <div className="mt-1 text-slate-400">Review the prefilled podium, then save the official outcome.</div>
               </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">3. Fallback only</div>
-                <div className="mt-2 font-semibold text-white">Manual override only</div>
-                <div className="mt-1 text-slate-400">Keep manual edits hidden unless the source is missing or wrong.</div>
-              </div>
             </div>
           </div>
 
-          <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl">
+          <div id="bonus-questions" className="bg-card border border-red-500/15 rounded-2xl p-6 shadow-xl scroll-mt-28">
+             <div className="mb-4 flex flex-col gap-3 border-b border-white/10 pb-4 sm:flex-row sm:items-start sm:justify-between">
+               <div>
+                 <div className="text-xs font-bold uppercase tracking-[0.22em] text-red-300">Before lock</div>
+                 <h2 className="mt-1 text-xl font-bold flex items-center"><AlertCircle className="w-5 h-5 mr-2 text-red-500" /> Bonus Questions</h2>
+                 <p className="mt-2 text-sm leading-6 text-slate-400">
+                   Add these before members submit predictions. They appear in the picker and can be answered alongside podium picks.
+                 </p>
+               </div>
+               <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-300">
+                 {bonusQuestionCount} live
+               </span>
+             </div>
+
+             {bonusQuestions?.length === 0 ? (
+               <p className="text-slate-500 text-sm mb-6">No bonus questions defined for this race.</p>
+             ) : (
+               <div className="space-y-4 mb-6">
+                 {typedBonusQuestions.map((q) => (
+                   <BonusQuestionCard key={q.id} question={q} raceId={typedRace.id} />
+                 ))}
+               </div>
+             )}
+
+             <form action={addBonusQuestion} className="space-y-3 rounded-2xl border border-white/10 bg-black/20 p-4">
+                <input type="hidden" name="race_id" value={typedRace.id} />
+                <h3 className="text-sm font-bold text-slate-300">Add a bonus question</h3>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500">Question</span>
+                  <input name="question_text" placeholder="Example: Who records the fastest lap?" required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2" />
+                </label>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-bold uppercase tracking-wider text-slate-500">Points</span>
+                  <input name="points" type="number" min="1" defaultValue={1} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2" />
+                </label>
+                <div className="space-y-2">
+                  <p className="text-xs text-slate-500 font-bold uppercase">Answer options</p>
+                  <input name="options" placeholder="Option A" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm" />
+                  <input name="options" placeholder="Option B" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm" />
+                  <input name="options" placeholder="Option C (optional)" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm" />
+                  <input name="options" placeholder="Option D (optional)" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm" />
+                </div>
+                <FormActionButton idleLabel="Save question" pendingLabel="Saving question..." tone="amber" className="mt-4 text-lg italic tracking-wider" />
+             </form>
+          </div>
+
+          <div id="openf1-sync" className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl scroll-mt-28">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
                 <h2 className="text-xl font-bold mb-2 flex items-center">
@@ -579,42 +693,12 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
              </form>
              </div>
           </details>
-
-          {/* Bonus Questions Management */}
-          <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl">
-             <h2 className="text-xl font-bold mb-4 flex items-center"><AlertCircle className="w-5 h-5 mr-2 text-red-500" /> Bonus Questions</h2>
-             
-             {bonusQuestions?.length === 0 ? (
-               <p className="text-slate-500 text-sm mb-6">No bonus questions defined for this race.</p>
-             ) : (
-               <div className="space-y-4 mb-6">
-                 {typedBonusQuestions.map((q) => (
-                   <BonusQuestionCard key={q.id} question={q} raceId={typedRace.id} />
-                 ))}
-               </div>
-             )}
-
-             <form action={addBonusQuestion} className="space-y-3 pt-6 border-t border-white/10">
-                <input type="hidden" name="race_id" value={typedRace.id} />
-                <h3 className="text-sm font-bold text-slate-300">Add New Bonus Question</h3>
-                <input name="question_text" placeholder="Question Text" required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2" />
-                <input name="points" type="number" defaultValue={1} required className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2" />
-                <div className="space-y-2">
-                  <p className="text-xs text-slate-500 font-bold uppercase">Options</p>
-                  <input name="options" placeholder="Option A" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm" />
-                  <input name="options" placeholder="Option B" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm" />
-                  <input name="options" placeholder="Option C (Optional)" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm" />
-                  <input name="options" placeholder="Option D (Optional)" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2 text-sm" />
-                </div>
-                <FormActionButton idleLabel="Save question" pendingLabel="Saving question..." tone="amber" className="mt-4 text-lg italic tracking-wider" />
-             </form>
-          </div>
         </div>
 
         {/* Results Entry */}
         <div className="space-y-6">
 
-          <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl">
+          <div id="official-results" className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl scroll-mt-28">
              <h2 className="text-xl font-bold mb-4 flex items-center"><CheckCircle className="w-5 h-5 mr-2 text-red-500" /> Official Results{bonusQuestionCount > 0 ? ' & Bonus Answers' : ''}</h2>
              <p className="mb-4 text-sm text-slate-400">
                Save the published podium here{bonusQuestionCount > 0 ? ` and set ${bonusQuestionCount} bonus answer${bonusQuestionCount === 1 ? '' : 's'} in the same card` : ''}. When OpenF1 has classified results, matching drivers are suggested automatically before you save.
@@ -636,7 +720,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
              />
           </div>
 
-          <div className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl">
+          <div id="scoring" className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl scroll-mt-28">
              <h2 className="text-xl font-bold mb-4 flex items-center"><Calculator className="w-5 h-5 mr-2 text-red-500" /> Scoring</h2>
              <p className="text-sm text-slate-400 mb-4">
                Keep scoring manual for now, but safe to rerun. This recalculates from the current predictions, official results, and bonus answers.

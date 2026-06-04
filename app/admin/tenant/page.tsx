@@ -25,6 +25,11 @@ import { GroupInvitePanel } from './group-invite-panel'
 import { GroupRosterPanel } from './group-roster-panel'
 import { TenantNotificationTimingPanel } from './notification-timing-panel'
 import {
+  TenantBonusPanel,
+  type TenantBonusAnswer,
+  type TenantBonusQuestion,
+} from './tenant-bonus-panel'
+import {
   getPlatformNotificationTiming,
 } from '@/utils/notification-settings'
 import { formatAmsterdamDateTime } from '@/utils/amsterdam-time'
@@ -220,6 +225,40 @@ export default async function TenantAdminPage() {
     : `${typedTenant?.name || 'This group'} follows the platform default of ${platformTiming.raceReminderLeadHours}h.`
   const typedRaces = (races || []) as RaceRecord[]
   const memberIds = operationalMembers.map((member) => member.id)
+  const seasonRaceIds = typedRaces.map((race) => race.id)
+
+  const { data: tenantBonusQuestions } =
+    seasonRaceIds.length > 0
+      ? await supabase
+          .from('bonus_questions')
+          .select('id, race_id, question_text, points, display_order, bonus_options(id, label)')
+          .in('race_id', seasonRaceIds)
+          .eq('tenant_id', access.tenantId)
+          .eq('is_active', true)
+          .order('display_order', { ascending: true })
+      : { data: [] as TenantBonusQuestion[] }
+
+  const typedTenantBonusQuestions = (tenantBonusQuestions || []) as TenantBonusQuestion[]
+  const tenantBonusQuestionIds = typedTenantBonusQuestions.map((question) => question.id)
+
+  const { data: tenantBonusAnswers } =
+    tenantBonusQuestionIds.length > 0
+      ? await supabase
+          .from('race_bonus_answers')
+          .select('race_id, bonus_question_id, correct_bonus_option_id')
+          .in('bonus_question_id', tenantBonusQuestionIds)
+      : { data: [] as TenantBonusAnswer[] }
+  const typedTenantBonusAnswers = (tenantBonusAnswers || []) as TenantBonusAnswer[]
+  const tenantAnsweredQuestionIds = new Set(
+    typedTenantBonusAnswers.map((answer) => answer.bonus_question_id)
+  )
+  const statusByRaceId = new Map(
+    typedRaces.map((race) => [race.id, getEffectiveRaceStatus(race)])
+  )
+  const pendingTenantBonusAnswerCount = typedTenantBonusQuestions.filter((question) => {
+    const status = statusByRaceId.get(question.race_id)
+    return status && status !== 'upcoming' && !tenantAnsweredQuestionIds.has(question.id)
+  }).length
 
   const openRaces = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'upcoming')
   const lockedOrCompletedRaces = typedRaces.filter((race) => {
@@ -331,7 +370,9 @@ export default async function TenantAdminPage() {
       ? settledRaceIds.length * operationalMembers.length - ((settledPredictions || []) as PredictionEntry[]).length
       : 0
   const openItemsCount =
-    (featuredRace ? missingFeaturedRaceMembers.length : 0) + (activeInviteCount === 0 ? 1 : 0)
+    (featuredRace ? missingFeaturedRaceMembers.length : 0) +
+    (activeInviteCount === 0 ? 1 : 0) +
+    pendingTenantBonusAnswerCount
 
   const roster = typedMembers.map((member) => {
     const standing = leaderboardByUserId.get(member.id)
@@ -385,6 +426,13 @@ export default async function TenantAdminPage() {
             className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-all hover:bg-red-500"
           >
             Invite people
+            <ArrowRight className="h-4 w-4" />
+          </a>
+          <a
+            href="#group-bonus"
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
+          >
+            Manage bonus
             <ArrowRight className="h-4 w-4" />
           </a>
           <a
@@ -477,69 +525,106 @@ export default async function TenantAdminPage() {
         </div>
       </section>
 
-      <TenantNotificationTimingPanel
-        groupName={typedTenant?.name || 'This group'}
-        currentLeadHoursLabel={timingHeading}
-        defaultLeadHours={defaultTenantLeadHours}
-        overrideLeadHours={tenantOverrideLeadHours}
-        timingSummary={timingSummary}
+      <GroupInvitePanel
+        groupName={typedTenant?.name || 'your group'}
+        invites={groupInvites}
+        setupMessage={inviteSetupMessage}
+        migrationNotice={inviteMigrationNotice}
       />
 
-      {featuredRace && (
-        <section className="grid gap-5 rounded-3xl border border-red-500/20 bg-red-500/8 p-5 shadow-2xl lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] md:p-6">
-          <div>
-            <div className="text-xs font-bold uppercase tracking-[0.24em] text-red-200">Next race submissions</div>
-            <h2 className="mt-2 text-3xl font-black italic tracking-tight text-white">{nextRaceCoverage}/{operationalMembers.length} submitted</h2>
-            <p className="mt-2 text-sm text-red-100/80">
-              {featuredRace.race_name} is the current group participation checkpoint. {coveragePercent}% of members have an entry saved.
-            </p>
-            {featuredRaceReminderAt && (
-              <p className="mt-3 flex items-center gap-2 text-sm text-red-100/70">
-                <CalendarClock className="h-4 w-4 shrink-0" />
-                Reminder scheduled for {formatAmsterdamDateTime(featuredRaceReminderAt, { includeZone: true })}.
-              </p>
-            )}
-            <div className="mt-5 flex flex-wrap gap-3">
-              <PendingLink
-                href={`/race/${featuredRace.id}/predict`}
-                className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
-              >
-                Open Race Page
-                <ArrowRight className="h-4 w-4" />
-              </PendingLink>
-              <a
-                href="#group-invites"
-                className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/25 px-5 py-3 font-bold text-red-50 transition-colors hover:bg-white/10"
-              >
-                Invite Members
-              </a>
-            </div>
-          </div>
+      <section id="race-week-ops" className="space-y-4 scroll-mt-28">
+        <SectionHeader
+          eyebrow="Race-week ops"
+          title="Submission coverage and reminders"
+          description="After the invite link exists, this is the weekly operating rhythm: watch coverage, nudge before lock, and keep the group moving."
+        />
 
-          <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
-            <div className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Still missing</div>
-            {missingFeaturedRaceMembers.length === 0 ? (
-              <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-200">
-                Everyone has submitted for this race.
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,0.82fr)_minmax(0,1.18fr)]">
+          <TenantNotificationTimingPanel
+            groupName={typedTenant?.name || 'This group'}
+            currentLeadHoursLabel={timingHeading}
+            defaultLeadHours={defaultTenantLeadHours}
+            overrideLeadHours={tenantOverrideLeadHours}
+            timingSummary={timingSummary}
+          />
+
+          {featuredRace ? (
+            <section className="grid gap-5 rounded-3xl border border-red-500/20 bg-red-500/8 p-5 shadow-2xl lg:grid-cols-[minmax(0,1.1fr)_minmax(280px,0.9fr)] md:p-6">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-[0.24em] text-red-200">Next race submissions</div>
+                <h2 className="mt-2 text-3xl font-black italic tracking-tight text-white">{nextRaceCoverage}/{operationalMembers.length} submitted</h2>
+                <p className="mt-2 text-sm text-red-100/80">
+                  {featuredRace.race_name} is the current group participation checkpoint. {coveragePercent}% of members have an entry saved.
+                </p>
+                {featuredRaceReminderAt && (
+                  <p className="mt-3 flex items-center gap-2 text-sm text-red-100/70">
+                    <CalendarClock className="h-4 w-4 shrink-0" />
+                    Reminder scheduled for {formatAmsterdamDateTime(featuredRaceReminderAt, { includeZone: true })}.
+                  </p>
+                )}
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <PendingLink
+                    href={`/race/${featuredRace.id}/predict`}
+                    className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
+                  >
+                    Open Race Page
+                    <ArrowRight className="h-4 w-4" />
+                  </PendingLink>
+                  <a
+                    href="#group-invites"
+                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/25 px-5 py-3 font-bold text-red-50 transition-colors hover:bg-white/10"
+                  >
+                    Invite Members
+                  </a>
+                </div>
               </div>
-            ) : (
-              <div className="mt-4 max-h-64 space-y-2 overflow-y-auto pr-1">
-                {missingFeaturedRaceMembers.slice(0, 8).map((member) => (
-                  <div key={member.id} className="rounded-xl border border-white/5 bg-black/25 px-3 py-2">
-                    <div className="font-semibold text-slate-100">{getProfileDisplayName(member.display_name, member.email)}</div>
-                    <div className="text-xs text-slate-500">{member.email}</div>
+
+              <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+                <div className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Still missing</div>
+                {missingFeaturedRaceMembers.length === 0 ? (
+                  <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-200">
+                    Everyone has submitted for this race.
                   </div>
-                ))}
-                {missingFeaturedRaceMembers.length > 8 && (
-                  <div className="text-sm text-slate-400">
-                    +{missingFeaturedRaceMembers.length - 8} more in the roster below.
+                ) : (
+                  <div className="mt-4 max-h-64 space-y-2 overflow-y-auto pr-1">
+                    {missingFeaturedRaceMembers.slice(0, 8).map((member) => (
+                      <div key={member.id} className="rounded-xl border border-white/5 bg-black/25 px-3 py-2">
+                        <div className="font-semibold text-slate-100">{getProfileDisplayName(member.display_name, member.email)}</div>
+                        <div className="text-xs text-slate-500">{member.email}</div>
+                      </div>
+                    ))}
+                    {missingFeaturedRaceMembers.length > 8 && (
+                      <div className="text-sm text-slate-400">
+                        +{missingFeaturedRaceMembers.length - 8} more in the roster below.
+                      </div>
+                    )}
                   </div>
                 )}
               </div>
-            )}
-          </div>
-        </section>
-      )}
+            </section>
+          ) : (
+            <section className="rounded-3xl border border-white/10 bg-card p-6 shadow-2xl">
+              <div className="text-xs font-bold uppercase tracking-[0.24em] text-slate-500">Next race submissions</div>
+              <h2 className="mt-2 text-2xl font-black italic tracking-tight text-white">No active race checkpoint</h2>
+              <p className="mt-2 text-sm text-slate-400">
+                When the next race opens, submission coverage and missing members will appear here.
+              </p>
+            </section>
+          )}
+        </div>
+      </section>
+
+      <TenantBonusPanel
+        groupName={typedTenant?.name || 'This group'}
+        races={typedRaces.map((race) => ({
+          id: race.id,
+          round: race.round,
+          race_name: race.race_name,
+          effectiveStatus: getEffectiveRaceStatus(race),
+        }))}
+        questions={typedTenantBonusQuestions}
+        answers={typedTenantBonusAnswers}
+      />
 
       <div className="grid gap-4 md:grid-cols-4">
         <div className="rounded-2xl border border-white/5 bg-card p-5 shadow-xl">
@@ -576,11 +661,11 @@ export default async function TenantAdminPage() {
         </div>
       </div>
 
-      <GroupInvitePanel
-        groupName={typedTenant?.name || 'your group'}
-        invites={groupInvites}
-        setupMessage={inviteSetupMessage}
-        migrationNotice={inviteMigrationNotice}
+      <GroupRosterPanel
+        roster={roster}
+        currentUserId={access.userId}
+        isMainGroup={isMainGroup}
+        tenantAdminCount={tenantAdminCount}
       />
 
       <div className="grid gap-6 lg:grid-cols-[1.05fr,0.95fr]">
@@ -678,13 +763,6 @@ export default async function TenantAdminPage() {
           </div>
         </section>
       </div>
-
-      <GroupRosterPanel
-        roster={roster}
-        currentUserId={access.userId}
-        isMainGroup={isMainGroup}
-        tenantAdminCount={tenantAdminCount}
-      />
     </div>
   )
 }

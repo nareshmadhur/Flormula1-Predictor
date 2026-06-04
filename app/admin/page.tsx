@@ -66,6 +66,10 @@ export default async function AdminDashboardPage() {
         .is('tenant_id', null)
     : unassignedUsersWithTest
   const typedRaces = (races || []) as AdminRace[]
+  const setupRaces = typedRaces
+    .filter((race) => getEffectiveRaceStatus(race) === 'upcoming')
+    .sort((left, right) => new Date(left.race_start_at).getTime() - new Date(right.race_start_at).getTime())
+  const nextSetupRace = setupRaces[0] || null
   const liveRaces = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'locked')
   const resultRaces = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'completed')
   const liveCount = liveRaces.length
@@ -76,6 +80,15 @@ export default async function AdminDashboardPage() {
   const reviewRaces = [...resultRaces, ...liveRaces].sort(
     (left, right) => new Date(right.race_start_at).getTime() - new Date(left.race_start_at).getTime()
   )
+  const { count: nextSetupBonusCount } = nextSetupRace
+    ? await supabase
+        .from('bonus_questions')
+        .select('*', { count: 'exact', head: true })
+        .eq('race_id', nextSetupRace.id)
+        .is('tenant_id', null)
+        .eq('is_active', true)
+    : { count: 0 }
+  const raceSetupHref = nextSetupRace ? `/admin/races/${nextSetupRace.id}#bonus-questions` : '/admin/schedule'
 
   return (
     <div className="space-y-7 animate-in fade-in duration-500">
@@ -147,6 +160,39 @@ export default async function AdminDashboardPage() {
         </div>
       </section>
 
+      <section className="rounded-3xl border border-red-500/20 bg-red-500/8 p-5 shadow-xl md:p-6">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.24em] text-red-200">Race setup shortcut</div>
+            <h2 className="mt-2 text-2xl font-black italic tracking-tight text-white">
+              {nextSetupRace ? nextSetupRace.race_name : 'No open race to set up'}
+            </h2>
+            <p className="mt-2 max-w-3xl text-sm leading-6 text-red-100/80">
+              {nextSetupRace
+                ? `Add or review bonus questions before members submit picks. ${nextSetupBonusCount || 0} live question${nextSetupBonusCount === 1 ? '' : 's'} currently configured.`
+                : 'Use schedule sync to create or open the next race before adding race-week setup details.'}
+            </p>
+          </div>
+          <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
+            <PendingLink
+              href={raceSetupHref}
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
+            >
+              {nextSetupRace ? 'Open bonus setup' : 'Open schedule sync'}
+              <ChevronRight className="h-4 w-4" />
+            </PendingLink>
+            {nextSetupRace && (
+              <PendingLink
+                href={`/admin/races/${nextSetupRace.id}#official-results`}
+                className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/25 px-5 py-3 font-bold text-red-50 transition-colors hover:bg-white/10"
+              >
+                Result entry
+              </PendingLink>
+            )}
+          </div>
+        </div>
+      </section>
+
       <section className="space-y-4">
         <SectionHeader
           eyebrow="Routes"
@@ -156,16 +202,18 @@ export default async function AdminDashboardPage() {
 
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <PendingLink
-            href="/admin/schedule"
+            href={raceSetupHref}
             className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-4 shadow-xl transition-colors hover:bg-white/[0.02]"
           >
             <div className="min-w-0">
               <div className="mb-2 inline-flex max-w-full flex-wrap items-center gap-x-2 gap-y-1 rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[11px] font-bold uppercase leading-5 tracking-[0.14em] text-slate-300 sm:tracking-[0.18em]">
                 <CalendarSync className="h-3.5 w-3.5 shrink-0 text-red-400" />
-                Schedule
+                Race setup
               </div>
-              <h2 className="text-base font-bold leading-tight text-white">Sync race timing</h2>
-              <p className="mt-1 break-words text-sm text-slate-400">Review OpenF1 timing changes and missing weekends.</p>
+              <h2 className="text-base font-bold leading-tight text-white">Setup & bonus</h2>
+              <p className="mt-1 break-words text-sm text-slate-400">
+                Add bonus questions for the next race, then sync timing when needed.
+              </p>
             </div>
             <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
           </PendingLink>
