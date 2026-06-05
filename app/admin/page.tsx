@@ -8,6 +8,7 @@ import { MaintenanceSection } from '@/components/ui/maintenance-section'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { PendingLink } from '@/components/ui/pending-link'
 import { SectionHeader } from '@/components/ui/section-header'
+import { getRaceFocus } from '@/utils/race-focus'
 
 export const revalidate = 0
 
@@ -66,12 +67,12 @@ export default async function AdminDashboardPage() {
         .is('tenant_id', null)
     : unassignedUsersWithTest
   const typedRaces = (races || []) as AdminRace[]
-  const setupRaces = typedRaces
-    .filter((race) => getEffectiveRaceStatus(race) === 'upcoming')
-    .sort((left, right) => new Date(left.race_start_at).getTime() - new Date(right.race_start_at).getTime())
-  const nextSetupRace = setupRaces[0] || null
-  const liveRaces = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'locked')
-  const resultRaces = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'completed')
+  const raceFocus = getRaceFocus(typedRaces)
+  const nextSetupRace = raceFocus.nextOpenRace
+  const liveRaces = raceFocus.lockedRaces
+  const resultRaces = raceFocus.completedRaces
+  const currentWeekendRace = raceFocus.currentWeekend
+  const currentWeekendStatus = currentWeekendRace ? getEffectiveRaceStatus(currentWeekendRace) : null
   const liveCount = liveRaces.length
   const resultsCount = resultRaces.length
   const unassignedCount = unassignedUsersResult.count || 0
@@ -81,6 +82,14 @@ export default async function AdminDashboardPage() {
     (left, right) => new Date(right.race_start_at).getTime() - new Date(left.race_start_at).getTime()
   )
   const raceSetupHref = nextSetupRace ? `/admin/races/${nextSetupRace.id}#openf1-sync` : '/admin/schedule'
+  const raceWeekendHref = currentWeekendRace
+    ? `/admin/races/${currentWeekendRace.id}${currentWeekendStatus === 'completed' ? '#official-results' : ''}`
+    : raceSetupHref
+  const raceWeekendLabel = currentWeekendStatus
+    ? getAdminRaceStatusLabel(currentWeekendStatus)
+    : nextSetupRace
+      ? 'NEXT SETUP'
+      : 'NO RACE'
 
   return (
     <div className="space-y-7 animate-in fade-in duration-500">
@@ -100,24 +109,32 @@ export default async function AdminDashboardPage() {
 
         <div className="mt-4 space-y-3">
           <PendingLink
-            href="/admin/results"
+            href={raceWeekendHref}
             className="group block min-w-0 rounded-2xl border border-red-500/20 bg-red-500/10 p-5 transition-colors hover:bg-red-500/14"
           >
             <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs font-bold uppercase leading-5 tracking-[0.18em] text-red-100 sm:tracking-[0.22em]">
               <ClipboardCheck className="h-4 w-4 shrink-0" />
-              Results
+              Race weekend
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end">
-              <div className="text-5xl font-bold leading-none text-white">{resultsCount}</div>
+              <div className="text-4xl font-bold leading-none text-white">{raceWeekendLabel}</div>
               <div className="min-w-0">
-                <h2 className="break-words text-xl font-bold tracking-tight text-white">Races waiting for results</h2>
+                <h2 className="break-words text-xl font-bold tracking-tight text-white">
+                  {currentWeekendRace?.race_name || nextSetupRace?.race_name || 'No race weekend active'}
+                </h2>
                 <p className="mt-1 break-words text-sm text-red-100/80">
-                  Enter podiums before scoring. Group bonus answers live in tenant admin.
+                  {currentWeekendStatus === 'completed'
+                    ? 'Enter official results, then publish scoring.'
+                    : currentWeekendStatus === 'locked'
+                      ? 'Prediction window is closed. Monitor the weekend until results are ready.'
+                      : nextSetupRace
+                        ? 'Review schedule timing and OpenF1 linkage before the next lock.'
+                        : 'Use schedule sync when a new race needs setup.'}
                 </p>
               </div>
             </div>
             <span className="mt-5 inline-flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-1 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white transition-colors group-hover:bg-red-500">
-              Open results
+              {currentWeekendStatus === 'completed' ? 'Enter results' : currentWeekendRace ? 'Open race' : 'Open setup'}
               <ChevronRight className="h-4 w-4" />
             </span>
           </PendingLink>

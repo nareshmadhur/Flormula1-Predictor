@@ -12,6 +12,9 @@ import { getRoundLabel } from '@/utils/race-copy'
 import { SectionHeader } from '@/components/ui/section-header'
 import { RaceMetaStrip } from '@/components/ui/race-meta-strip'
 import { isTestModeProfile } from '@/utils/test-mode'
+import { getEffectiveRaceStatus, type RaceStatus } from '@/utils/race-status'
+import { getRaceStatusLabel } from '@/utils/race-experience'
+import { getRaceFocus } from '@/utils/race-focus'
 
 export const revalidate = 0
 
@@ -58,6 +61,7 @@ type RaceSummary = {
   id: string
   race_name: string
   round: number | null
+  status: RaceStatus
   race_start_at: string
   prediction_lock_at: string
   circuits?: {
@@ -287,16 +291,18 @@ export default async function HomePage() {
   const hasGroup = Boolean(groupContext.tenantId)
   const activeView = hasGroup ? 'group' : 'global'
 
-  const { data: upcomingRaces } = await supabase
+  const { data: seasonRaces } = await supabase
     .from('races')
     .select('*, circuits(name, country, emoji)')
     .eq('season', currentSeason)
-    .gte('race_start_at', new Date().toISOString())
     .neq('status', 'cancelled')
     .order('race_start_at', { ascending: true })
-    .limit(1)
 
-  const nextRace = upcomingRaces?.[0]
+  const raceFocus = getRaceFocus((seasonRaces || []) as RaceSummary[])
+  const currentWeekendRace = raceFocus.currentWeekend
+  const nextRace = raceFocus.nextOpenRace
+  const focusRace = raceFocus.primaryRace
+  const focusRaceStatus = focusRace ? getEffectiveRaceStatus(focusRace) : null
 
   const leaderboardWithTestMode = await supabase
     .from('leaderboard_cache')
@@ -489,41 +495,57 @@ export default async function HomePage() {
 
       <div className="space-y-4">
         <section className={`rounded-3xl border border-white/10 bg-card p-6 shadow-xl ${showLatestRecapFirst ? 'order-2' : ''}`}>
-          <SectionHeader eyebrow="Next race" title="Next race" />
+          <SectionHeader
+            eyebrow={currentWeekendRace ? 'Race weekend' : 'Next race'}
+            title={currentWeekendRace ? 'This weekend' : 'Next race'}
+          />
 
-          {nextRace ? (
+          {focusRace && focusRaceStatus ? (
             <div className="mt-4 space-y-4">
               <div>
                 <div className="text-xs font-bold uppercase tracking-widest text-red-500">
-                  {getRoundLabel(nextRace.round)}
+                  {focusRace.round ? getRoundLabel(focusRace.round) : `Season ${currentSeason}`}
                 </div>
-                <h2 className="text-3xl font-black italic tracking-tight text-white">{nextRace.race_name}</h2>
+                <h2 className="text-3xl font-black italic tracking-tight text-white">{focusRace.race_name}</h2>
                 <p className="mt-1 text-slate-400">
-                  {nextRace.circuits?.emoji} {nextRace.circuits?.name}, {nextRace.circuits?.country}
+                  {focusRace.circuits?.emoji} {focusRace.circuits?.name}, {focusRace.circuits?.country}
                 </p>
               </div>
 
               <RaceMetaStrip
                 items={[
                   {
-                    label: 'Race',
-                    value: format(new Date(nextRace.race_start_at), 'PPP p'),
+                    label: 'Status',
+                    value: getRaceStatusLabel(focusRaceStatus),
+                    tone:
+                      focusRaceStatus === 'upcoming'
+                        ? 'open'
+                        : focusRaceStatus === 'scored'
+                          ? 'scored'
+                          : 'pending',
                     icon: Timer,
                   },
                   {
-                    label: 'Lock',
-                    value: format(new Date(nextRace.prediction_lock_at), 'PPP p'),
-                    tone: isPast(new Date(nextRace.prediction_lock_at)) ? 'pending' : 'open',
+                    label: focusRaceStatus === 'upcoming' ? 'Lock' : 'Race',
+                    value: format(
+                      new Date(
+                        focusRaceStatus === 'upcoming'
+                          ? focusRace.prediction_lock_at
+                          : focusRace.race_start_at
+                      ),
+                      'PPP p'
+                    ),
+                    tone: focusRaceStatus === 'upcoming' && !isPast(new Date(focusRace.prediction_lock_at)) ? 'open' : 'pending',
                   },
                 ]}
               />
 
               <div className="flex flex-wrap gap-4 pt-1">
                 <PendingLink
-                  href={user ? `/race/${nextRace.id}/predict` : `/race/${nextRace.id}`}
+                  href={user ? `/race/${focusRace.id}/predict` : `/race/${focusRace.id}`}
                   className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
                 >
-                  {user ? 'Predict' : 'Race'}
+                  {focusRaceStatus === 'upcoming' ? (user ? 'Predict' : 'Race') : 'Track weekend'}
                   <ChevronRight className="h-5 w-5" />
                 </PendingLink>
                 <PendingLink
@@ -534,10 +556,31 @@ export default async function HomePage() {
                   <ArrowRight className="h-4 w-4" />
                 </PendingLink>
               </div>
+
+              {currentWeekendRace && nextRace && nextRace.id !== focusRace.id && (
+                <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
+                  <div className="text-xs font-bold uppercase tracking-widest text-slate-500">Up next</div>
+                  <div className="mt-2 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0">
+                      <div className="font-bold text-white">{nextRace.race_name}</div>
+                      <p className="mt-1 text-sm text-slate-400">
+                        Entries close {format(new Date(nextRace.prediction_lock_at), 'EEE d MMM, p')}.
+                      </p>
+                    </div>
+                    <PendingLink
+                      href={user ? `/race/${nextRace.id}/predict` : `/race/${nextRace.id}`}
+                      className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-white/10"
+                    >
+                      {user ? 'Predict' : 'Race'}
+                      <ChevronRight className="h-4 w-4" />
+                    </PendingLink>
+                  </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="mt-4 rounded-2xl border border-dashed border-white/10 px-4 py-8 text-center text-slate-500">
-              No upcoming race.
+              No race weekend scheduled.
             </div>
           )}
         </section>

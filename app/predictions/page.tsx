@@ -14,6 +14,7 @@ import { SectionHeader } from '@/components/ui/section-header'
 import { getMemberRaceActionLabel, getRaceParticipationLabel, getRaceTone } from '@/utils/race-experience'
 import { getPrivateGroupRaceExperience } from '@/utils/group-race-experience'
 import { formatAmsterdamDateTime } from '@/utils/amsterdam-time'
+import { getRaceFocus } from '@/utils/race-focus'
 
 export const revalidate = 0
 
@@ -430,11 +431,13 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
   const predictedRaceIds = new Set(typedPredictions.map((prediction) => prediction.race_id))
   const scoreByRaceId = new Map(typedScores.map((score) => [score.race_id, score.total_points]))
 
-  const openRaces = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'upcoming')
-  const nextOpenRace = openRaces[0] || null
+  const raceFocus = getRaceFocus(typedRaces)
+  const openRaces = raceFocus.upcomingRaces
+  const currentWeekendRace = raceFocus.currentWeekend
+  const nextOpenRace = raceFocus.nextOpenRace
   const nextOpenRaceExperience = await getPrivateGroupRaceExperience(tenantContext.tenantId, nextOpenRace?.id)
   const actionableRaces = nextOpenRace && !predictedRaceIds.has(nextOpenRace.id) ? [nextOpenRace] : []
-  const upcomingScheduleRaces = openRaces.filter((race) => race.id !== actionableRaces[0]?.id)
+  const upcomingScheduleRaces = openRaces.filter((race) => race.id !== nextOpenRace?.id)
   const waitingRaces = typedRaces.filter((race) => {
     const status = getEffectiveRaceStatus(race)
     return (status === 'locked' || status === 'completed') && predictedRaceIds.has(race.id)
@@ -468,8 +471,16 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
         : 'missed'
       : null
 
+  const currentWeekendDefaultTab =
+    currentWeekendRace
+      ? predictedRaceIds.has(currentWeekendRace.id)
+        ? 'waiting'
+        : 'missed'
+      : null
+
   const defaultTab =
-    actionableRaces.length > 0
+    currentWeekendDefaultTab ||
+    (actionableRaces.length > 0
       ? 'action'
       : nextOpenRace
         ? 'upcoming'
@@ -479,11 +490,16 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
             waitingCount: waitingRaces.length,
             scoredCount: scoredRaces.length,
             missedCount: missedRaces.length,
-          })
+          }))
   const activeTab = resolveFilter(rawTab, defaultTab)
 
   const hero =
-    actionableRaces[0]
+    currentWeekendRace
+      ? {
+          kind: predictedRaceIds.has(currentWeekendRace.id) ? 'waiting' as const : 'missed' as const,
+          race: currentWeekendRace,
+        }
+      : actionableRaces[0]
         ? { kind: 'action' as const, race: actionableRaces[0] }
         : nextOpenRace
           ? { kind: 'upcoming' as const, race: nextOpenRace }
@@ -510,6 +526,12 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
     hasPredicted: heroHasPredicted,
     score: heroScore,
   })
+  const showUpNextRace = Boolean(
+    currentWeekendRace &&
+      nextOpenRace &&
+      nextOpenRace.id !== hero.race?.id
+  )
+  const nextOpenRaceHasPredicted = nextOpenRace ? predictedRaceIds.has(nextOpenRace.id) : false
 
   const filterCards: FilterCard[] = [
     {
@@ -573,7 +595,7 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
               <div className="text-xs font-bold uppercase tracking-[0.2em] text-emerald-200">Group joined</div>
               <h1 className="mt-1 text-2xl font-black italic text-white">You joined {joinedGroup}</h1>
               <p className="mt-2 text-sm leading-6 text-emerald-50/80">
-                Your private standings are ready. Start with the next race weekend below.
+                Your private standings are ready. Start with the race weekend below.
               </p>
             </div>
           </div>
@@ -671,6 +693,43 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
             ) : (
               <div className="rounded-2xl border border-white/10 bg-black/30 p-5 text-slate-400">
                 No races are currently scheduled for this season.
+              </div>
+            )}
+
+            {showUpNextRace && nextOpenRace && (
+              <div className="rounded-2xl border border-white/10 bg-black/25 p-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-bold uppercase tracking-widest text-slate-500">
+                    Up next
+                  </span>
+                  <span className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-medium text-slate-300">
+                    {getRoundLabel(nextOpenRace.round)}
+                  </span>
+                  <RaceStatusPill status={getEffectiveRaceStatus(nextOpenRace)} size="xs" />
+                </div>
+
+                <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+                  <div className="min-w-0">
+                    <h2 className="text-xl font-bold tracking-tight text-white">{nextOpenRace.race_name}</h2>
+                    <p className="mt-1 text-sm text-slate-400">
+                      {nextOpenRaceHasPredicted
+                        ? `Entry saved. Editable until ${formatRaceDateTime(nextOpenRace.prediction_lock_at)}.`
+                        : `Entries close ${formatDistanceToNowStrict(new Date(nextOpenRace.prediction_lock_at), { addSuffix: true })}.`}
+                    </p>
+                    {nextOpenRaceExperience && (
+                      <p className="mt-2 text-sm text-slate-500">
+                        {nextOpenRaceExperience.submittedEntries}/{nextOpenRaceExperience.totalMembers} group entries saved.
+                      </p>
+                    )}
+                  </div>
+                  <PendingLink
+                    href={`/race/${nextOpenRace.id}/predict`}
+                    className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 text-sm font-bold text-slate-100 transition-colors hover:bg-white/10"
+                  >
+                    {getMemberRaceActionLabel(getEffectiveRaceStatus(nextOpenRace), nextOpenRaceHasPredicted)}
+                    <ChevronRight className="h-4 w-4" />
+                  </PendingLink>
+                </div>
               </div>
             )}
 

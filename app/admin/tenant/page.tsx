@@ -30,6 +30,7 @@ import {
   getPlatformNotificationTiming,
 } from '@/utils/notification-settings'
 import { formatAmsterdamDateTime } from '@/utils/amsterdam-time'
+import { getRaceFocus, sortRacesByFocus } from '@/utils/race-focus'
 
 export const revalidate = 0
 
@@ -76,6 +77,13 @@ type PredictionEntry = {
   race_id: string
 }
 
+type RaceScoreEntry = {
+  race_id: string
+  user_id: string
+  total_points: number
+  exact_hits: number
+}
+
 type GroupInviteRecord = {
   id: string
   invite_url?: string | null
@@ -98,6 +106,14 @@ function getRaceStatusCopy(status: RaceStatus) {
   if (status === 'completed') return 'Race finished. Scoring still needs to be published.'
   if (status === 'scored') return 'Race scored and standings updated.'
   return 'Race cancelled.'
+}
+
+function getRaceStageLabel(status: RaceStatus) {
+  if (status === 'upcoming') return 'Next prediction'
+  if (status === 'locked') return 'Weekend live'
+  if (status === 'completed') return 'Results pending'
+  if (status === 'scored') return 'Scored'
+  return 'Cancelled'
 }
 
 function getMemberRaceStatus(status: RaceStatus, hasPrediction: boolean) {
@@ -262,20 +278,8 @@ export default async function TenantAdminPage() {
     return status && status !== 'upcoming' && !tenantAnsweredQuestionIds.has(question.id)
   }).length
 
-  const openRaces = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'upcoming')
-  const lockedOrCompletedRaces = typedRaces.filter((race) => {
-    const status = getEffectiveRaceStatus(race)
-    return status === 'locked' || status === 'completed'
-  })
-  const scoredRaces = typedRaces.filter((race) => getEffectiveRaceStatus(race) === 'scored')
-  const featuredRace =
-    openRaces[0] ||
-    lockedOrCompletedRaces[0] ||
-    [...scoredRaces].sort(
-      (left, right) =>
-        new Date(right.race_start_at).getTime() - new Date(left.race_start_at).getTime()
-    )[0] ||
-    null
+  const raceFocus = getRaceFocus(typedRaces)
+  const featuredRace = raceFocus.primaryRace || null
   const featuredRaceReminderAt =
     featuredRace && getEffectiveRaceStatus(featuredRace) === 'upcoming'
       ? new Date(
@@ -283,14 +287,23 @@ export default async function TenantAdminPage() {
         ).toISOString()
       : null
 
-  const { data: nextRacePredictions } =
-    featuredRace && memberIds.length > 0
+  const { data: seasonRacePredictions } =
+    seasonRaceIds.length > 0 && memberIds.length > 0
       ? await supabase
           .from('predictions')
           .select('user_id, race_id')
-          .eq('race_id', featuredRace.id)
+          .in('race_id', seasonRaceIds)
           .in('user_id', memberIds)
       : { data: [] as PredictionEntry[] }
+
+  const { data: seasonRaceScores } =
+    seasonRaceIds.length > 0 && memberIds.length > 0
+      ? await supabase
+          .from('user_race_scores')
+          .select('race_id, user_id, total_points, exact_hits')
+          .in('race_id', seasonRaceIds)
+          .in('user_id', memberIds)
+      : { data: [] as RaceScoreEntry[] }
 
   const { data: leaderboardRows } =
     memberIds.length > 0
@@ -334,9 +347,31 @@ export default async function TenantAdminPage() {
 
   const leaderboard = sortCompetitionStandings((leaderboardRows || []) as LeaderboardEntry[])
   const leaderboardByUserId = new Map(leaderboard.map((entry) => [entry.user_id, entry]))
-  const nextRacePredictionUserIds = new Set(
-    ((nextRacePredictions || []) as PredictionEntry[]).map((entry) => entry.user_id)
-  )
+  const memberById = new Map(operationalMembers.map((member) => [member.id, member]))
+  const predictionUserIdsByRaceId = new Map<string, Set<string>>()
+  for (const entry of (seasonRacePredictions || []) as PredictionEntry[]) {
+    const userIds = predictionUserIdsByRaceId.get(entry.race_id) || new Set<string>()
+    userIds.add(entry.user_id)
+    predictionUserIdsByRaceId.set(entry.race_id, userIds)
+  }
+  const scoreRowsByRaceId = new Map<string, RaceScoreEntry[]>()
+  for (const entry of (seasonRaceScores || []) as RaceScoreEntry[]) {
+    const scoreRows = scoreRowsByRaceId.get(entry.race_id) || []
+    scoreRows.push(entry)
+    scoreRowsByRaceId.set(entry.race_id, scoreRows)
+  }
+  for (const [raceId, scoreRows] of scoreRowsByRaceId.entries()) {
+    scoreRowsByRaceId.set(
+      raceId,
+      scoreRows.sort((left, right) => {
+        if (right.total_points !== left.total_points) return right.total_points - left.total_points
+        if (right.exact_hits !== left.exact_hits) return right.exact_hits - left.exact_hits
+        return left.user_id.localeCompare(right.user_id)
+      })
+    )
+  }
+  const nextRacePredictionUserIds =
+    featuredRace ? predictionUserIdsByRaceId.get(featuredRace.id) || new Set<string>() : new Set<string>()
   const tenantAdminCount = typedMembers.filter(
     (member) => member.role === 'admin' && member.admin_scope === 'tenant'
   ).length
@@ -348,6 +383,27 @@ export default async function TenantAdminPage() {
     featuredRace && operationalMembers.length > 0
       ? Math.round((nextRaceCoverage / operationalMembers.length) * 100)
       : 0
+  const tenantRaceRows = sortRacesByFocus(typedRaces).slice(0, 6).map((race) => {
+    const predictionUserIds = predictionUserIdsByRaceId.get(race.id) || new Set<string>()
+    const scoreRows = scoreRowsByRaceId.get(race.id) || []
+    const topScore = scoreRows[0] || null
+    const topScoreMember = topScore ? memberById.get(topScore.user_id) || null : null
+    const status = getEffectiveRaceStatus(race)
+
+    return {
+      race,
+      status,
+      entryCount: predictionUserIds.size,
+      scoreCount: scoreRows.length,
+      topScoreLabel: topScore
+        ? `${getProfileDisplayName(topScoreMember?.display_name, topScoreMember?.email)} · ${topScore.total_points} pts`
+        : status === 'scored'
+          ? 'No group scores yet'
+          : status === 'completed'
+            ? 'Waiting for platform results'
+            : 'Scores not published yet',
+    }
+  })
   const openItemsCount =
     (featuredRace ? missingFeaturedRaceMembers.length : 0) +
     (activeInviteCount === 0 ? 1 : 0) +
@@ -455,12 +511,12 @@ export default async function TenantAdminPage() {
               </div>
               <div className="min-w-0">
                 <h2 className="text-xl font-bold tracking-tight text-white">
-                  {featuredRace ? featuredRace.race_name : 'No active race'}
+                  {featuredRace ? featuredRace.race_name : 'No race to review'}
                 </h2>
                 <p className="mt-1 text-sm text-red-100/80">
                   {featuredRace
                     ? `${coveragePercent}% submitted. ${getRaceStatusCopy(getEffectiveRaceStatus(featuredRace))}`
-                    : 'There is no active race for this group.'}
+                    : 'No race is open, live, or waiting on results for this group.'}
                 </p>
               </div>
             </div>
@@ -474,16 +530,18 @@ export default async function TenantAdminPage() {
 
       <section id="race-week-ops" className="space-y-4 scroll-mt-28">
         <SectionHeader
-          eyebrow="Race entries"
-          title="Entries and reminders"
-          description="Check who has entered the next race and when reminder emails will be sent."
+          eyebrow="Race weekend"
+          title="Entries, results, and reminders"
+          description="Review the active weekend first, then prepare the next prediction window."
         />
 
         <div className="space-y-5">
           {featuredRace ? (
             <section className="rounded-3xl border border-red-500/20 bg-red-500/8 p-5 shadow-2xl md:p-6">
               <div>
-                <div className="text-xs font-bold uppercase tracking-[0.2em] text-red-200">Next race entries</div>
+                <div className="text-xs font-bold uppercase tracking-[0.2em] text-red-200">
+                  {getRaceStageLabel(getEffectiveRaceStatus(featuredRace))}
+                </div>
                 <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">{nextRaceCoverage}/{operationalMembers.length} entered</h2>
                 <p className="mt-2 text-sm text-red-100/80">
                   {featuredRace.race_name}: {coveragePercent}% of members have saved an entry.
@@ -536,13 +594,58 @@ export default async function TenantAdminPage() {
             </section>
           ) : (
             <section className="rounded-3xl border border-white/10 bg-card p-6 shadow-2xl">
-              <div className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Next race entries</div>
-              <h2 className="mt-2 text-2xl font-bold tracking-tight text-white">No active race</h2>
+              <div className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Race weekend</div>
+              <h2 className="mt-2 text-2xl font-bold tracking-tight text-white">No race to review</h2>
               <p className="mt-2 text-sm text-slate-400">
-                When the next race opens, entries and missing members will appear here.
+                When a race opens or locks, entries and missing members will appear here.
               </p>
             </section>
           )}
+
+          <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-xl">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Race review</div>
+                <h2 className="mt-1 text-xl font-bold tracking-tight text-white">Entries and group results by race</h2>
+              </div>
+              <div className="text-sm font-bold text-slate-400">
+                {tenantRaceRows.length} race{tenantRaceRows.length === 1 ? '' : 's'}
+              </div>
+            </div>
+
+            <div className="mt-4 overflow-hidden rounded-2xl border border-white/5 bg-black/20">
+              {tenantRaceRows.length === 0 ? (
+                <div className="p-6 text-center text-sm text-slate-500">No races available for this season.</div>
+              ) : (
+                tenantRaceRows.map((row) => (
+                  <PendingLink
+                    key={row.race.id}
+                    href={`/race/${row.race.id}/predict`}
+                    className="group grid min-w-0 gap-3 border-b border-white/5 p-4 transition-colors last:border-b-0 hover:bg-white/[0.03] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+                  >
+                    <div className="min-w-0">
+                      <div className="text-xs font-bold uppercase tracking-widest text-red-500">
+                        Round {row.race.round} · {getRaceStageLabel(row.status)}
+                      </div>
+                      <div className="mt-1 break-words text-base font-bold leading-tight text-white">{row.race.race_name}</div>
+                      <div className="mt-1 break-words text-sm text-slate-400">
+                        {row.entryCount}/{operationalMembers.length} entries · {row.scoreCount} scored member{row.scoreCount === 1 ? '' : 's'}
+                      </div>
+                    </div>
+
+                    <div className="flex min-w-0 flex-col gap-2 lg:items-end">
+                      <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-slate-300">
+                        {getRaceStageLabel(row.status)}
+                      </div>
+                      <div className="max-w-full break-words text-sm text-slate-400 lg:text-right">
+                        {row.topScoreLabel}
+                      </div>
+                    </div>
+                  </PendingLink>
+                ))
+              )}
+            </div>
+          </section>
 
           <TenantNotificationTimingPanel
             groupName={typedTenant?.name || 'This group'}
