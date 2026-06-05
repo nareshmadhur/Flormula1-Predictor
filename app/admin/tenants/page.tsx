@@ -120,8 +120,8 @@ export default async function AdminTenantsPage() {
       <div className="flex items-start justify-between gap-4">
         <div>
           <PageBackLink href="/admin" label="Back to Admin" />
-          <h1 className="flex items-center text-3xl font-black italic tracking-tighter text-red-500">
-            <Building2 className="mr-3 h-8 w-8" /> GROUPS & ACCESS
+          <h1 className="flex items-center text-3xl font-bold tracking-tight text-red-500">
+            <Building2 className="mr-3 h-8 w-8" /> Groups and access
           </h1>
           <p className="max-w-3xl text-slate-400">
             Everyone starts in Main Group. Use this page to run private groups, invites, roles, and rare setup fixes.
@@ -143,7 +143,7 @@ export default async function AdminTenantsPage() {
         testModeAvailable={testModeAvailable}
       />
 
-      <div className="grid gap-6 xl:grid-cols-[0.9fr,1.1fr]">
+      <div className="space-y-6">
         <section className="rounded-2xl border border-white/5 bg-card p-6 shadow-xl">
           <h2 className="mb-2 text-xl font-bold">Create group</h2>
           <p className="mb-4 text-sm text-slate-400">

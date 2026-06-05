@@ -46,11 +46,11 @@ function getStatusDescription(status: RaceStatus) {
 
 function getMetadataDescription(raceName: string, status: RaceStatus) {
   if (status === 'upcoming') {
-    return `Follow the ${raceName} schedule, pick deadline, and bonus questions before the grid locks.`
+    return `Follow the ${raceName} schedule and pick deadline before the grid locks.`
   }
 
   if (status === 'scored') {
-    return `See the published ${raceName} podium, bonus answers, and season context on the public race hub.`
+    return `See the published ${raceName} podium, top scorers, and season context on the public race hub.`
   }
 
   return `Track the ${raceName} status, published results, and official race updates on the public race hub.`
@@ -221,7 +221,7 @@ export default async function PublicRacePage({ params }: PageProps) {
             }
           />
 
-          <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.55fr)]">
+          <div className="mt-4 space-y-4">
             <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
               <div className="flex items-center justify-between gap-3">
                 <div>
@@ -350,7 +350,7 @@ export default async function PublicRacePage({ params }: PageProps) {
 
         {bonusQuestions.length === 0 ? (
           <div className="mt-4 rounded-2xl border border-white/5 bg-black/30 p-5 text-slate-400">
-            No bonus questions.
+            Group bonus questions are private to each group. Sign in to view your group MCQs on the prediction page.
           </div>
         ) : (
           <div className="mt-4 space-y-3">

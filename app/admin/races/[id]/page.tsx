@@ -280,45 +280,22 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
           </PendingLink>
         </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-5 flex gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Race admin shortcuts">
           {setupTasks.map((task) => (
             <a
               key={task.href}
               href={task.href}
-              className="group rounded-2xl border border-white/5 bg-black/25 p-4 transition-colors hover:border-red-500/25 hover:bg-red-500/8"
+              className="inline-flex shrink-0 items-center rounded-full border border-white/10 bg-black/25 px-4 py-2 text-sm font-bold text-slate-200 transition-colors hover:border-red-500/25 hover:bg-red-500/8"
             >
-              <div className="text-[11px] font-bold uppercase tracking-[0.18em] text-red-300">{task.eyebrow}</div>
-              <div className="mt-2 text-lg font-bold text-white">{task.title}</div>
-              <p className="mt-1 text-sm leading-6 text-slate-400">{task.detail}</p>
+              {task.title}
             </a>
           ))}
         </div>
       </section>
 
-      <div className="grid md:grid-cols-2 gap-8">
+      <div className="space-y-6">
         
         <div className="space-y-6">
-          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-5 shadow-xl">
-            <div className="text-xs font-bold uppercase tracking-[0.2em] text-red-100">Basic order</div>
-            <div className="mt-3 grid gap-3 lg:grid-cols-3">
-              <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">1. Race timing</div>
-                <div className="mt-2 font-semibold text-white">Use OpenF1 first</div>
-                <div className="mt-1 text-slate-400">Update timing, race name, and circuit match from OpenF1.</div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">2. Group bonus</div>
-                <div className="mt-2 font-semibold text-white">Tenant admins own bonus</div>
-                <div className="mt-1 text-slate-400">Questions and answers are handled in the group admin workspace.</div>
-              </div>
-              <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-200">
-                <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-300">3. After the race</div>
-                <div className="mt-2 font-semibold text-white">Save podium</div>
-                <div className="mt-1 text-slate-400">Review the prefilled podium, then save the official outcome.</div>
-              </div>
-            </div>
-          </div>
-
           <div id="openf1-sync" className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl scroll-mt-28">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>

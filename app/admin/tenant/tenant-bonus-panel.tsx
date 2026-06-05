@@ -54,7 +54,7 @@ type TenantBonusPanelProps = {
 function getBonusStatusCopy(status: RaceStatus) {
   if (status === 'upcoming') return 'Add or edit questions before entries close.'
   if (status === 'locked') return 'Entries are locked. Set answers after the race.'
-  if (status === 'completed') return 'Set answers before scores are published.'
+  if (status === 'completed') return 'Set answers before the next scoring run.'
   if (status === 'scored') return 'Scores are published. Changing answers requires rescoring.'
   return 'Cancelled races do not need bonus management.'
 }
@@ -117,7 +117,7 @@ export function TenantBonusPanel({
             {unansweredCount === 0 ? 'All answers saved' : `${unansweredCount} answer${unansweredCount === 1 ? '' : 's'} pending`}
           </div>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            Scoring needs an answer for each active bonus question.
+            Bonus points count once this group saves the official answers.
           </p>
         </div>
       </div>

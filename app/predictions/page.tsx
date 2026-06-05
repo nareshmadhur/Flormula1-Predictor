@@ -697,7 +697,7 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
           </div>
         </div>
 
-        <nav className="flex gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Race views">
+        <nav className="flex gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="My races">
           {filterCards.map((card) => {
             const isActive = card.key === activeTab
 

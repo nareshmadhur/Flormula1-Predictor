@@ -190,7 +190,7 @@ export function GroupInvitePanel({ groupName, invites, setupMessage, migrationNo
           {setupMessage}
         </div>
       ) : (
-        <div className="mt-6 grid gap-5 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+        <div className="mt-6 space-y-5">
           <div className="rounded-2xl border border-white/10 bg-black/25 p-4">
             <form action={formAction} className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-2">

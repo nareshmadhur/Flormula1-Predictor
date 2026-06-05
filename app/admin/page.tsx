@@ -98,7 +98,7 @@ export default async function AdminDashboardPage() {
           <span>{tenantCount || 0} groups</span>
         </div>
 
-        <div className="mt-4 grid gap-3 lg:grid-cols-[minmax(0,1.15fr)_minmax(280px,0.85fr)]">
+        <div className="mt-4 space-y-3">
           <PendingLink
             href="/admin/results"
             className="group block min-w-0 rounded-2xl border border-red-500/20 bg-red-500/10 p-5 transition-colors hover:bg-red-500/14"
@@ -122,7 +122,7 @@ export default async function AdminDashboardPage() {
             </span>
           </PendingLink>
 
-          <div className="grid gap-3">
+          <div className="grid gap-3 md:grid-cols-2">
             <PendingLink
               href={firstLiveRace ? `/admin/races/${firstLiveRace.id}` : '/admin/schedule'}
               className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 rounded-2xl border border-amber-500/15 bg-amber-500/8 p-4 transition-colors hover:bg-amber-500/12"
@@ -185,14 +185,17 @@ export default async function AdminDashboardPage() {
         </div>
       </section>
 
-      <section className="space-y-4">
-        <SectionHeader
-          eyebrow="Sections"
-          title="Admin sections"
-          description="Choose the area you need."
-        />
+      <details className="group rounded-3xl border border-white/10 bg-card p-5 shadow-xl">
+        <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
+          <div>
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Sections</div>
+            <h2 className="mt-1 text-xl font-bold text-white">More admin areas</h2>
+            <p className="mt-1 text-sm text-slate-400">Open these when the queue above does not cover the job.</p>
+          </div>
+          <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-slate-500 transition-transform group-open:rotate-90" />
+        </summary>
 
-        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <div className="mt-4 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <PendingLink
             href={raceSetupHref}
             className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-4 shadow-xl transition-colors hover:bg-white/[0.02]"
@@ -255,7 +258,7 @@ export default async function AdminDashboardPage() {
             <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
           </PendingLink>
         </div>
-      </section>
+      </details>
 
       {reviewRaces.length > 0 && (
         <section className="space-y-4">
