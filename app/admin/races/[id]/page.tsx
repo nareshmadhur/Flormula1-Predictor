@@ -242,11 +242,11 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
       
       <div>
         <PageBackLink href="/admin" label="Back to Admin" />
-        <div className="flex justify-between items-start">
-          <div>
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
             <div className="text-red-500 font-bold tracking-widest uppercase mb-1">Round {typedRace.round}</div>
             <h1 className="text-3xl font-bold tracking-tight">Manage {typedRace.race_name}</h1>
-            <div className="flex items-center space-x-4 mt-2">
+            <div className="mt-3 flex flex-wrap items-center gap-2">
               <span className={`px-3 py-1 rounded-lg text-sm font-bold border ${getAdminRaceStatusBadgeClasses(effectiveStatus)}`}>
                 Status: {getAdminRaceStatusLabel(effectiveStatus)}
               </span>
@@ -256,7 +256,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
               </span>
             </div>
           </div>
-          <div className="flex space-x-2">
+          <div className="grid w-full gap-2 sm:grid-cols-2 lg:flex lg:w-auto lg:justify-end">
             <CancelRaceButton raceId={typedRace.id} raceStatus={typedRace.status} />
             <DeleteRaceButton raceId={typedRace.id} />
           </div>

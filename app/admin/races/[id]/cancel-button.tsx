@@ -31,10 +31,10 @@ export default function CancelRaceButton({ raceId, raceStatus }: { raceId: strin
     <button
       onClick={handleCancel}
       disabled={isLoading}
-      className="bg-orange-500/10 hover:bg-orange-500/20 disabled:bg-orange-500/10 disabled:cursor-not-allowed text-orange-500 font-bold px-4 py-2 rounded-lg border border-orange-500/20 transition-colors flex items-center shadow-lg hover:shadow-orange-500/10 ml-2"
+      className="flex w-full items-center justify-center gap-2 rounded-lg border border-orange-500/20 bg-orange-500/10 px-4 py-2 font-bold text-orange-500 shadow-lg transition-colors hover:bg-orange-500/20 hover:shadow-orange-500/10 disabled:cursor-not-allowed disabled:bg-orange-500/10 lg:w-auto"
     >
-      <XCircle className="w-4 h-4 mr-2" />
-      {isLoading ? 'CANCELLING...' : 'CANCEL RACE'}
+      <XCircle className="h-4 w-4 shrink-0" />
+      {isLoading ? 'Cancelling...' : 'Cancel race'}
     </button>
   )
 }

@@ -28,10 +28,10 @@ export default function DeleteRaceButton({ raceId }: { raceId: string }) {
     <button
       onClick={handleDelete}
       disabled={isLoading}
-      className="bg-red-500/10 hover:bg-red-500/20 disabled:bg-red-500/10 disabled:cursor-not-allowed text-red-500 font-bold px-4 py-2 rounded-lg border border-red-500/20 transition-colors flex items-center shadow-lg hover:shadow-red-500/10"
+      className="flex w-full items-center justify-center gap-2 rounded-lg border border-red-500/20 bg-red-500/10 px-4 py-2 font-bold text-red-500 shadow-lg transition-colors hover:bg-red-500/20 hover:shadow-red-500/10 disabled:cursor-not-allowed disabled:bg-red-500/10 lg:w-auto"
     >
-      <Trash2 className="w-4 h-4 mr-2" />
-      {isLoading ? 'DELETING...' : 'DELETE RACE'}
+      <Trash2 className="h-4 w-4 shrink-0" />
+      {isLoading ? 'Deleting...' : 'Delete race'}
     </button>
   )
 }
