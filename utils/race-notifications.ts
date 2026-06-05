@@ -59,6 +59,10 @@ type NotificationPreview = {
   recipientEmail: string
   testRecipient?: string
   testUsersOnly?: boolean
+  hasPrediction?: boolean
+  totalBonusQuestions?: number
+  answeredBonusQuestions?: number
+  missingBonusQuestions?: number
   score?: number
 }
 
@@ -95,6 +99,13 @@ type NotificationPreference = {
   profiles?: NotificationProfile | NotificationProfile[] | null
 }
 
+type PredictionReminderCompletion = {
+  hasPrediction: boolean
+  totalBonusQuestions: number
+  answeredBonusQuestions: number
+  missingBonusQuestions: number
+}
+
 type ClaimedNotificationEvent = {
   id: string
 }
@@ -129,6 +140,22 @@ type RaceScorePosition = {
 
 type LeaderboardStanding = CompetitionStanding & {
   profiles?: { tenant_id?: string | null } | Array<{ tenant_id?: string | null }> | null
+}
+
+type ReminderPredictionRow = {
+  id: string
+  user_id: string
+}
+
+type ReminderBonusQuestionRow = {
+  id: string
+  tenant_id?: string | null
+  bonus_options?: Array<{ id: string }> | null
+}
+
+type ReminderBonusAnswerRow = {
+  prediction_id: string
+  bonus_question_id: string
 }
 
 type NotificationClient = ReturnType<typeof createServiceRoleClient>
@@ -481,6 +508,134 @@ async function getNotificationGroupCoverage(
   }
 }
 
+function getEmptyReminderCompletion(): PredictionReminderCompletion {
+  return {
+    hasPrediction: false,
+    totalBonusQuestions: 0,
+    answeredBonusQuestions: 0,
+    missingBonusQuestions: 0,
+  }
+}
+
+function isReminderComplete(completion: PredictionReminderCompletion) {
+  return completion.hasPrediction && completion.missingBonusQuestions === 0
+}
+
+function getReminderReasonDetail(completion: PredictionReminderCompletion, leadHours: number) {
+  if (completion.hasPrediction && completion.missingBonusQuestions > 0) {
+    return `${completion.missingBonusQuestions} bonus call${completion.missingBonusQuestions === 1 ? '' : 's'} still need an answer before lock.`
+  }
+
+  return `This reminder is sent when a race is within ${leadHours} hours of lock and your entry is not complete yet.`
+}
+
+async function getPredictionReminderCompletions(
+  supabase: NotificationClient,
+  raceId: string,
+  preferences: NotificationPreference[]
+) {
+  const userIds = preferences.map((preference) => preference.user_id)
+  const tenantIds = [
+    ...new Set(
+      preferences
+        .map((preference) => getProfile(preference)?.tenant_id)
+        .filter((tenantId): tenantId is string => Boolean(tenantId))
+    ),
+  ]
+  const completionByUserId = new Map<string, PredictionReminderCompletion>(
+    userIds.map((userId) => [userId, getEmptyReminderCompletion()])
+  )
+
+  if (userIds.length === 0) return completionByUserId
+
+  const { data: predictions, error: predictionsError } = await supabase
+    .from('predictions')
+    .select('id, user_id')
+    .eq('race_id', raceId)
+    .in('user_id', userIds)
+
+  if (predictionsError) {
+    throw new Error(`Failed to load predictions for reminder completion: ${predictionsError.message}`)
+  }
+
+  const predictionRows = (predictions || []) as ReminderPredictionRow[]
+  const predictionByUserId = new Map(predictionRows.map((prediction) => [prediction.user_id, prediction]))
+  const predictionIds = predictionRows.map((prediction) => prediction.id)
+  let bonusQuestions: ReminderBonusQuestionRow[] = []
+
+  if (tenantIds.length > 0) {
+    const { data, error } = await supabase
+      .from('bonus_questions')
+      .select('id, tenant_id, bonus_options(id)')
+      .eq('race_id', raceId)
+      .eq('is_active', true)
+      .in('tenant_id', tenantIds)
+
+    if (error) {
+      throw new Error(`Failed to load bonus questions for reminder completion: ${error.message}`)
+    }
+
+    bonusQuestions = (data || []) as ReminderBonusQuestionRow[]
+  }
+
+  const questionIdsByTenantId = new Map<string, Set<string>>()
+  bonusQuestions.forEach((question) => {
+    const tenantId = question.tenant_id
+    if (!tenantId || !question.bonus_options?.length) return
+
+    const currentQuestionIds = questionIdsByTenantId.get(tenantId) || new Set<string>()
+    currentQuestionIds.add(question.id)
+    questionIdsByTenantId.set(tenantId, currentQuestionIds)
+  })
+
+  const requiredQuestionIds = new Set(
+    [...questionIdsByTenantId.values()].flatMap((questionIds) => [...questionIds])
+  )
+  const answeredQuestionIdsByPredictionId = new Map<string, Set<string>>()
+
+  if (predictionIds.length > 0 && requiredQuestionIds.size > 0) {
+    const { data, error } = await supabase
+      .from('prediction_bonus_answers')
+      .select('prediction_id, bonus_question_id')
+      .in('prediction_id', predictionIds)
+      .in('bonus_question_id', [...requiredQuestionIds])
+
+    if (error) {
+      throw new Error(`Failed to load prediction bonus answers for reminder completion: ${error.message}`)
+    }
+
+    ;((data || []) as ReminderBonusAnswerRow[]).forEach((answer) => {
+      const currentQuestionIds = answeredQuestionIdsByPredictionId.get(answer.prediction_id) || new Set<string>()
+      currentQuestionIds.add(answer.bonus_question_id)
+      answeredQuestionIdsByPredictionId.set(answer.prediction_id, currentQuestionIds)
+    })
+  }
+
+  preferences.forEach((preference) => {
+    const profile = getProfile(preference)
+    const questionIds = profile?.tenant_id
+      ? questionIdsByTenantId.get(profile.tenant_id) || new Set<string>()
+      : new Set<string>()
+    const prediction = predictionByUserId.get(preference.user_id)
+    const answeredQuestionIds = prediction
+      ? answeredQuestionIdsByPredictionId.get(prediction.id) || new Set<string>()
+      : new Set<string>()
+    const answeredBonusQuestions = [...questionIds].filter((questionId) =>
+      answeredQuestionIds.has(questionId)
+    ).length
+    const totalBonusQuestions = questionIds.size
+
+    completionByUserId.set(preference.user_id, {
+      hasPrediction: Boolean(prediction),
+      totalBonusQuestions,
+      answeredBonusQuestions,
+      missingBonusQuestions: Math.max(totalBonusQuestions - answeredBonusQuestions, 0),
+    })
+  })
+
+  return completionByUserId
+}
+
 function renderInfoGrid(items: Array<{ label: string; value: string; detail?: string }>) {
   return `
     <div style="margin:22px 0;border:1px solid rgba(148,163,184,0.12);border-radius:18px;background:#111827;padding:16px;">
@@ -508,6 +663,7 @@ function renderPreLockEmail({
   preference,
   leadHours,
   groupCoverage,
+  completion,
   testRecipient,
   isTestSend,
 }: {
@@ -515,12 +671,24 @@ function renderPreLockEmail({
   preference: NotificationPreference
   leadHours: number
   groupCoverage?: GroupRaceExperience | null
+  completion?: PredictionReminderCompletion
   testRecipient?: string | null
   isTestSend?: boolean
 }) {
   const profile = getProfile(preference)
   const predictionUrl = getAbsoluteUrl(`/race/${race.id}/predict`)
   const lockLabel = formatRaceDate(race.prediction_lock_at, true)
+  const reminderCompletion = completion || getEmptyReminderCompletion()
+  const entrySummary =
+    reminderCompletion.hasPrediction && reminderCompletion.totalBonusQuestions > 0
+      ? `${reminderCompletion.answeredBonusQuestions}/${reminderCompletion.totalBonusQuestions} bonus answered`
+      : reminderCompletion.hasPrediction
+        ? 'Podium saved'
+        : 'No entry submitted yet'
+  const intro =
+    reminderCompletion.hasPrediction && reminderCompletion.missingBonusQuestions > 0
+      ? `Hi ${getProfileDisplayName(profile?.display_name, profile?.email, 'there')}, your podium is saved, but your bonus calls still need attention. Predictions close ${lockLabel}.`
+      : `Hi ${getProfileDisplayName(profile?.display_name, profile?.email, 'there')}, your entry is still open. Predictions close ${lockLabel}.`
   const testNotice = isTestSend
     ? `
       <div style="margin:0 0 18px;border:1px solid rgba(251,191,36,0.2);border-radius:16px;background:rgba(251,191,36,0.08);padding:14px;color:#fde68a;font-size:13px;line-height:1.5;">
@@ -536,7 +704,7 @@ function renderPreLockEmail({
   return renderBrandedEmail({
     eyebrow: 'Prediction reminder',
     title: `${race.race_name} closes soon`,
-    intro: `Hi ${getProfileDisplayName(profile?.display_name, profile?.email, 'there')}, your entry is still open. Predictions close ${lockLabel}.`,
+    intro,
     actions: [{ label: 'Make my prediction', url: predictionUrl }],
     unsubscribeUrl: isTestSend ? null : getUnsubscribeUrl(preference),
     bodyHtml:
@@ -550,7 +718,14 @@ function renderPreLockEmail({
         {
           label: 'Prediction lock',
           value: lockLabel,
-          detail: `This reminder is sent when a race is within ${leadHours} hours of lock and you have not submitted yet.`,
+          detail: getReminderReasonDetail(reminderCompletion, leadHours),
+        },
+        {
+          label: 'Entry status',
+          value: entrySummary,
+          detail: reminderCompletion.hasPrediction
+            ? 'Open your picks to finish or update your race entry before the deadline.'
+            : 'Pick your podium and answer any available bonus calls before the deadline.',
         },
         {
           label: 'Race start',
@@ -913,32 +1088,35 @@ async function sendManualPredictionEmail({
     }
   }
 
-  const { data: predictions, error: predictionsError } = await supabase
-    .from('predictions')
-    .select('race_id')
-    .eq('user_id', preference.user_id)
-    .in(
-      'race_id',
-      candidateRaces.map((race) => race.id)
+  const completionByRaceId = new Map<string, PredictionReminderCompletion>()
+  for (const candidateRace of candidateRaces) {
+    const completionByUserId = await getPredictionReminderCompletions(
+      supabase,
+      candidateRace.id,
+      [preference]
     )
-
-  if (predictionsError) {
-    throw new Error(`Failed to load predictions: ${predictionsError.message}`)
+    completionByRaceId.set(
+      candidateRace.id,
+      completionByUserId.get(preference.user_id) || getEmptyReminderCompletion()
+    )
   }
 
-  const predictedRaceIds = new Set((predictions || []).map((prediction) => prediction.race_id as string))
   const race = overrideRules
     ? candidateRaces[0]
-    : candidateRaces.find((candidateRace) => !predictedRaceIds.has(candidateRace.id))
+    : candidateRaces.find((candidateRace) => {
+        const completion = completionByRaceId.get(candidateRace.id) || getEmptyReminderCompletion()
+        return !isReminderComplete(completion)
+      })
 
   if (!race) {
     return {
       ok: false,
       sent: false,
-      message: 'No prediction reminder is due right now. The selected user has already submitted for races in the reminder window. Confirm the override to send anyway.',
+      message: 'No prediction reminder is due right now. The selected user has completed their podium and bonus calls for races in the reminder window. Confirm the override to send anyway.',
     }
   }
 
+  const completion = completionByRaceId.get(race.id) || getEmptyReminderCompletion()
   const claimed = await claimManualNotificationEvent(supabase, {
     userId: preference.user_id,
     raceId: race.id,
@@ -969,11 +1147,16 @@ async function sendManualPredictionEmail({
       preference,
       leadHours,
       groupCoverage,
+      completion,
     }),
     metadata: {
       leadHours,
       leadHoursSource: timing.source,
       predictionLockAt: race.prediction_lock_at,
+      hasPrediction: completion.hasPrediction,
+      totalBonusQuestions: completion.totalBonusQuestions,
+      answeredBonusQuestions: completion.answeredBonusQuestions,
+      missingBonusQuestions: completion.missingBonusQuestions,
       manualAdminSend: true,
       manualAdminOverride: Boolean(overrideRules),
     },
@@ -1279,21 +1462,12 @@ export async function runPreLockReminderEmails(
   for (const race of candidateRaces) {
     if (preferenceUserIds.length === 0) continue
 
-    const { data: predictions, error: predictionsError } = await supabase
-      .from('predictions')
-      .select('user_id')
-      .eq('race_id', race.id)
-      .in('user_id', preferenceUserIds)
-
-    if (predictionsError) {
-      throw new Error(`Failed to load predictions for ${race.race_name}: ${predictionsError.message}`)
-    }
-
-    const predictedUserIds = new Set((predictions || []).map((prediction) => prediction.user_id as string))
+    const completionByUserId = await getPredictionReminderCompletions(supabase, race.id, preferences)
     const groupCoverageByTenantId = new Map<string, GroupRaceExperience | null>()
     const raceLockTime = new Date(race.prediction_lock_at).getTime()
     const unsubmittedPreferences = preferences.filter((preference) => {
-      if (predictedUserIds.has(preference.user_id)) return false
+      const completion = completionByUserId.get(preference.user_id) || getEmptyReminderCompletion()
+      if (isReminderComplete(completion)) return false
 
       const timing = timingByUserId.get(preference.user_id)
       const leadHours = timing?.raceReminderLeadHours || getReminderLeadHours()
@@ -1346,6 +1520,8 @@ export async function runPreLockReminderEmails(
         }
         groupCoverage = groupCoverageByTenantId.get(tenantId) || null
       }
+      const completion = completionByUserId.get(preference.user_id) || getEmptyReminderCompletion()
+
       if (previews.length < previewLimit) {
         previews.push({
           eventType: 'pre_lock_reminder',
@@ -1356,6 +1532,10 @@ export async function runPreLockReminderEmails(
           recipientEmail: maskEmail(profile?.email),
           testRecipient: testRecipient || undefined,
           testUsersOnly: options.testUsersOnly || undefined,
+          hasPrediction: completion.hasPrediction,
+          totalBonusQuestions: completion.totalBonusQuestions,
+          answeredBonusQuestions: completion.answeredBonusQuestions,
+          missingBonusQuestions: completion.missingBonusQuestions,
         })
       }
 
@@ -1389,6 +1569,7 @@ export async function runPreLockReminderEmails(
           preference,
           leadHours,
           groupCoverage,
+          completion,
           testRecipient,
           isTestSend: isLimitedTestSend,
         }),
@@ -1398,6 +1579,10 @@ export async function runPreLockReminderEmails(
           leadHours,
           leadHoursSource: timing.source,
           predictionLockAt: race.prediction_lock_at,
+          hasPrediction: completion.hasPrediction,
+          totalBonusQuestions: completion.totalBonusQuestions,
+          answeredBonusQuestions: completion.answeredBonusQuestions,
+          missingBonusQuestions: completion.missingBonusQuestions,
         },
       })
 

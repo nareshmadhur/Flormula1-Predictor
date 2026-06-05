@@ -5,6 +5,11 @@ import { createClient } from '@/utils/supabase/server'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { saveTenantRaceBonusAnswers } from '@/utils/result-pipeline'
+import {
+  buildBonusOptionInsertRows,
+  getCleanBonusOptionLabels,
+  getSelectedCircuitOptionIds,
+} from '@/utils/bonus-option-inputs'
 
 type TenantBonusAccess = {
   supabase: Awaited<ReturnType<typeof createClient>>
@@ -17,6 +22,8 @@ type RaceEditWindowRow = {
   race_start_at: string
   prediction_lock_at: string
 }
+
+const DRAFT_QUESTION_ID = '00000000-0000-0000-0000-000000000000'
 
 function revalidateTenantBonusPaths(raceId: string) {
   revalidatePath('/admin/tenant')
@@ -56,19 +63,13 @@ async function assertQuestionEditWindow(
   }
 }
 
-function getCleanOptionLabels(formData: FormData) {
-  return Array.from(formData.getAll('options'))
-    .map((value) => String(value).trim())
-    .filter(Boolean)
-}
-
 export async function addTenantBonusQuestion(formData: FormData) {
   const { supabase, tenantId } = await assertTenantBonusAccess()
 
   const raceId = String(formData.get('race_id') || '').trim()
   const questionText = String(formData.get('question_text') || '').trim()
   const points = Number.parseInt(String(formData.get('points') || '1'), 10)
-  const optionLabels = getCleanOptionLabels(formData)
+  const optionCount = getCleanBonusOptionLabels(formData).length + getSelectedCircuitOptionIds(formData).length
 
   if (!raceId || !questionText) {
     throw new Error('Race and question text are required.')
@@ -78,11 +79,12 @@ export async function addTenantBonusQuestion(formData: FormData) {
     throw new Error('Bonus points must be between 1 and 25.')
   }
 
-  if (optionLabels.length < 2) {
+  if (optionCount < 2) {
     throw new Error('Add at least two options for a bonus question.')
   }
 
   await assertQuestionEditWindow(supabase, raceId)
+  const optionDrafts = await buildBonusOptionInsertRows(supabase, DRAFT_QUESTION_ID, formData)
 
   const { data: question, error: questionError } = await supabase
     .from('bonus_questions')
@@ -99,13 +101,12 @@ export async function addTenantBonusQuestion(formData: FormData) {
     throw new Error(questionError?.message || 'Failed to add group bonus question.')
   }
 
-  const { error: optionsError } = await supabase.from('bonus_options').insert(
-    optionLabels.map((label) => ({
-      bonus_question_id: question.id,
-      option_type: 'custom_text',
-      label,
-    }))
-  )
+  const options = optionDrafts.map((option) => ({
+    ...option,
+    bonus_question_id: question.id,
+  }))
+
+  const { error: optionsError } = await supabase.from('bonus_options').insert(options)
 
   if (optionsError) {
     throw new Error(optionsError.message || 'Failed to add group bonus options.')

@@ -26,30 +26,11 @@ type DriverRow = {
   full_name: string
 }
 
-type BonusOptionRow = {
-  id: string
-  label?: string | null
-}
-
-type BonusQuestionRow = {
-  id: string
-  race_id: string
-  question_text: string
-  points: number
-  bonus_options?: BonusOptionRow[]
-}
-
 type RaceResultRow = {
   race_id: string
   p1_driver_id?: string | null
   p2_driver_id?: string | null
   p3_driver_id?: string | null
-}
-
-type RaceBonusAnswerRow = {
-  race_id: string
-  bonus_question_id: string
-  correct_bonus_option_id: string
 }
 
 export default async function AdminResultsPage() {
@@ -82,44 +63,17 @@ export default async function AdminResultsPage() {
   })
 
   const eligibleRaceIds = eligibleRaces.map((race) => race.id)
-  const [resultsResponse, questionsResponse, answersResponse] =
+  const resultsResponse =
     eligibleRaceIds.length > 0
-      ? await Promise.all([
-          supabase
-            .from('race_results')
-            .select('race_id, p1_driver_id, p2_driver_id, p3_driver_id')
-            .in('race_id', eligibleRaceIds),
-          supabase
-            .from('bonus_questions')
-            .select('id, race_id, question_text, points, bonus_options(id, label)')
-            .in('race_id', eligibleRaceIds)
-            .is('tenant_id', null)
-            .eq('is_active', true)
-            .order('points', { ascending: false }),
-          supabase
-            .from('race_bonus_answers')
-            .select('race_id, bonus_question_id, correct_bonus_option_id')
-            .in('race_id', eligibleRaceIds),
-        ])
-      : [{ data: [] }, { data: [] }, { data: [] }]
+      ? await supabase
+          .from('race_results')
+          .select('race_id, p1_driver_id, p2_driver_id, p3_driver_id')
+          .in('race_id', eligibleRaceIds)
+      : { data: [] }
 
   const resultsByRace = new Map(
     ((resultsResponse.data || []) as RaceResultRow[]).map((result) => [result.race_id, result])
   )
-  const bonusQuestionsByRace = new Map<string, BonusQuestionRow[]>()
-  const bonusAnswersByRace = new Map<string, RaceBonusAnswerRow[]>()
-
-  for (const question of (questionsResponse.data || []) as BonusQuestionRow[]) {
-    const current = bonusQuestionsByRace.get(question.race_id) || []
-    current.push(question)
-    bonusQuestionsByRace.set(question.race_id, current)
-  }
-
-  for (const answer of (answersResponse.data || []) as RaceBonusAnswerRow[]) {
-    const current = bonusAnswersByRace.get(answer.race_id) || []
-    current.push(answer)
-    bonusAnswersByRace.set(answer.race_id, current)
-  }
 
   const batchRaces = eligibleRaces.map((race) => {
     const existingResult = resultsByRace.get(race.id) || null
@@ -133,9 +87,7 @@ export default async function AdminResultsPage() {
       effectiveStatus,
       hasExistingResult: Boolean(existingResult),
       selectedByDefault: !existingResult || effectiveStatus === 'completed',
-      bonusQuestions: bonusQuestionsByRace.get(race.id) || [],
       existingResult,
-      existingBonusAnswers: bonusAnswersByRace.get(race.id) || [],
     }
   })
 
@@ -152,7 +104,7 @@ export default async function AdminResultsPage() {
         <SectionHeader
           eyebrow="Admin"
           title="Results"
-          description="Save official podiums and bonus answers across multiple races."
+          description="Save official podiums across multiple races. Group bonus answers are handled by tenant admins."
           aside={<ClipboardCheck className="h-8 w-8 text-red-500" />}
         />
       </div>
@@ -191,7 +143,7 @@ export default async function AdminResultsPage() {
                 Official results will appear here after a race ends.
               </h2>
               <p className="max-w-2xl text-sm leading-6 text-slate-400">
-                When a race moves past start time, use this page to save the podium and bonus answers.
+                When a race moves past start time, use this page to save the podium.
                 Until then, use schedule sync and race setup from Admin.
               </p>
             </div>

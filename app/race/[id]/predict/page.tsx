@@ -174,7 +174,7 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
     .from('bonus_questions')
     .select('*, bonus_options(*)')
     .eq('race_id', id)
-    .or(`tenant_id.is.null,tenant_id.eq.${tenantContext.tenantId}`)
+    .eq('tenant_id', tenantContext.tenantId)
     .eq('is_active', true)
     .order('display_order')
 
@@ -395,21 +395,21 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
           />
 
           {effectiveStatus === 'upcoming' && groupRaceExperience && (
-            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
-                <Users className="h-4 w-4 text-red-300" />
-                Group grid
-              </div>
-              <div className="mt-2 font-bold text-white">
-                {groupRaceExperience.submittedEntries} of {groupRaceExperience.totalMembers} entries submitted
-              </div>
-              <p className="mt-1 text-sm text-slate-400">
+            <details className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+                <span className="flex items-center gap-2 text-sm font-bold text-slate-200">
+                  <Users className="h-4 w-4 text-red-300" />
+                  {groupRaceExperience.submittedEntries}/{groupRaceExperience.totalMembers} group entries
+                </span>
+                <span className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Details</span>
+              </summary>
+              <p className="mt-3 text-sm text-slate-400">
                 {groupRaceExperience.totalMembers > 0 &&
                 groupRaceExperience.submittedEntries === groupRaceExperience.totalMembers
-                  ? `Full grid. Everyone submitted for ${race.race_name}.`
+                  ? `Everyone submitted for ${race.race_name}.`
                   : 'Picks stay hidden until the deadline.'}
               </p>
-            </div>
+            </details>
           )}
         </div>
       </section>
@@ -543,7 +543,7 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
       )}
 
       {shouldShowReadOnlyState && (
-        <div className="grid gap-5 pb-12 xl:grid-cols-[minmax(0,1.2fr)_minmax(0,0.8fr)]">
+        <div className="space-y-5 pb-12">
           <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-2xl md:p-6">
             <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
               <SectionHeader

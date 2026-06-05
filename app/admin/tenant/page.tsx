@@ -5,10 +5,6 @@ import {
   Building2,
   CalendarClock,
   ClipboardCheck,
-  Link2,
-  ShieldCheck,
-  Trophy,
-  UserCheck,
 } from 'lucide-react'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { getCurrentSeason } from '@/utils/season'
@@ -28,6 +24,7 @@ import {
   TenantBonusPanel,
   type TenantBonusAnswer,
   type TenantBonusQuestion,
+  type TenantBonusVenueOption,
 } from './tenant-bonus-panel'
 import {
   getPlatformNotificationTiming,
@@ -199,6 +196,11 @@ export default async function TenantAdminPage() {
     .neq('status', 'cancelled')
     .order('race_start_at', { ascending: true })
 
+  const { data: venueOptions } = await supabase
+    .from('circuits')
+    .select('id, name, country, emoji')
+    .order('name')
+
   const typedTenant = (tenantResult.data as TenantRecord | null) ?? null
   const typedMembers = ((membersResult.data || []) as TenantMember[]).map((member) => ({
     ...member,
@@ -354,9 +356,6 @@ export default async function TenantAdminPage() {
   const tenantAdminCount = typedMembers.filter(
     (member) => member.role === 'admin' && member.admin_scope === 'tenant'
   ).length
-  const platformAdminCount = typedMembers.filter(
-    (member) => member.role === 'admin' && member.admin_scope === 'platform'
-  ).length
   const nextRaceCoverage = featuredRace ? nextRacePredictionUserIds.size : 0
   const missingFeaturedRaceMembers = featuredRace
     ? operationalMembers.filter((member) => !nextRacePredictionUserIds.has(member.id))
@@ -364,10 +363,6 @@ export default async function TenantAdminPage() {
   const coveragePercent =
     featuredRace && operationalMembers.length > 0
       ? Math.round((nextRaceCoverage / operationalMembers.length) * 100)
-      : 0
-  const missedEntriesCount =
-    settledRaceIds.length > 0
-      ? settledRaceIds.length * operationalMembers.length - ((settledPredictions || []) as PredictionEntry[]).length
       : 0
   const openItemsCount =
     (featuredRace ? missingFeaturedRaceMembers.length : 0) +
@@ -624,6 +619,7 @@ export default async function TenantAdminPage() {
         }))}
         questions={typedTenantBonusQuestions}
         answers={typedTenantBonusAnswers}
+        venueOptions={(venueOptions || []) as TenantBonusVenueOption[]}
       />
 
       <div className="grid gap-4 md:grid-cols-4">

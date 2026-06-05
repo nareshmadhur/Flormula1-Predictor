@@ -189,7 +189,7 @@ export default async function UserHistoryPage() {
           .from('bonus_questions')
           .select('id, race_id, question_text, bonus_options(id, label)')
           .in('race_id', raceIds)
-          .or(`tenant_id.is.null,tenant_id.eq.${tenantContext.tenantId}`)
+          .eq('tenant_id', tenantContext.tenantId)
           .eq('is_active', true)
           .order('display_order')
       : Promise.resolve({ data: [] as BonusQuestionRow[] }),

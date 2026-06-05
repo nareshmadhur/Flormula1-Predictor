@@ -487,7 +487,7 @@ export default async function HomePage() {
         </>
       )}
 
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="space-y-4">
         <section className={`rounded-3xl border border-white/10 bg-card p-6 shadow-xl ${showLatestRecapFirst ? 'order-2' : ''}`}>
           <SectionHeader eyebrow="Next race" title="Next race" />
 

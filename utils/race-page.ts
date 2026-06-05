@@ -102,22 +102,13 @@ export const getPublicRacePageData = cache(async (raceId: string) => {
         .from('drivers')
         .select('id, code, full_name, emoji')
         .order('full_name'),
-      supabase
-        .from('bonus_questions')
-        .select('id, question_text, points, bonus_options(id, label)')
-        .eq('race_id', raceId)
-        .is('tenant_id', null)
-        .eq('is_active', true)
-        .order('display_order'),
+      Promise.resolve({ data: [] as PublicRaceBonusQuestion[] }),
       supabase
         .from('race_results')
         .select('p1_driver_id, p2_driver_id, p3_driver_id')
         .eq('race_id', raceId)
         .maybeSingle(),
-      supabase
-        .from('race_bonus_answers')
-        .select('bonus_question_id, correct_bonus_option_id')
-        .eq('race_id', raceId),
+      Promise.resolve({ data: [] as PublicRaceBonusAnswer[] }),
       supabase
         .from('user_race_scores')
         .select('user_id, total_points, podium_points, bonus_points, exact_hits, profiles(display_name, email, is_test, tenants(is_test))')

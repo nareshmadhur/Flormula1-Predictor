@@ -94,7 +94,7 @@ export async function submitPrediction(formData: FormData) {
         .from('bonus_questions')
         .select('id, bonus_options(id)')
         .eq('race_id', raceId)
-        .or(`tenant_id.is.null,tenant_id.eq.${tenantId}`)
+        .eq('tenant_id', tenantId)
         .eq('is_active', true)
 
       if (questionsError) {

@@ -1,5 +1,5 @@
 import { createClient } from '@/utils/supabase/server'
-import { ArrowRight, ChevronDown, Medal, Target, TrendingUp, Trophy, UsersRound } from 'lucide-react'
+import { ArrowRight, ChevronDown, Medal, Trophy, UsersRound } from 'lucide-react'
 import { format } from 'date-fns'
 import { getRoundLabel } from '@/utils/race-copy'
 import { getCurrentSeason } from '@/utils/season'
@@ -138,14 +138,6 @@ function getSlotStatusText(slot: PodiumSlotBreakdown) {
   if (slot.outcome === 'exact') return '✓'
   if (slot.outcome === 'podium') return slot.actualPositionLabel ? slot.actualPositionLabel : 'podium'
   return '✕'
-}
-
-function getLatestMovementLabel(currentRank: number | null, previousRank: number | null) {
-  if (!currentRank) return 'Not ranked yet'
-  if (!previousRank) return `New at #${currentRank}`
-  if (currentRank < previousRank) return `Up ${previousRank - currentRank} position${previousRank - currentRank === 1 ? '' : 's'}`
-  if (currentRank > previousRank) return `Down ${currentRank - previousRank} position${currentRank - previousRank === 1 ? '' : 's'}`
-  return `Holding #${currentRank}`
 }
 
 const summaryGridTemplate = '4rem minmax(0,1fr) 5.5rem 5.5rem 5.5rem 1.5rem'
@@ -329,41 +321,6 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
     driversById,
     userTenantById,
   })
-  const nextReachableEntry =
-    currentUserRank && currentUserRank > 1
-      ? sortedVisibleLeaderboard[currentUserRank - 2] || null
-      : null
-  const nextReachableProfile = nextReachableEntry ? getLeaderboardProfile(nextReachableEntry) : null
-  const pointsToNextPosition =
-    currentUserEntry && nextReachableEntry
-      ? nextReachableEntry.total_points - currentUserEntry.total_points
-      : 0
-  const latestScoredRaceId = scoredRaceIds[0]
-  const latestScoreByUserId = new Map(
-    raceScoreRows
-      .filter((score) => score.race_id === latestScoredRaceId)
-      .map((score) => [score.user_id, score])
-  )
-  const previousVisibleLeaderboard = sortCompetitionStandings(
-    sortedVisibleLeaderboard.flatMap((entry) => {
-      const latestScore = latestScoreByUserId.get(entry.user_id)
-      const previousEntry = {
-        ...entry,
-        total_points: entry.total_points - (latestScore?.total_points || 0),
-        exact_hits: entry.exact_hits - (latestScore?.exact_hits || 0),
-        races_scored: entry.races_scored - (latestScore ? 1 : 0),
-      }
-
-      return previousEntry.races_scored > 0 ? [previousEntry] : []
-    })
-  )
-  const latestMovement = user
-    ? getLatestMovementLabel(
-        getCompetitionRank(sortedVisibleLeaderboard, user.id),
-        getCompetitionRank(previousVisibleLeaderboard, user.id)
-      )
-    : null
-
   return (
     <div className="space-y-5 animate-in fade-in duration-500">
       <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
@@ -404,66 +361,12 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
           </span>
         )}
 
-        {sortedVisibleLeaderboard.length > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${getOutcomeClasses('exact')}`}
-            >
-              <span className="h-2 w-2 rounded-full bg-current opacity-80" />
-              Exact
-            </span>
-            <span
-              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${getOutcomeClasses('podium')}`}
-            >
-              <span className="h-2 w-2 rounded-full bg-current opacity-80" />
-              Right driver
-            </span>
-            <span
-              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${getOutcomeClasses('miss')}`}
-            >
-              <span className="h-2 w-2 rounded-full bg-current opacity-80" />
-              Miss
-            </span>
-          </div>
-        )}
-
         {!user && sortedVisibleLeaderboard.length > 0 && (
           <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-sm font-bold text-slate-300">
             {sortedVisibleLeaderboard.length} players
           </span>
         )}
       </div>
-
-      {user && currentUserRank && currentUserEntry && (
-        <section className="grid gap-3 md:grid-cols-2">
-          <div className="rounded-2xl border border-red-500/20 bg-red-500/10 p-4">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-red-200">
-              <Target className="h-4 w-4" />
-              Next target
-            </div>
-            <div className="mt-2 text-lg font-black italic text-white">
-              {nextReachableEntry
-                ? `${pointsToNextPosition} pt${pointsToNextPosition === 1 ? '' : 's'} from #${currentUserRank - 1}`
-                : 'You are leading this table'}
-            </div>
-            <p className="mt-1 text-sm text-red-50/75">
-              {nextReachableEntry
-                ? `${getProfileDisplayName(nextReachableProfile?.display_name, nextReachableProfile?.email)} is within reach.`
-                : 'Every new race is a chance to protect the lead.'}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-card p-4">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
-              <TrendingUp className="h-4 w-4 text-red-300" />
-              Latest race
-            </div>
-            <div className="mt-2 text-lg font-black italic text-white">{latestMovement}</div>
-            <p className="mt-1 text-sm text-slate-400">
-              {scoredRaces?.[0]?.race_name || 'Movement will appear after the first scored weekend.'}
-            </p>
-          </div>
-        </section>
-      )}
 
       {user && groupContext.role === 'user' && groupContext.tenantSlug === 'main' && (
         <section className="flex flex-col gap-3 rounded-2xl border border-red-500/15 bg-red-500/8 p-4 sm:flex-row sm:items-center sm:justify-between">

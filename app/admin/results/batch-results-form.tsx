@@ -19,27 +19,10 @@ type DriverRecord = {
   full_name: string
 }
 
-type BonusOptionRecord = {
-  id: string
-  label?: string | null
-}
-
-type BonusQuestionRecord = {
-  id: string
-  question_text: string
-  points: number
-  bonus_options?: BonusOptionRecord[]
-}
-
 type RaceResultRecord = {
   p1_driver_id?: string | null
   p2_driver_id?: string | null
   p3_driver_id?: string | null
-}
-
-type RaceBonusAnswerRecord = {
-  bonus_question_id: string
-  correct_bonus_option_id: string
 }
 
 type BatchResultRace = {
@@ -50,9 +33,7 @@ type BatchResultRace = {
   effectiveStatus: RaceStatus
   hasExistingResult: boolean
   selectedByDefault: boolean
-  bonusQuestions: BonusQuestionRecord[]
   existingResult: RaceResultRecord | null
-  existingBonusAnswers: RaceBonusAnswerRecord[]
 }
 
 type BatchResultsFormProps = {
@@ -121,8 +102,8 @@ export function BatchResultsForm({ races, drivers }: BatchResultsFormProps) {
               Multi-race save
             </div>
             <p className="max-w-2xl text-sm leading-6 text-slate-300">
-              Pick the weekends you want to update, save their podiums and bonus answers together, then run
-              scoring from the race page when you are ready.
+              Pick the weekends you want to update, save their podiums together, then run scoring from the race page
+              when you are ready. Group bonus answers are managed by tenant admins.
             </p>
           </div>
 
@@ -174,12 +155,6 @@ export function BatchResultsForm({ races, drivers }: BatchResultsFormProps) {
       <div className="space-y-4">
         {races.map((race) => {
           const selected = selectedRaceIds.has(race.id)
-          const answerMap = new Map(
-            race.existingBonusAnswers.map((answer) => [
-              answer.bonus_question_id,
-              answer.correct_bonus_option_id,
-            ])
-          )
 
           return (
             <section
@@ -249,7 +224,7 @@ export function BatchResultsForm({ races, drivers }: BatchResultsFormProps) {
 
               <fieldset
                 disabled={!selected || pending}
-                className={`grid gap-4 p-4 sm:p-5 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)] ${
+                className={`grid gap-4 p-4 sm:p-5 ${
                   selected ? '' : 'opacity-55'
                 }`}
               >
@@ -284,46 +259,6 @@ export function BatchResultsForm({ races, drivers }: BatchResultsFormProps) {
                       </div>
                     ))}
                   </div>
-                </div>
-
-                <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-                  <div className="mb-3 text-sm font-bold uppercase tracking-[0.22em] text-slate-400">
-                    Bonus answers
-                  </div>
-
-                  {race.bonusQuestions.length > 0 ? (
-                    <div className="grid gap-3">
-                      {race.bonusQuestions.map((question) => (
-                        <div key={question.id}>
-                          <label className="mb-1 block text-sm font-semibold text-white">
-                            {question.question_text}
-                            <span className="ml-2 text-xs uppercase tracking-[0.18em] text-slate-500">
-                              {question.points} pt{question.points === 1 ? '' : 's'}
-                            </span>
-                          </label>
-                          <select
-                            name={`race:${race.id}:bonus:${question.id}`}
-                            defaultValue={answerMap.get(question.id) || ''}
-                            required={selected}
-                            className="w-full rounded-xl border border-white/10 bg-black/40 px-3 py-2.5 text-sm text-white disabled:cursor-not-allowed disabled:text-slate-500"
-                          >
-                            <option value="" disabled className="bg-slate-900 text-white">
-                              Select answer
-                            </option>
-                            {question.bonus_options?.map((option) => (
-                              <option key={option.id} value={option.id} className="bg-slate-900 text-white">
-                                {option.label}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <div className="rounded-2xl border border-dashed border-white/10 bg-black/10 px-4 py-6 text-sm text-slate-500">
-                      No bonus answers are required for this weekend.
-                    </div>
-                  )}
                 </div>
               </fieldset>
             </section>

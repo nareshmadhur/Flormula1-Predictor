@@ -223,24 +223,9 @@ export async function saveBatchOfficialResults(
 
   try {
     const { supabase } = await assertPlatformAdmin()
-    const [{ data: races }, { data: bonusQuestions }] = await Promise.all([
-      supabase.from('races').select('id, race_name, season').in('id', selectedRaceIds),
-      supabase
-        .from('bonus_questions')
-        .select('id, race_id')
-        .in('race_id', selectedRaceIds)
-        .is('tenant_id', null)
-        .eq('is_active', true),
-    ])
+    const { data: races } = await supabase.from('races').select('id, race_name, season').in('id', selectedRaceIds)
 
     const raceById = new Map((races || []).map((race) => [race.id, race]))
-    const bonusQuestionIdsByRace = new Map<string, string[]>()
-
-    for (const question of bonusQuestions || []) {
-      const current = bonusQuestionIdsByRace.get(question.race_id) || []
-      current.push(question.id)
-      bonusQuestionIdsByRace.set(question.race_id, current)
-    }
 
     let savedCount = 0
     const skippedRaceLabels: string[] = []
@@ -258,42 +243,11 @@ export async function saveBatchOfficialResults(
         continue
       }
 
-      const raceQuestionIds = bonusQuestionIdsByRace.get(raceId) || []
-      const bonusInserts: Array<{
-        race_id: string
-        bonus_question_id: string
-        correct_bonus_option_id: string
-      }> = []
-
-      let missingBonusAnswer = false
-      for (const questionId of raceQuestionIds) {
-        const optionId = String(formData.get(`race:${raceId}:bonus:${questionId}`) || '').trim()
-
-        if (!optionId) {
-          missingBonusAnswer = true
-          break
-        }
-
-        bonusInserts.push({
-          race_id: raceId,
-          bonus_question_id: questionId,
-          correct_bonus_option_id: optionId,
-        })
-      }
-
-      if (missingBonusAnswer) {
-        skippedRaceLabels.push(raceLabel)
-        continue
-      }
-
       try {
         await saveOfficialRaceResult(supabase, {
           raceId,
           podium: { p1, p2, p3 },
-          bonusAnswers: bonusInserts.map((answer) => ({
-            questionId: answer.bonus_question_id,
-            optionId: answer.correct_bonus_option_id,
-          })),
+          bonusAnswers: [],
         })
       } catch {
         return {
@@ -308,7 +262,7 @@ export async function saveBatchOfficialResults(
     if (savedCount === 0) {
       return {
         status: 'error',
-        message: 'Nothing was saved. Finish all podium fields and any bonus answers for the races you selected.',
+        message: 'Nothing was saved. Finish all podium fields for the races you selected.',
       }
     }
 

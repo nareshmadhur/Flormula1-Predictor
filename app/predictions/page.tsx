@@ -580,7 +580,7 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
         </section>
       )}
 
-      <section className="grid gap-5 xl:grid-cols-[minmax(0,1.5fr)_21rem]">
+      <section className="space-y-5">
         <div className="overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-slate-900 to-black shadow-2xl">
           <div className="space-y-5 p-6 md:p-8">
             <div className="flex flex-wrap items-center gap-2">
@@ -632,21 +632,21 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
                 />
 
                 {hero.race.id === nextOpenRace?.id && nextOpenRaceExperience && (
-                  <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
-                    <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-400">
-                      <Users className="h-4 w-4 text-red-300" />
-                      Group grid
-                    </div>
-                    <div className="mt-2 text-lg font-bold text-white">
-                      {nextOpenRaceExperience.submittedEntries} of {nextOpenRaceExperience.totalMembers} entries submitted
-                    </div>
-                    <p className="mt-1 text-sm text-slate-400">
+                  <details className="mt-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4">
+                    <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+                      <span className="flex items-center gap-2 text-sm font-bold text-slate-200">
+                        <Users className="h-4 w-4 text-red-300" />
+                        {nextOpenRaceExperience.submittedEntries}/{nextOpenRaceExperience.totalMembers} group entries
+                      </span>
+                      <span className="text-xs font-bold uppercase tracking-[0.16em] text-slate-500">Details</span>
+                    </summary>
+                    <p className="mt-3 text-sm text-slate-400">
                       {nextOpenRaceExperience.totalMembers > 0 &&
                       nextOpenRaceExperience.submittedEntries === nextOpenRaceExperience.totalMembers
-                        ? `Full grid. Everyone submitted for ${hero.race.race_name}.`
+                        ? `Everyone submitted for ${hero.race.race_name}.`
                         : 'Picks stay hidden until the deadline.'}
                     </p>
-                  </div>
+                  </details>
                 )}
 
                 <div className="mt-4 flex items-center text-slate-400">
@@ -697,43 +697,26 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
           </div>
         </div>
 
-        <aside className="self-start rounded-3xl border border-white/10 bg-card p-5 shadow-2xl xl:sticky xl:top-24">
-          <div className="space-y-2">
-            <div className="text-xs font-bold uppercase tracking-[0.25em] text-slate-500">My races</div>
-            <h2 className="text-2xl font-black italic tracking-tight text-white">Race views</h2>
-          </div>
+        <nav className="flex gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Race views">
+          {filterCards.map((card) => {
+            const isActive = card.key === activeTab
 
-          <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-1">
-            {filterCards.map((card) => {
-              const Icon = card.icon
-              const isActive = card.key === activeTab
-
-              return (
-                <PendingLink
-                  key={card.key}
-                  href={card.href}
-                  className={`rounded-2xl border p-4 text-left transition-all ${
-                    isActive
-                      ? 'border-red-500/30 bg-red-500/10 shadow-[0_0_20px_rgba(239,68,68,0.12)]'
-                      : 'border-white/10 bg-black/20 hover:bg-white/[0.03]'
-                  }`}
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 text-sm font-bold text-slate-100">
-                        <Icon className={`h-4 w-4 ${isActive ? 'text-red-300' : 'text-slate-400'}`} />
-                        {card.label}
-                      </div>
-                    </div>
-                    <div className={`shrink-0 text-3xl font-black italic ${isActive ? 'text-red-300' : 'text-white'}`}>
-                      {card.count}
-                    </div>
-                  </div>
-                </PendingLink>
-              )
-            })}
-          </div>
-        </aside>
+            return (
+              <PendingLink
+                key={card.key}
+                href={card.href}
+                className={`inline-flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-sm font-bold transition-colors ${
+                  isActive
+                    ? 'border-red-500/35 bg-red-500/15 text-red-100'
+                    : 'border-white/10 bg-white/5 text-slate-200 hover:bg-white/10'
+                }`}
+              >
+                {card.label}
+                <span className="rounded-full bg-black/25 px-2 py-0.5 text-xs">{card.count}</span>
+              </PendingLink>
+            )
+          })}
+        </nav>
       </section>
 
       <section className="space-y-4">

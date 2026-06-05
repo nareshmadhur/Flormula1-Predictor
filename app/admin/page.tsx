@@ -80,15 +80,7 @@ export default async function AdminDashboardPage() {
   const reviewRaces = [...resultRaces, ...liveRaces].sort(
     (left, right) => new Date(right.race_start_at).getTime() - new Date(left.race_start_at).getTime()
   )
-  const { count: nextSetupBonusCount } = nextSetupRace
-    ? await supabase
-        .from('bonus_questions')
-        .select('*', { count: 'exact', head: true })
-        .eq('race_id', nextSetupRace.id)
-        .is('tenant_id', null)
-        .eq('is_active', true)
-    : { count: 0 }
-  const raceSetupHref = nextSetupRace ? `/admin/races/${nextSetupRace.id}#bonus-questions` : '/admin/schedule'
+  const raceSetupHref = nextSetupRace ? `/admin/races/${nextSetupRace.id}#openf1-sync` : '/admin/schedule'
 
   return (
     <div className="space-y-7 animate-in fade-in duration-500">
@@ -120,7 +112,7 @@ export default async function AdminDashboardPage() {
               <div className="min-w-0">
                 <h2 className="break-words text-xl font-bold tracking-tight text-white">Races waiting for results</h2>
                 <p className="mt-1 break-words text-sm text-red-100/80">
-                  Enter podiums and bonus answers before scoring.
+                  Enter podiums before scoring. Group bonus answers live in tenant admin.
                 </p>
               </div>
             </div>
@@ -169,7 +161,7 @@ export default async function AdminDashboardPage() {
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-red-100/80">
               {nextSetupRace
-                ? `Add or review bonus questions before entries close. ${nextSetupBonusCount || 0} active question${nextSetupBonusCount === 1 ? '' : 's'} configured.`
+                ? 'Review schedule timing and OpenF1 linkage. Group bonus questions are managed by tenant admins.'
                 : 'Use schedule sync to create or open the next race first.'}
             </p>
           </div>
@@ -212,7 +204,7 @@ export default async function AdminDashboardPage() {
               </div>
               <h2 className="text-base font-bold leading-tight text-white">Race setup</h2>
               <p className="mt-1 break-words text-sm text-slate-400">
-                Add bonus questions or update race timing.
+                Update race timing, source links, and official result flow.
               </p>
             </div>
             <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
