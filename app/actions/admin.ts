@@ -5,7 +5,7 @@ import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { rebuildLeaderboardForSeason } from '@/utils/leaderboard'
 import { assertPlatformAdmin } from '@/utils/admin-access'
 import { parseAmsterdamInputToIso } from '@/utils/amsterdam-time'
-import { invalidateRaceScores } from '@/utils/race-scoring'
+import { recalculateRaceScoresIfResultExists } from '@/utils/race-scoring'
 import { saveOfficialRaceResult } from '@/utils/result-pipeline'
 import {
   buildOpenF1ScheduleReview,
@@ -249,6 +249,7 @@ export async function saveBatchOfficialResults(
           podium: { p1, p2, p3 },
           bonusAnswers: [],
         })
+        await recalculateRaceScoresIfResultExists(supabase, raceId)
       } catch {
         return {
           status: 'error',
@@ -406,10 +407,10 @@ export async function deleteBonusQuestion(formData: FormData) {
   
   if (!questionId) throw new Error('Missing question ID')
 
-  await invalidateRaceScores(supabase, raceId)
-
   const { error } = await supabase.from('bonus_questions').delete().eq('id', questionId)
   if (error) throw new Error('Failed to delete question')
+
+  await recalculateRaceScoresIfResultExists(supabase, raceId)
 
   revalidatePath(`/admin/races/${raceId}`)
   revalidatePath(`/race/${raceId}`)
@@ -431,8 +432,6 @@ export async function updateBonusQuestion(formData: FormData) {
   const optionIds = Array.from(formData.getAll('option_ids')) as string[]
 
   if (!questionId) throw new Error('Missing question ID')
-
-  await invalidateRaceScores(supabase, raceId)
 
   const { error } = await supabase.from('bonus_questions').update({
     question_text: questionText,
@@ -457,6 +456,8 @@ export async function updateBonusQuestion(formData: FormData) {
          if (optionError) throw new Error('Failed to delete bonus option')
      }
   }
+
+  await recalculateRaceScoresIfResultExists(supabase, raceId)
 
   revalidatePath(`/admin/races/${raceId}`)
   revalidatePath(`/race/${raceId}`)

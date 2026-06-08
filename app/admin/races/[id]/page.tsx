@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
-import { Plus, CheckCircle, Calculator, Settings, Users, CalendarSync, ExternalLink } from 'lucide-react'
+import { Plus, CheckCircle, Calculator, Settings, Users, CalendarSync, ExternalLink, HelpCircle } from 'lucide-react'
 import { revalidatePath } from 'next/cache'
 import DeleteRaceButton from './delete-button'
 import CancelRaceButton from './cancel-button'
@@ -10,7 +10,7 @@ import { calculateRaceScoresAction } from '@/app/actions/scoring'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { getProfileDisplayName } from '@/utils/profile-name'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
-import { recalculateRaceScores } from '@/utils/race-scoring'
+import { recalculateRaceScores, recalculateRaceScoresIfResultExists } from '@/utils/race-scoring'
 import { saveHistoricPrediction, saveOfficialRaceResult } from '@/utils/result-pipeline'
 import { getAdminRaceStatusBadgeClasses, getAdminRaceStatusLabel } from '@/utils/admin-race-status'
 import {
@@ -27,6 +27,16 @@ import { FormActionButton } from '@/components/ui/form-action-button'
 import { PageBackLink } from '@/components/ui/page-back-link'
 import { OpenF1RaceSyncForm } from './openf1-race-sync-form'
 import { PendingLink } from '@/components/ui/pending-link'
+import {
+  TenantBonusPanel,
+  type TenantBonusAnswer,
+  type TenantBonusConstructorOption,
+  type TenantBonusDriverOption,
+  type TenantBonusQuestion,
+  type TenantBonusVenueOption,
+} from '@/app/admin/tenant/tenant-bonus-panel'
+import { BonusAuditLog } from '@/components/ui/bonus-audit-log'
+import { getRaceBonusAuditEntries } from '@/utils/bonus-audit'
 
 export const revalidate = 0
 
@@ -74,6 +84,17 @@ type ProfileRecord = {
   email?: string | null
 }
 
+type TenantRecord = {
+  id: string
+  name: string
+  slug?: string | null
+  is_test?: boolean | null
+}
+
+type PlatformTenantBonusQuestion = TenantBonusQuestion & {
+  tenant_id?: string | null
+}
+
 async function saveResults(formData: FormData) {
   'use server'
   const supabase = await createClient()
@@ -90,6 +111,7 @@ async function saveResults(formData: FormData) {
     podium: { p1, p2, p3 },
     bonusAnswers: [],
   })
+  await recalculateRaceScoresIfResultExists(supabase, raceId)
 
   revalidatePath(`/admin/races/${raceId}`)
   revalidatePath('/admin/results')
@@ -156,15 +178,36 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
   if (!race) return <div className="p-20 text-center">Race not found.</div>
 
   const { data: drivers } = await supabase.from('drivers').select('*').order('full_name')
+  const { data: constructors } = await supabase.from('constructors').select('id, name, short_code, emoji').order('name')
   const { data: circuits } = await supabase.from('circuits').select('*').order('name')
   const { data: existingResult } = await supabase.from('race_results').select('*').eq('race_id', id).single()
   const { data: profiles } = await supabase.from('profiles').select('*').order('display_name')
+  const { data: tenants } = await supabase.from('tenants').select('id, name, slug, is_test').order('name')
+  const { data: tenantBonusQuestions } = await supabase
+    .from('bonus_questions')
+    .select('id, race_id, tenant_id, question_text, points, display_order, bonus_options(id, label)')
+    .eq('race_id', id)
+    .eq('is_active', true)
+    .order('display_order', { ascending: true })
 
   const typedRace = race as RaceRecord
   const typedDrivers = (drivers || []) as DriverRecord[]
+  const typedConstructors = (constructors || []) as TenantBonusConstructorOption[]
   const typedCircuits = (circuits || []) as CircuitRecord[]
   const typedExistingResult = (existingResult || null) as RaceResultRecord | null
   const typedProfiles = (profiles || []) as ProfileRecord[]
+  const typedTenants = (tenants || []) as TenantRecord[]
+  const typedTenantBonusQuestions = (tenantBonusQuestions || []) as PlatformTenantBonusQuestion[]
+  const tenantBonusQuestionIds = typedTenantBonusQuestions.map((question) => question.id)
+  const { data: tenantBonusAnswers } =
+    tenantBonusQuestionIds.length > 0
+      ? await supabase
+          .from('race_bonus_answers')
+          .select('race_id, bonus_question_id, correct_bonus_option_id')
+          .in('bonus_question_id', tenantBonusQuestionIds)
+      : { data: [] as TenantBonusAnswer[] }
+  const typedTenantBonusAnswers = (tenantBonusAnswers || []) as TenantBonusAnswer[]
+  const bonusAuditEntries = await getRaceBonusAuditEntries(supabase, id)
   const effectiveStatus = getEffectiveRaceStatus(typedRace)
   let suggestedPodium = null
   let openF1Review: OpenF1ScheduleReviewRow | null = null
@@ -227,15 +270,42 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
       href: '#official-results',
       eyebrow: 'Results',
       title: 'Official results',
-      detail: typedExistingResult ? 'Podium is saved. Review before rescoring if needed.' : 'Save the podium once the race is complete.',
+      detail: typedExistingResult ? 'Podium is saved and scores refresh automatically.' : 'Save the podium once the race is complete.',
     },
     {
-      href: '#scoring',
-      eyebrow: 'Publish',
-      title: 'Scoring',
-      detail: typedExistingResult ? 'Recalculate from saved results and current predictions.' : 'Scoring unlocks after official results are saved.',
+      href: '#group-bonus',
+      eyebrow: 'Bonus',
+      title: 'Group bonuses',
+      detail: 'Review and override tenant bonus questions and answers.',
     },
   ]
+  const tenantBonusGroups = typedTenants.map((tenant) => {
+    const questionsForTenant = typedTenantBonusQuestions.filter((question) => question.tenant_id === tenant.id)
+    const questionIds = new Set(questionsForTenant.map((question) => question.id))
+
+    return {
+      tenant,
+      questions: questionsForTenant,
+      answers: typedTenantBonusAnswers.filter((answer) => questionIds.has(answer.bonus_question_id)),
+    }
+  })
+  const bonusRace = {
+    id: typedRace.id,
+    round: typedRace.round,
+    race_name: typedRace.race_name,
+    effectiveStatus,
+  }
+  const driverOptions = typedDrivers.map((driver) => ({
+    id: driver.id,
+    code: driver.code,
+    full_name: driver.full_name,
+  })) satisfies TenantBonusDriverOption[]
+  const venueOptions = typedCircuits.map((circuit) => ({
+    id: circuit.id,
+    name: circuit.name,
+    country: circuit.country,
+    emoji: circuit.emoji,
+  })) satisfies TenantBonusVenueOption[]
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -536,7 +606,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
           <div id="official-results" className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl scroll-mt-28">
              <h2 className="text-xl font-bold mb-4 flex items-center"><CheckCircle className="w-5 h-5 mr-2 text-red-500" /> Official results</h2>
              <p className="mb-4 text-sm text-slate-400">
-               Save the published podium here. Group bonus answers are handled from each tenant admin workspace. When OpenF1 has classified results, matching drivers are suggested automatically before you save.
+               Save the published podium here. Scores recalculate automatically after saving. When OpenF1 has classified results, matching drivers are suggested automatically before you save.
              </p>
              {openF1PodiumError && (
                <div className="mb-4 rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
@@ -553,23 +623,74 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
              />
           </div>
 
-          <div id="scoring" className="bg-card border border-white/5 rounded-2xl p-6 shadow-xl scroll-mt-28">
-             <h2 className="text-xl font-bold mb-4 flex items-center"><Calculator className="w-5 h-5 mr-2 text-red-500" /> Scoring</h2>
-             <p className="text-sm text-slate-400 mb-4">
-               Keep scoring manual for now, but safe to rerun. This recalculates from the current predictions, official podium, and group bonus answers.
-             </p>
+          <section id="group-bonus" className="space-y-5 scroll-mt-28">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+              <div>
+                <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-slate-500">
+                  <HelpCircle className="h-4 w-4" />
+                  Group bonus control
+                </div>
+                <h2 className="mt-2 text-2xl font-bold tracking-tight text-white">Tenant bonus questions</h2>
+                <p className="mt-1 max-w-3xl text-sm text-slate-400">
+                  Platform admins can review and override bonus questions and answers for every group on this race.
+                </p>
+              </div>
+              <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-sm font-bold text-slate-300">
+                {typedTenantBonusQuestions.length} question{typedTenantBonusQuestions.length === 1 ? '' : 's'}
+              </div>
+            </div>
 
-             <form action={calculateRaceScoresAction}>
+            {tenantBonusGroups.length === 0 ? (
+              <div className="rounded-3xl border border-white/10 bg-card p-6 text-sm text-slate-400">
+                Create a group before adding tenant bonus questions.
+              </div>
+            ) : (
+              <div className="grid gap-5">
+                {tenantBonusGroups.map(({ tenant, questions, answers }) => (
+                  <TenantBonusPanel
+                    key={tenant.id}
+                    groupName={tenant.name}
+                    races={[bonusRace]}
+                    questions={questions}
+                    answers={answers}
+                    driverOptions={driverOptions}
+                    constructorOptions={typedConstructors}
+                    venueOptions={venueOptions}
+                    scopeTenantId={tenant.id}
+                    isPlatformScope
+                    sectionId={`group-bonus-${tenant.id}`}
+                  />
+                ))}
+              </div>
+            )}
+          </section>
+
+          <BonusAuditLog entries={bonusAuditEntries} />
+
+          <details id="scoring" className="group bg-card border border-amber-500/10 rounded-2xl p-6 shadow-xl scroll-mt-28">
+             <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
+               <div>
+                 <h2 className="text-xl font-bold flex items-center"><Calculator className="w-5 h-5 mr-2 text-amber-300" /> Scoring repair</h2>
+                 <p className="mt-2 text-sm text-slate-400">
+                   Results and bonus answer saves recalculate automatically. Use this only to repair historic drift.
+                 </p>
+               </div>
+               <span className="rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-amber-100">
+                 Advanced
+               </span>
+             </summary>
+
+             <form action={calculateRaceScoresAction} className="mt-6 border-t border-white/10 pt-6">
                 <input type="hidden" name="race_id" value={typedRace.id} />
                 <FormActionButton
-                  idleLabel={typedExistingResult ? 'Recalculate scores' : 'Save results first'}
-                  pendingLabel="Recalculating scores..."
+                  idleLabel={typedExistingResult ? 'Repair scores' : 'Save results first'}
+                  pendingLabel="Repairing scores..."
                   tone="light"
                   disabled={!typedExistingResult}
                   className="disabled:opacity-50"
                 />
              </form>
-          </div>
+          </details>
 
           {/* Proxy Prediction Form */}
           <details className="group bg-card border border-amber-500/10 rounded-2xl p-6 shadow-xl">

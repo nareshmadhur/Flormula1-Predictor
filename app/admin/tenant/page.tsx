@@ -4,7 +4,12 @@ import {
   ArrowRight,
   Building2,
   CalendarClock,
+  CalendarSync,
+  ChevronRight,
   ClipboardCheck,
+  HelpCircle,
+  MailCheck,
+  Trophy,
 } from 'lucide-react'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { getCurrentSeason } from '@/utils/season'
@@ -20,12 +25,7 @@ import { SectionHeader } from '@/components/ui/section-header'
 import { GroupInvitePanel } from './group-invite-panel'
 import { GroupRosterPanel } from './group-roster-panel'
 import { TenantNotificationTimingPanel } from './notification-timing-panel'
-import {
-  TenantBonusPanel,
-  type TenantBonusAnswer,
-  type TenantBonusQuestion,
-  type TenantBonusVenueOption,
-} from './tenant-bonus-panel'
+import type { TenantBonusAnswer, TenantBonusQuestion } from './tenant-bonus-panel'
 import {
   getPlatformNotificationTiming,
 } from '@/utils/notification-settings'
@@ -212,11 +212,6 @@ export default async function TenantAdminPage() {
     .neq('status', 'cancelled')
     .order('race_start_at', { ascending: true })
 
-  const { data: venueOptions } = await supabase
-    .from('circuits')
-    .select('id, name, country, emoji')
-    .order('name')
-
   const typedTenant = (tenantResult.data as TenantRecord | null) ?? null
   const typedMembers = ((membersResult.data || []) as TenantMember[]).map((member) => ({
     ...member,
@@ -286,6 +281,7 @@ export default async function TenantAdminPage() {
           new Date(featuredRace.prediction_lock_at).getTime() - defaultTenantLeadHours * 60 * 60 * 1000
         ).toISOString()
       : null
+  const featuredRaceAdminHref = featuredRace ? `/admin/tenant/races/${featuredRace.id}` : '/season'
 
   const { data: seasonRacePredictions } =
     seasonRaceIds.length > 0 && memberIds.length > 0
@@ -408,6 +404,16 @@ export default async function TenantAdminPage() {
     (featuredRace ? missingFeaturedRaceMembers.length : 0) +
     (activeInviteCount === 0 ? 1 : 0) +
     pendingTenantBonusAnswerCount
+  const pendingBonusRaceId = typedTenantBonusQuestions.find((question) => {
+    const status = statusByRaceId.get(question.race_id)
+    return status && status !== 'upcoming' && !tenantAnsweredQuestionIds.has(question.id)
+  })?.race_id
+  const bonusAdminHref =
+    pendingBonusRaceId
+      ? `/admin/tenant/races/${pendingBonusRaceId}#group-bonus`
+      : featuredRace
+        ? `/admin/tenant/races/${featuredRace.id}#group-bonus`
+        : '#all-race-pages'
 
   const roster = typedMembers.map((member) => {
     const standing = leaderboardByUserId.get(member.id)
@@ -455,34 +461,55 @@ export default async function TenantAdminPage() {
           )}
         </div>
 
-        <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Group admin shortcuts">
           <a
             href="#race-week-ops"
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-all hover:bg-red-500"
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-red-600 px-4 py-2 text-sm font-bold text-white transition-all hover:bg-red-500"
           >
-            Check entries
-            <ArrowRight className="h-4 w-4" />
+            <ClipboardCheck className="h-4 w-4" />
+            Race ops
           </a>
+          <PendingLink
+            href={bonusAdminHref}
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-sm font-bold text-slate-100 transition-all hover:bg-white/10"
+          >
+            <HelpCircle className="h-4 w-4" />
+            Bonus
+          </PendingLink>
           <a
             href="#group-invites"
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-sm font-bold text-slate-100 transition-all hover:bg-white/10"
           >
-            Invite people
-            <ArrowRight className="h-4 w-4" />
-          </a>
-          <a
-            href="#group-bonus"
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
-          >
-            Bonus questions
-            <ArrowRight className="h-4 w-4" />
+            <MailCheck className="h-4 w-4" />
+            Invites
           </a>
           <a
             href="#group-roster"
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/30 px-5 py-3 font-bold text-slate-100 transition-all hover:bg-white/10"
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-sm font-bold text-slate-100 transition-all hover:bg-white/10"
           >
-            Manage roster
-            <ArrowRight className="h-4 w-4" />
+            <Building2 className="h-4 w-4" />
+            Roster
+          </a>
+          <a
+            href="#reminders"
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-sm font-bold text-slate-100 transition-all hover:bg-white/10"
+          >
+            <CalendarClock className="h-4 w-4" />
+            Reminders
+          </a>
+          <PendingLink
+            href="/leaderboard?view=tenant"
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-sm font-bold text-slate-100 transition-all hover:bg-white/10"
+          >
+            <Trophy className="h-4 w-4" />
+            Standings
+          </PendingLink>
+          <a
+            href="#all-race-pages"
+            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-sm font-bold text-slate-100 transition-all hover:bg-white/10"
+          >
+            <CalendarSync className="h-4 w-4" />
+            All races
           </a>
         </div>
       </div>
@@ -498,7 +525,7 @@ export default async function TenantAdminPage() {
 
         <div className="mt-4">
           <PendingLink
-            href={featuredRace ? `/race/${featuredRace.id}/predict` : '/season'}
+            href={featuredRaceAdminHref}
             className="group block rounded-2xl border border-red-500/20 bg-red-500/10 p-5 transition-colors hover:bg-red-500/14"
           >
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-red-100">
@@ -521,7 +548,7 @@ export default async function TenantAdminPage() {
               </div>
             </div>
             <span className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white transition-colors group-hover:bg-red-500">
-              View race
+              Open race admin
               <ArrowRight className="h-4 w-4" />
             </span>
           </PendingLink>
@@ -554,10 +581,10 @@ export default async function TenantAdminPage() {
                 )}
                 <div className="mt-5 flex flex-wrap gap-3">
                   <PendingLink
-                    href={`/race/${featuredRace.id}/predict`}
+                    href={`/admin/tenant/races/${featuredRace.id}`}
                     className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
                   >
-                    View race
+                    Open race admin
                     <ArrowRight className="h-4 w-4" />
                   </PendingLink>
                   <a
@@ -620,7 +647,7 @@ export default async function TenantAdminPage() {
                 tenantRaceRows.map((row) => (
                   <PendingLink
                     key={row.race.id}
-                    href={`/race/${row.race.id}/predict`}
+                    href={`/admin/tenant/races/${row.race.id}`}
                     className="group grid min-w-0 gap-3 border-b border-white/5 p-4 transition-colors last:border-b-0 hover:bg-white/[0.03] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
                   >
                     <div className="min-w-0">
@@ -647,13 +674,15 @@ export default async function TenantAdminPage() {
             </div>
           </section>
 
-          <TenantNotificationTimingPanel
-            groupName={typedTenant?.name || 'This group'}
-            currentLeadHoursLabel={timingHeading}
-            defaultLeadHours={defaultTenantLeadHours}
-            overrideLeadHours={tenantOverrideLeadHours}
-            timingSummary={timingSummary}
-          />
+          <div id="reminders" className="scroll-mt-28">
+            <TenantNotificationTimingPanel
+              groupName={typedTenant?.name || 'This group'}
+              currentLeadHoursLabel={timingHeading}
+              defaultLeadHours={defaultTenantLeadHours}
+              overrideLeadHours={tenantOverrideLeadHours}
+              timingSummary={timingSummary}
+            />
+          </div>
         </div>
       </section>
 
@@ -664,18 +693,57 @@ export default async function TenantAdminPage() {
         migrationNotice={inviteMigrationNotice}
       />
 
-      <TenantBonusPanel
-        groupName={typedTenant?.name || 'This group'}
-        races={typedRaces.map((race) => ({
-          id: race.id,
-          round: race.round,
-          race_name: race.race_name,
-          effectiveStatus: getEffectiveRaceStatus(race),
-        }))}
-        questions={typedTenantBonusQuestions}
-        answers={typedTenantBonusAnswers}
-        venueOptions={(venueOptions || []) as TenantBonusVenueOption[]}
-      />
+      <details id="all-race-pages" className="group border-t border-white/10 pt-5 scroll-mt-28">
+        <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
+          <div className="min-w-0">
+            <div className="break-words text-xs font-bold uppercase leading-5 tracking-[0.16em] text-slate-500 sm:tracking-[0.22em]">Calendar reference</div>
+            <h2 className="mt-1 text-lg font-bold leading-tight text-white">All race detail pages</h2>
+            <p className="mt-1 max-w-2xl text-sm text-slate-400">
+              Open race admin pages for entries, results visibility, bonus questions, answers, and history.
+            </p>
+          </div>
+          <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-slate-500 transition-transform group-open:rotate-90" />
+        </summary>
+
+        <div className="mt-4 overflow-hidden rounded-2xl border border-white/5 bg-card shadow-xl">
+          {typedRaces.length === 0 ? (
+            <div className="p-8 text-center italic text-slate-500">No races available for this season.</div>
+          ) : (
+            typedRaces.map((race) => {
+              const status = getEffectiveRaceStatus(race)
+              const raceQuestions = typedTenantBonusQuestions.filter((question) => question.race_id === race.id)
+              const answeredCount = raceQuestions.filter((question) => tenantAnsweredQuestionIds.has(question.id)).length
+
+              return (
+                <PendingLink
+                  href={`/admin/tenant/races/${race.id}`}
+                  key={race.id}
+                  className="group grid min-w-0 gap-3 border-b border-white/5 p-4 transition-colors last:border-b-0 hover:bg-white/[0.02] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+                >
+                  <div className="min-w-0 space-y-1">
+                    <div className="text-xs font-bold uppercase tracking-widest text-red-500">
+                      Round {race.round} · {getRaceStageLabel(status)}
+                    </div>
+                    <div className="break-words text-base font-bold leading-tight text-white">{race.race_name}</div>
+                    <div className="break-words text-sm text-slate-400">
+                      {race.circuits?.name} {race.circuits?.emoji}
+                    </div>
+                  </div>
+
+                  <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 lg:justify-end">
+                    <div className="max-w-full rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-left text-[11px] font-bold uppercase leading-4 tracking-[0.14em] text-slate-300 sm:tracking-[0.18em] lg:text-right">
+                      {raceQuestions.length === 0
+                        ? 'No bonus'
+                        : `${answeredCount}/${raceQuestions.length} bonus answers`}
+                    </div>
+                    <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
+                  </div>
+                </PendingLink>
+              )
+            })
+          )}
+        </div>
+      </details>
 
       <GroupRosterPanel
         roster={roster}

@@ -23,12 +23,14 @@ type TenantBonusQuestionCardProps = {
   question: BonusQuestion
   raceId: string
   canEdit: boolean
+  scopeTenantId?: string
 }
 
 export function TenantBonusQuestionCard({
   question,
   raceId,
   canEdit,
+  scopeTenantId,
 }: TenantBonusQuestionCardProps) {
   const [isEditing, setIsEditing] = useState(false)
 
@@ -38,6 +40,7 @@ export function TenantBonusQuestionCard({
     const formData = new FormData()
     formData.append('question_id', question.id)
     formData.append('race_id', raceId)
+    if (scopeTenantId) formData.append('tenant_id', scopeTenantId)
     await deleteTenantBonusQuestion(formData)
   }
 
@@ -53,6 +56,7 @@ export function TenantBonusQuestionCard({
         >
           <input type="hidden" name="question_id" value={question.id} />
           <input type="hidden" name="race_id" value={raceId} />
+          {scopeTenantId && <input type="hidden" name="tenant_id" value={scopeTenantId} />}
 
           <div className="flex gap-2">
             <input

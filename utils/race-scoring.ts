@@ -1,6 +1,6 @@
 import { createClient } from '@/utils/supabase/server'
 
-type ScoringClient = Pick<Awaited<ReturnType<typeof createClient>>, 'rpc'>
+type ScoringClient = Pick<Awaited<ReturnType<typeof createClient>>, 'from' | 'rpc'>
 
 type RecalculateRaceScoresRow = {
   season: number
@@ -38,4 +38,20 @@ export async function recalculateRaceScores(supabase: ScoringClient, raceId: str
     season: result.season,
     predictionsCount: result.predictions_count,
   }
+}
+
+export async function recalculateRaceScoresIfResultExists(supabase: ScoringClient, raceId: string) {
+  const { data, error } = await supabase
+    .from('race_results')
+    .select('race_id')
+    .eq('race_id', raceId)
+    .maybeSingle()
+
+  if (error) {
+    throw new Error(error.message || 'Failed to check race result before recalculating scores')
+  }
+
+  if (!data) return null
+
+  return recalculateRaceScores(supabase, raceId)
 }

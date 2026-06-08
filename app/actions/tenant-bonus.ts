@@ -4,16 +4,20 @@ import { revalidatePath } from 'next/cache'
 import { createClient } from '@/utils/supabase/server'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
+import { recalculateRaceScoresIfResultExists } from '@/utils/race-scoring'
 import { saveTenantRaceBonusAnswers } from '@/utils/result-pipeline'
 import {
   buildBonusOptionInsertRows,
   getCleanBonusOptionLabels,
+  getSelectedConstructorOptionIds,
   getSelectedCircuitOptionIds,
+  getSelectedDriverOptionIds,
 } from '@/utils/bonus-option-inputs'
 
 type TenantBonusAccess = {
   supabase: Awaited<ReturnType<typeof createClient>>
   tenantId: string
+  isPlatformOverride: boolean
 }
 
 type RaceEditWindowRow = {
@@ -31,23 +35,47 @@ function revalidateTenantBonusPaths(raceId: string) {
   revalidatePath('/predictions')
   revalidatePath('/me/history')
   revalidatePath(`/race/${raceId}/predict`)
+  revalidatePath(`/admin/tenant/races/${raceId}`)
+  revalidatePath(`/admin/races/${raceId}`)
 }
 
-async function assertTenantBonusAccess(): Promise<TenantBonusAccess> {
+async function assertTenantBonusAccess(formData: FormData): Promise<TenantBonusAccess> {
   const supabase = await createClient()
   const access = await getAdminAccessContext(supabase)
+  const requestedTenantId = String(formData.get('tenant_id') || '').trim()
 
-  if (!access || !access.isAdmin || !access.tenantId) {
+  if (!access || !access.isAdmin) {
     throw new Error('Group admin access is required.')
   }
 
-  return { supabase, tenantId: access.tenantId }
+  if (access.isPlatformAdmin) {
+    const tenantId = requestedTenantId || access.tenantId
+
+    if (!tenantId) {
+      throw new Error('Choose a group before managing bonus questions.')
+    }
+
+    return { supabase, tenantId, isPlatformOverride: true }
+  }
+
+  if (!access.tenantId) {
+    throw new Error('Group admin access is required.')
+  }
+
+  if (requestedTenantId && requestedTenantId !== access.tenantId) {
+    throw new Error('You can only manage bonus questions for your group.')
+  }
+
+  return { supabase, tenantId: access.tenantId, isPlatformOverride: false }
 }
 
 async function assertQuestionEditWindow(
   supabase: Awaited<ReturnType<typeof createClient>>,
-  raceId: string
+  raceId: string,
+  allowAfterLock: boolean
 ) {
+  if (allowAfterLock) return
+
   const { data: race } = await supabase
     .from('races')
     .select('id, status, race_start_at, prediction_lock_at')
@@ -63,13 +91,28 @@ async function assertQuestionEditWindow(
   }
 }
 
+async function recalculateAndRevalidateRaceIfReady(
+  supabase: Awaited<ReturnType<typeof createClient>>,
+  raceId: string
+) {
+  await recalculateRaceScoresIfResultExists(supabase, raceId)
+  revalidateTenantBonusPaths(raceId)
+  revalidatePath('/admin')
+  revalidatePath('/admin/results')
+  revalidatePath('/season')
+}
+
 export async function addTenantBonusQuestion(formData: FormData) {
-  const { supabase, tenantId } = await assertTenantBonusAccess()
+  const { supabase, tenantId, isPlatformOverride } = await assertTenantBonusAccess(formData)
 
   const raceId = String(formData.get('race_id') || '').trim()
   const questionText = String(formData.get('question_text') || '').trim()
   const points = Number.parseInt(String(formData.get('points') || '1'), 10)
-  const optionCount = getCleanBonusOptionLabels(formData).length + getSelectedCircuitOptionIds(formData).length
+  const optionCount =
+    getCleanBonusOptionLabels(formData).length +
+    getSelectedDriverOptionIds(formData).length +
+    getSelectedConstructorOptionIds(formData).length +
+    getSelectedCircuitOptionIds(formData).length
 
   if (!raceId || !questionText) {
     throw new Error('Race and question text are required.')
@@ -83,7 +126,7 @@ export async function addTenantBonusQuestion(formData: FormData) {
     throw new Error('Add at least two options for a bonus question.')
   }
 
-  await assertQuestionEditWindow(supabase, raceId)
+  await assertQuestionEditWindow(supabase, raceId, isPlatformOverride)
   const optionDrafts = await buildBonusOptionInsertRows(supabase, DRAFT_QUESTION_ID, formData)
 
   const { data: question, error: questionError } = await supabase
@@ -112,11 +155,11 @@ export async function addTenantBonusQuestion(formData: FormData) {
     throw new Error(optionsError.message || 'Failed to add group bonus options.')
   }
 
-  revalidateTenantBonusPaths(raceId)
+  await recalculateAndRevalidateRaceIfReady(supabase, raceId)
 }
 
 export async function updateTenantBonusQuestion(formData: FormData) {
-  const { supabase, tenantId } = await assertTenantBonusAccess()
+  const { supabase, tenantId, isPlatformOverride } = await assertTenantBonusAccess(formData)
 
   const questionId = String(formData.get('question_id') || '').trim()
   const raceId = String(formData.get('race_id') || '').trim()
@@ -133,7 +176,7 @@ export async function updateTenantBonusQuestion(formData: FormData) {
     throw new Error('Bonus points must be between 1 and 25.')
   }
 
-  await assertQuestionEditWindow(supabase, raceId)
+  await assertQuestionEditWindow(supabase, raceId, isPlatformOverride)
 
   const { data: existingQuestion } = await supabase
     .from('bonus_questions')
@@ -191,11 +234,11 @@ export async function updateTenantBonusQuestion(formData: FormData) {
     }
   }
 
-  revalidateTenantBonusPaths(raceId)
+  await recalculateAndRevalidateRaceIfReady(supabase, raceId)
 }
 
 export async function deleteTenantBonusQuestion(formData: FormData) {
-  const { supabase, tenantId } = await assertTenantBonusAccess()
+  const { supabase, tenantId, isPlatformOverride } = await assertTenantBonusAccess(formData)
 
   const questionId = String(formData.get('question_id') || '').trim()
   const raceId = String(formData.get('race_id') || '').trim()
@@ -204,7 +247,7 @@ export async function deleteTenantBonusQuestion(formData: FormData) {
     throw new Error('Question and race are required.')
   }
 
-  await assertQuestionEditWindow(supabase, raceId)
+  await assertQuestionEditWindow(supabase, raceId, isPlatformOverride)
 
   const { error } = await supabase
     .from('bonus_questions')
@@ -217,11 +260,11 @@ export async function deleteTenantBonusQuestion(formData: FormData) {
     throw new Error(error.message || 'Failed to delete group bonus question.')
   }
 
-  revalidateTenantBonusPaths(raceId)
+  await recalculateAndRevalidateRaceIfReady(supabase, raceId)
 }
 
 export async function saveTenantBonusAnswers(formData: FormData) {
-  const { supabase, tenantId } = await assertTenantBonusAccess()
+  const { supabase, tenantId } = await assertTenantBonusAccess(formData)
 
   const raceId = String(formData.get('race_id') || '').trim()
 
@@ -258,8 +301,5 @@ export async function saveTenantBonusAnswers(formData: FormData) {
     bonusAnswers,
   })
 
-  revalidateTenantBonusPaths(raceId)
-  revalidatePath('/admin')
-  revalidatePath('/admin/results')
-  revalidatePath(`/admin/races/${raceId}`)
+  await recalculateAndRevalidateRaceIfReady(supabase, raceId)
 }

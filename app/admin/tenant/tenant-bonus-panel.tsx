@@ -1,4 +1,4 @@
-import { CheckCircle2, HelpCircle, Lock } from 'lucide-react'
+import { Building2, Car, CheckCircle2, HelpCircle, Lock, MapPin } from 'lucide-react'
 import { FormActionButton } from '@/components/ui/form-action-button'
 import { RaceStatusPill } from '@/components/ui/race-status-pill'
 import { getRoundLabel } from '@/utils/race-copy'
@@ -28,6 +28,20 @@ export type TenantBonusVenueOption = {
   emoji?: string | null
 }
 
+export type TenantBonusDriverOption = {
+  id: string
+  code: string
+  full_name: string
+  emoji?: string | null
+}
+
+export type TenantBonusConstructorOption = {
+  id: string
+  name: string
+  short_code: string
+  emoji?: string | null
+}
+
 export type TenantBonusQuestion = {
   id: string
   race_id: string
@@ -48,7 +62,12 @@ type TenantBonusPanelProps = {
   races: TenantBonusRace[]
   questions: TenantBonusQuestion[]
   answers: TenantBonusAnswer[]
-  venueOptions: TenantBonusVenueOption[]
+  venueOptions?: TenantBonusVenueOption[]
+  driverOptions?: TenantBonusDriverOption[]
+  constructorOptions?: TenantBonusConstructorOption[]
+  scopeTenantId?: string
+  isPlatformScope?: boolean
+  sectionId?: string
 }
 
 function getBonusStatusCopy(status: RaceStatus) {
@@ -64,7 +83,12 @@ export function TenantBonusPanel({
   races,
   questions,
   answers,
-  venueOptions,
+  venueOptions = [],
+  driverOptions = [],
+  constructorOptions = [],
+  scopeTenantId,
+  isPlatformScope = false,
+  sectionId = 'group-bonus',
 }: TenantBonusPanelProps) {
   const questionsByRaceId = new Map<string, TenantBonusQuestion[]>()
   const answerByQuestionId = new Map<string, string>()
@@ -93,7 +117,7 @@ export function TenantBonusPanel({
   const unansweredCount = questions.filter((question) => !answerByQuestionId.has(question.id)).length
 
   return (
-    <section id="group-bonus" className="rounded-3xl border border-white/10 bg-card p-6 shadow-2xl md:p-8">
+    <section id={sectionId} className="rounded-3xl border border-white/10 bg-card p-6 shadow-2xl md:p-8">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <div className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-red-200">
@@ -104,7 +128,7 @@ export function TenantBonusPanel({
             Group bonus questions
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-            Add questions for {groupName} before entries close. After the race, set the correct answers here.
+            Add questions for {groupName} before entries close. After the race, set the correct answers from this race workspace.
           </p>
         </div>
 
@@ -161,6 +185,7 @@ export function TenantBonusPanel({
                         question={question}
                         raceId={race.id}
                         canEdit={canEditQuestions}
+                        scopeTenantId={scopeTenantId}
                       />
                     ))}
                   </div>
@@ -169,9 +194,14 @@ export function TenantBonusPanel({
                 {canEditQuestions && (
                   <form action={addTenantBonusQuestion} className="mt-4 space-y-3 rounded-xl border border-white/10 bg-black/25 p-4">
                     <input type="hidden" name="race_id" value={race.id} />
+                    {scopeTenantId && <input type="hidden" name="tenant_id" value={scopeTenantId} />}
                     <div>
                       <h4 className="text-sm font-bold text-slate-200">Add question</h4>
-                      <p className="mt-1 text-xs text-slate-500">Only members of {groupName} will see it.</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {isPlatformScope
+                          ? `Platform override for ${groupName}.`
+                          : `Only members of ${groupName} will see it.`}
+                      </p>
                     </div>
                     <input
                       name="question_text"
@@ -179,24 +209,87 @@ export function TenantBonusPanel({
                       required
                       className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2"
                     />
-                    <input
-                      name="points"
-                      type="number"
-                      min={1}
-                      max={25}
-                      defaultValue={1}
-                      required
-                      className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2"
-                    />
-                    <div className="grid gap-2 md:grid-cols-2">
-                      <input name="options" placeholder="Option A" className="rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-sm" />
-                      <input name="options" placeholder="Option B" className="rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-sm" />
-                      <input name="options" placeholder="Option C (optional)" className="rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-sm" />
-                      <input name="options" placeholder="Option D (optional)" className="rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-sm" />
+                    <div className="grid gap-3 md:grid-cols-[8rem_minmax(0,1fr)]">
+                      <input
+                        name="points"
+                        type="number"
+                        min={1}
+                        max={25}
+                        defaultValue={1}
+                        required
+                        aria-label="Bonus points"
+                        className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2"
+                      />
+                      <div className="grid gap-2 md:grid-cols-2">
+                        <input name="options" placeholder="Custom option A" className="rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-sm" />
+                        <input name="options" placeholder="Custom option B" className="rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-sm" />
+                      </div>
                     </div>
+
+                    {driverOptions.length > 0 && (
+                      <details className="rounded-xl border border-white/10 bg-black/20 p-3">
+                        <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-400 [&::-webkit-details-marker]:hidden">
+                          <Car className="h-3.5 w-3.5 text-red-300" />
+                          Driver options
+                        </summary>
+                        <div className="mt-3 grid max-h-56 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                          {driverOptions.map((driver) => (
+                            <label
+                              key={driver.id}
+                              className="flex items-start gap-2 rounded-lg border border-white/5 bg-black/25 px-3 py-2 text-sm text-slate-300"
+                            >
+                              <input
+                                type="checkbox"
+                                name="driver_options"
+                                value={driver.id}
+                                className="mt-1"
+                              />
+                              <span>
+                                <span className="font-semibold text-slate-100">
+                                  {driver.code}{driver.emoji ? ` ${driver.emoji}` : ''}
+                                </span>
+                                <span className="block text-xs text-slate-500">{driver.full_name}</span>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+
+                    {constructorOptions.length > 0 && (
+                      <details className="rounded-xl border border-white/10 bg-black/20 p-3">
+                        <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-400 [&::-webkit-details-marker]:hidden">
+                          <Building2 className="h-3.5 w-3.5 text-red-300" />
+                          Constructor options
+                        </summary>
+                        <div className="mt-3 grid max-h-56 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
+                          {constructorOptions.map((constructorOption) => (
+                            <label
+                              key={constructorOption.id}
+                              className="flex items-start gap-2 rounded-lg border border-white/5 bg-black/25 px-3 py-2 text-sm text-slate-300"
+                            >
+                              <input
+                                type="checkbox"
+                                name="constructor_options"
+                                value={constructorOption.id}
+                                className="mt-1"
+                              />
+                              <span>
+                                <span className="font-semibold text-slate-100">
+                                  {constructorOption.short_code}{constructorOption.emoji ? ` ${constructorOption.emoji}` : ''}
+                                </span>
+                                <span className="block text-xs text-slate-500">{constructorOption.name}</span>
+                              </span>
+                            </label>
+                          ))}
+                        </div>
+                      </details>
+                    )}
+
                     {venueOptions.length > 0 && (
                       <details className="rounded-xl border border-white/10 bg-black/20 p-3">
-                        <summary className="cursor-pointer text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                        <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-400 [&::-webkit-details-marker]:hidden">
+                          <MapPin className="h-3.5 w-3.5 text-red-300" />
                           Add venue options
                         </summary>
                         <div className="mt-3 grid max-h-56 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
@@ -234,10 +327,11 @@ export function TenantBonusPanel({
                 {canSaveAnswers && (
                   <form action={saveTenantBonusAnswers} className="mt-4 space-y-3 rounded-xl border border-emerald-500/15 bg-emerald-500/8 p-4">
                     <input type="hidden" name="race_id" value={race.id} />
+                    {scopeTenantId && <input type="hidden" name="tenant_id" value={scopeTenantId} />}
                     <div>
                       <h4 className="text-sm font-bold text-emerald-100">Set answers</h4>
                       <p className="mt-1 text-xs text-emerald-100/70">
-                        These answers apply only to {groupName}.
+                        These answers apply only to {groupName}. Scores recalculate automatically after saving.
                       </p>
                     </div>
                     {raceQuestions.map((question) => (

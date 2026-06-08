@@ -104,7 +104,7 @@ export default async function AdminResultsPage() {
         <SectionHeader
           eyebrow="Admin"
           title="Results"
-          description="Save official podiums across multiple races. Group bonus answers are handled by tenant admins."
+          description="Save official podiums across multiple races. Scores recalculate automatically after each saved result."
           aside={<ClipboardCheck className="h-8 w-8 text-red-500" />}
         />
       </div>
@@ -117,9 +117,9 @@ export default async function AdminResultsPage() {
         </div>
 
         <div className="rounded-3xl border border-amber-500/20 bg-amber-500/10 p-5 shadow-xl">
-          <div className="text-xs font-bold uppercase tracking-[0.22em] text-amber-100">Needs scoring</div>
+          <div className="text-xs font-bold uppercase tracking-[0.22em] text-amber-100">Auto scoring</div>
           <div className="mt-3 text-3xl font-bold text-white">{readyToRescoreCount}</div>
-          <p className="mt-2 text-sm text-amber-100/80">Saved results that are ready for a scoring rerun.</p>
+          <p className="mt-2 text-sm text-amber-100/80">Saved results that will rescore when updated.</p>
         </div>
 
         <div className="rounded-3xl border border-emerald-500/20 bg-emerald-500/10 p-5 shadow-xl">

@@ -102,8 +102,8 @@ export function BatchResultsForm({ races, drivers }: BatchResultsFormProps) {
               Multi-race save
             </div>
             <p className="max-w-2xl text-sm leading-6 text-slate-300">
-              Pick the weekends you want to update, save their podiums together, then run scoring from the race page
-              when you are ready. Group bonus answers are managed by tenant admins.
+              Pick the weekends you want to update and save their podiums together. Scoring refreshes automatically
+              after each saved result, and group bonus answers can still rescore later.
             </p>
           </div>
 
@@ -135,7 +135,7 @@ export function BatchResultsForm({ races, drivers }: BatchResultsFormProps) {
             {needsResultsCount} waiting for results
           </div>
           <div className="rounded-full border border-amber-500/20 bg-amber-500/10 px-3 py-1.5 font-medium text-amber-100">
-            Saving a scored weekend moves it back to needs scoring
+            Saving a scored weekend recalculates it
           </div>
         </div>
 

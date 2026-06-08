@@ -178,7 +178,7 @@ export default async function AdminDashboardPage() {
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-red-100/80">
               {nextSetupRace
-                ? 'Review schedule timing and OpenF1 linkage. Group bonus questions are managed by tenant admins.'
+                ? 'Review schedule timing, OpenF1 linkage, and tenant bonus questions from the race detail page.'
                 : 'Use schedule sync to create or open the next race first.'}
             </p>
           </div>
