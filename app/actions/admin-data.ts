@@ -9,6 +9,7 @@ import {
 } from '@/utils/admin-access'
 import { getCountryEmoji } from '@/utils/country-emoji'
 import { sendGroupWelcomeEmail } from '@/utils/group-welcome-email'
+import { createServiceRoleClient } from '@/utils/supabase/service-role'
 import type { TenantAdminActionState } from '@/app/admin/tenants/action-state'
 
 export async function addDriver(formData: FormData) {
@@ -266,6 +267,62 @@ export async function deleteDriver(driverId: string) {
   const { error } = await supabase.from('drivers').delete().eq('id', driverId)
   if (error) throw new Error('Failed to delete driver. Ensure no predictions depend on this driver first.')
   revalidatePath('/admin/data')
+}
+
+export async function deleteUserAccount(profileId: string) {
+  const { supabase, access } = await assertPlatformAdmin()
+  const id = profileId.trim()
+
+  if (!id) throw new Error('Profile ID is required.')
+  if (id === access.userId) throw new Error('Use another platform admin account before deleting your own account.')
+
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('id, role, tenant_id, admin_scope')
+    .eq('id', id)
+    .maybeSingle()
+
+  if (!profile) throw new Error('User account not found.')
+
+  const profileRole = (profile as AdminProfileRow).role ?? 'user'
+  const profileScope = resolveAdminScope(profile as AdminProfileRow)
+  const tenantId = (profile as AdminProfileRow).tenant_id ?? null
+
+  if (profileRole === 'admin' && profileScope === 'platform') {
+    throw new Error('Platform admin accounts cannot be deleted from this workspace.')
+  }
+
+  if (profileRole === 'admin' && profileScope === 'tenant' && tenantId) {
+    const { count: tenantAdminCount, error: tenantAdminCountError } = await supabase
+      .from('profiles')
+      .select('id', { count: 'exact', head: true })
+      .eq('role', 'admin')
+      .eq('admin_scope', 'tenant')
+      .eq('tenant_id', tenantId)
+
+    if (tenantAdminCountError) {
+      throw new Error('Could not verify group admin coverage: ' + tenantAdminCountError.message)
+    }
+
+    if ((tenantAdminCount || 0) <= 1) {
+      throw new Error('Assign another group admin before deleting the last group admin account.')
+    }
+  }
+
+  const serviceRole = createServiceRoleClient()
+  const { error } = await serviceRole.auth.admin.deleteUser(id)
+
+  if (error) {
+    throw new Error('Failed to delete user account: ' + error.message)
+  }
+
+  revalidatePath('/admin')
+  revalidatePath('/admin/tenants')
+  revalidatePath('/admin/tenant')
+  revalidatePath('/leaderboard')
+  revalidatePath('/predictions')
+  revalidatePath('/season')
+  revalidatePath('/me/history')
 }
 
 export async function createTenant(

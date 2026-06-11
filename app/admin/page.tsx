@@ -3,12 +3,13 @@ import { redirect } from 'next/navigation'
 import { ChevronRight, ClipboardCheck, Database, MailCheck, PlusCircle, Search, Settings, Users } from 'lucide-react'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { getAdminRaceStatusClasses, getAdminRaceStatusLabel } from '@/utils/admin-race-status'
-import { CreateRaceForm } from '@/components/ui/create-race-form'
+import { getAdminUserLifecycle } from '@/utils/admin-user-lifecycle'
 import { MaintenanceSection } from '@/components/ui/maintenance-section'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { PendingLink } from '@/components/ui/pending-link'
 import { SectionHeader } from '@/components/ui/section-header'
 import { getRaceFocus } from '@/utils/race-focus'
+import { getProfileDisplayName } from '@/utils/profile-name'
 
 export const revalidate = 0
 
@@ -45,6 +46,24 @@ type PlatformBonusAnswer = {
   bonus_question_id: string
 }
 
+type AdminUserSummary = {
+  id: string
+  display_name?: string | null
+  email?: string | null
+  role?: 'user' | 'admin' | null
+  tenant_id?: string | null
+}
+
+function formatLifecycleDate(value?: string | null) {
+  if (!value) return 'None'
+
+  return new Intl.DateTimeFormat('en', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(value))
+}
+
 export default async function AdminDashboardPage() {
   const supabase = await createClient()
   const access = await getAdminAccessContext(supabase)
@@ -70,8 +89,11 @@ export default async function AdminDashboardPage() {
     .select('*, circuits(name, emoji)')
     .order('round', { ascending: true })
 
-  const { data: circuits } = await supabase.from('circuits').select('*').order('name')
   const { data: tenants } = await supabase.from('tenants').select('id, name, slug').order('name')
+  const { data: userProfiles } = await supabase
+    .from('profiles')
+    .select('id, display_name, email, role, tenant_id')
+    .order('display_name')
   const { count: userCount } = await supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'user')
   const { data: tenantAdmins } = await supabase
     .from('profiles')
@@ -93,7 +115,9 @@ export default async function AdminDashboardPage() {
     : unassignedUsersWithTest
   const typedRaces = (races || []) as AdminRace[]
   const typedTenants = (tenants || []) as AdminTenant[]
+  const typedUserProfiles = (userProfiles || []) as AdminUserSummary[]
   const typedTenantAdmins = (tenantAdmins || []) as TenantAdminProfile[]
+  const userLifecycleById = await getAdminUserLifecycle(typedUserProfiles.map((profile) => profile.id))
   const raceFocus = getRaceFocus(typedRaces)
   const nextSetupRace = raceFocus.nextOpenRace
   const liveRaces = raceFocus.lockedRaces
@@ -145,6 +169,13 @@ export default async function AdminDashboardPage() {
     : nextSetupRace
       ? 'NEXT SETUP'
       : 'NO RACE'
+  const recentUserRows = [...typedUserProfiles]
+    .sort((left, right) => {
+      const leftActivity = userLifecycleById.get(left.id)?.lastActivityAt
+      const rightActivity = userLifecycleById.get(right.id)?.lastActivityAt
+      return new Date(rightActivity || 0).getTime() - new Date(leftActivity || 0).getTime()
+    })
+    .slice(0, 6)
 
   return (
     <div className="space-y-7 animate-in fade-in duration-500">
@@ -229,12 +260,10 @@ export default async function AdminDashboardPage() {
           <div>
             <div className="text-xs font-bold uppercase tracking-[0.2em] text-red-200">Race lifecycle</div>
             <h2 className="mt-2 text-2xl font-bold tracking-tight text-white">
-              {nextSetupRace ? nextSetupRace.race_name : 'No open race to set up'}
+              Operations queue
             </h2>
             <p className="mt-2 max-w-3xl text-sm leading-6 text-red-100/80">
-              {nextSetupRace
-                ? 'Review schedule timing, OpenF1 linkage, and tenant bonus questions from the race detail page.'
-                : 'Use schedule sync to create or open the next race first.'}
+              Keep setup, live weekends, and results publishing in one compact flow without repeating the headline race above.
             </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row lg:justify-end">
@@ -245,14 +274,34 @@ export default async function AdminDashboardPage() {
               {nextSetupRace ? 'Open setup' : 'Open schedule sync'}
               <ChevronRight className="h-4 w-4" />
             </PendingLink>
-            {nextSetupRace && (
+            {resultsCount > 0 && (
               <PendingLink
-                href={`/admin/races/${nextSetupRace.id}#official-results`}
+                href={`/admin/races/${resultRaces[0].id}#official-results`}
                 className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/25 px-5 py-3 font-bold text-red-50 transition-colors hover:bg-white/10"
               >
                 Enter results
               </PendingLink>
             )}
+          </div>
+        </div>
+
+        <div className="mt-5 grid gap-3 md:grid-cols-3">
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-100">Upcoming setup</div>
+            <div className="mt-2 text-3xl font-bold text-white">{nextSetupRace ? 1 : 0}</div>
+            <p className="mt-1 text-sm text-red-100/75">
+              {nextSetupRace ? 'One race ready for timing/source review.' : 'No upcoming setup queue.'}
+            </p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-100">Locked weekends</div>
+            <div className="mt-2 text-3xl font-bold text-white">{liveCount}</div>
+            <p className="mt-1 text-sm text-red-100/75">Windows closed and races still in progress.</p>
+          </div>
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-100">Results pending</div>
+            <div className="mt-2 text-3xl font-bold text-white">{resultsCount}</div>
+            <p className="mt-1 text-sm text-red-100/75">Completed races waiting on official publication.</p>
           </div>
         </div>
       </section>
@@ -338,45 +387,94 @@ export default async function AdminDashboardPage() {
           </PendingLink>
         </div>
 
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          <PendingLink
-            href="/admin/tenants"
-            className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 transition-colors hover:bg-white/[0.04]"
-          >
-            <div>
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                <Users className="h-4 w-4 text-red-400" />
-                Users
+        <div className="mt-4 grid gap-4 xl:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
+          <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-1">
+            <PendingLink
+              href="/admin/tenants"
+              className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 transition-colors hover:bg-white/[0.04]"
+            >
+              <div>
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                  <Users className="h-4 w-4 text-red-400" />
+                  Users
+                </div>
+                <div className="mt-2 text-3xl font-bold text-white">{userCount || 0}</div>
               </div>
-              <div className="mt-2 text-3xl font-bold text-white">{userCount || 0}</div>
-            </div>
-            <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
-          </PendingLink>
+              <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
+            </PendingLink>
 
-          <PendingLink
-            href="/admin/tenants"
-            className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-amber-500/15 bg-amber-500/8 p-4 transition-colors hover:bg-amber-500/12"
-          >
-            <div>
-              <div className="text-xs font-bold uppercase tracking-[0.18em] text-amber-100">Needs group</div>
-              <div className="mt-2 text-3xl font-bold text-white">{unassignedCount}</div>
-            </div>
-            <ChevronRight className="h-5 w-5 shrink-0 text-amber-100/70 transition-colors group-hover:text-white" />
-          </PendingLink>
-
-          <PendingLink
-            href="/admin/notifications"
-            className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 transition-colors hover:bg-white/[0.04]"
-          >
-            <div>
-              <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
-                <MailCheck className="h-4 w-4 text-red-400" />
-                Email support
+            <PendingLink
+              href="/admin/tenants"
+              className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-amber-500/15 bg-amber-500/8 p-4 transition-colors hover:bg-amber-500/12"
+            >
+              <div>
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-amber-100">Needs group</div>
+                <div className="mt-2 text-3xl font-bold text-white">{unassignedCount}</div>
               </div>
-              <div className="mt-2 text-base font-bold text-white">Notifications</div>
+              <ChevronRight className="h-5 w-5 shrink-0 text-amber-100/70 transition-colors group-hover:text-white" />
+            </PendingLink>
+
+            <PendingLink
+              href="/admin/notifications"
+              className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/10 bg-black/20 p-4 transition-colors hover:bg-white/[0.04]"
+            >
+              <div>
+                <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
+                  <MailCheck className="h-4 w-4 text-red-400" />
+                  Email support
+                </div>
+                <div className="mt-2 text-base font-bold text-white">Notifications</div>
+              </div>
+              <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
+            </PendingLink>
+          </div>
+
+          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Recent activity</div>
+                <div className="mt-1 font-bold text-white">Last login and last active</div>
+              </div>
+              <PendingLink
+                href="/admin/tenants"
+                className="text-sm font-bold text-red-400 transition-colors hover:text-red-300"
+              >
+                Manage users
+              </PendingLink>
             </div>
-            <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
-          </PendingLink>
+
+            <div className="mt-4 space-y-2">
+              {recentUserRows.length === 0 ? (
+                <div className="rounded-xl border border-white/5 bg-black/20 px-4 py-3 text-sm text-slate-500">
+                  No user activity is available yet.
+                </div>
+              ) : (
+                recentUserRows.map((profile) => {
+                  const lifecycle = userLifecycleById.get(profile.id)
+
+                  return (
+                    <div
+                      key={profile.id}
+                      className="grid gap-2 rounded-xl border border-white/5 bg-black/25 px-3 py-3 md:grid-cols-[minmax(0,1fr)_auto_auto] md:items-center"
+                    >
+                      <div className="min-w-0">
+                        <div className="font-semibold text-white">
+                          {getProfileDisplayName(profile.display_name, profile.email)}
+                        </div>
+                        <div className="break-all text-xs text-slate-500">{profile.email || 'No email'}</div>
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        Login {formatLifecycleDate(lifecycle?.lastLoginAt)}
+                      </div>
+                      <div className="text-xs text-slate-400">
+                        Active {formatLifecycleDate(lifecycle?.lastActivityAt)}
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+          </div>
         </div>
       </section>
 
@@ -439,7 +537,7 @@ export default async function AdminDashboardPage() {
 
           <div className="space-y-4">
             <PendingLink
-              href="/admin/data"
+              href="/admin/data#manual-race"
               className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-white/5 bg-card p-5 shadow-xl transition-colors hover:bg-white/[0.02]"
             >
               <div className="min-w-0">
@@ -449,20 +547,11 @@ export default async function AdminDashboardPage() {
                 </div>
                 <h2 className="break-words text-base font-bold leading-tight text-white">Source mapping</h2>
                 <p className="mt-1 break-words text-sm text-slate-400">
-                  Fix driver, constructor, or circuit matches when sync flags a mismatch.
+                  Fix driver, constructor, or circuit matches, or use the manual race fallback.
                 </p>
               </div>
               <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
             </PendingLink>
-
-            <div id="create-race" className="space-y-4 scroll-mt-24">
-              <SectionHeader
-                eyebrow="Manual fallback"
-                title="Add race weekend"
-                description="OpenF1 schedule sync should be the normal path. Create a weekend here only when the source cannot provide it yet."
-              />
-              <CreateRaceForm circuits={circuits || []} />
-            </div>
           </div>
         </div>
       </details>

@@ -13,7 +13,7 @@ import {
 interface Circuit {
   id: string
   name: string
-  emoji: string
+  emoji?: string | null
 }
 
 interface CreateRaceFormProps {

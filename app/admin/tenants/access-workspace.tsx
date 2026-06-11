@@ -19,6 +19,9 @@ type Profile = {
   admin_scope?: 'platform' | 'tenant' | null
   tenant_id?: string | null
   is_test?: boolean | null
+  last_activity_at?: string | null
+  last_login_at?: string | null
+  last_prediction_at?: string | null
 }
 
 type AccessFilter = 'needs-assignment' | 'members' | 'group-admins' | 'platform-admins' | 'test' | 'all'

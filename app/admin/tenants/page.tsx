@@ -2,6 +2,7 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { Building2 } from 'lucide-react'
 import { getAdminAccessContext, resolveAdminScope, type AdminScope, type AdminProfileRow } from '@/utils/admin-access'
+import { getAdminUserLifecycle } from '@/utils/admin-user-lifecycle'
 import { CreateTenantForm } from './create-tenant-form'
 import { AccessWorkspace } from './access-workspace'
 import { TestModeToggleButton } from './test-mode-toggle-button'
@@ -23,6 +24,9 @@ type Profile = {
   admin_scope?: AdminScope | null
   tenant_id?: string | null
   is_test?: boolean | null
+  last_activity_at?: string | null
+  last_login_at?: string | null
+  last_prediction_at?: string | null
 }
 
 type GroupRequest = {
@@ -91,10 +95,14 @@ export default async function AdminTenantsPage() {
     ...tenant,
     is_test: tenant.is_test ?? false,
   }))
+  const lifecycleByUserId = await getAdminUserLifecycle(rawProfiles.map((profile) => profile.id))
   const typedProfiles = rawProfiles.map((profile) => ({
     ...profile,
     admin_scope: resolveAdminScope(profile as AdminProfileRow),
     is_test: profile.is_test ?? false,
+    last_activity_at: lifecycleByUserId.get(profile.id)?.lastActivityAt || null,
+    last_login_at: lifecycleByUserId.get(profile.id)?.lastLoginAt || null,
+    last_prediction_at: lifecycleByUserId.get(profile.id)?.lastPredictionAt || null,
   }))
   const testModeAvailable = !tenantsWithTestMode.error && !profilesWithScope.error
   const groupRequestSetupMessage = pendingGroupRequestsResult.error

@@ -11,6 +11,7 @@ import { AddCircuitForm } from './add-circuit-form'
 import { EditConstructorForm } from './edit-constructor-form'
 import { DeleteConstructorButton } from './delete-constructor-button'
 import { EditCircuitForm } from './edit-circuit-form'
+import { CreateRaceForm } from '@/components/ui/create-race-form'
 import { PageBackLink } from '@/components/ui/page-back-link'
 import { useState, useEffect } from 'react'
 import type { User } from '@supabase/supabase-js'
@@ -50,6 +51,13 @@ type CircuitRow = {
   emoji?: string | null
 }
 
+type ConstructorReview = {
+  hasCodeCollision: boolean
+  hasNameCollision: boolean
+  primaryId: string | null
+  reviewStatus: 'ready' | 'keep' | 'review'
+}
+
 type AdminDataState = {
   constructors: Constructor[]
   drivers: DriverRow[]
@@ -61,6 +69,14 @@ type AdminDataState = {
 
 export default function AdminDataPage() {
   return <AdminDataPageClient />
+}
+
+function normalizeConstructorKey(value?: string | null) {
+  return (value || '').trim().toLowerCase()
+}
+
+function getConstructorUsageScore(constructorRow: Constructor) {
+  return ((constructorRow.driver_count || 0) * 100) + (constructorRow.bonus_option_count || 0)
 }
 
 function AdminDataPageClient() {
@@ -154,11 +170,67 @@ function AdminDataPageClient() {
   }
 
   const { constructors, drivers, circuits } = data
-  const constructorKeyCounts = constructors.reduce((counts, constructor) => {
-    const key = `${constructor.name.trim().toLowerCase()}::${constructor.short_code.trim().toLowerCase()}`
+  const constructorNameCounts = constructors.reduce((counts, constructorRow) => {
+    const key = normalizeConstructorKey(constructorRow.name)
     counts.set(key, (counts.get(key) || 0) + 1)
     return counts
   }, new Map<string, number>())
+  const constructorCodeCounts = constructors.reduce((counts, constructorRow) => {
+    const key = normalizeConstructorKey(constructorRow.short_code)
+    counts.set(key, (counts.get(key) || 0) + 1)
+    return counts
+  }, new Map<string, number>())
+  const constructorReviewById = new Map<string, ConstructorReview>()
+
+  constructors.forEach((constructorRow) => {
+    const nameKey = normalizeConstructorKey(constructorRow.name)
+    const codeKey = normalizeConstructorKey(constructorRow.short_code)
+    const hasNameCollision = (constructorNameCounts.get(nameKey) || 0) > 1
+    const hasCodeCollision = (constructorCodeCounts.get(codeKey) || 0) > 1
+    const collisionRows = constructors
+      .filter((candidate) => {
+        const candidateNameKey = normalizeConstructorKey(candidate.name)
+        const candidateCodeKey = normalizeConstructorKey(candidate.short_code)
+        return (hasNameCollision && candidateNameKey === nameKey) || (hasCodeCollision && candidateCodeKey === codeKey)
+      })
+      .sort((left, right) => {
+        const usageDelta = getConstructorUsageScore(right) - getConstructorUsageScore(left)
+        if (usageDelta !== 0) return usageDelta
+        const driverDelta = (right.driver_count || 0) - (left.driver_count || 0)
+        if (driverDelta !== 0) return driverDelta
+        const bonusDelta = (right.bonus_option_count || 0) - (left.bonus_option_count || 0)
+        if (bonusDelta !== 0) return bonusDelta
+        const emojiDelta = Number(Boolean(right.emoji)) - Number(Boolean(left.emoji))
+        if (emojiDelta !== 0) return emojiDelta
+        const nameLengthDelta = right.name.length - left.name.length
+        if (nameLengthDelta !== 0) return nameLengthDelta
+        return left.name.localeCompare(right.name)
+      })
+    const primaryId = collisionRows[0]?.id || null
+    const hasCollision = hasNameCollision || hasCodeCollision
+
+    constructorReviewById.set(constructorRow.id, {
+      hasCodeCollision,
+      hasNameCollision,
+      primaryId,
+      reviewStatus: !hasCollision ? 'ready' : primaryId === constructorRow.id ? 'keep' : 'review',
+    })
+  })
+
+  const sortedConstructors = [...constructors].sort((left, right) => {
+    const leftReview = constructorReviewById.get(left.id)
+    const rightReview = constructorReviewById.get(right.id)
+    const leftPriority = leftReview?.reviewStatus === 'review' ? 0 : leftReview?.reviewStatus === 'keep' ? 1 : 2
+    const rightPriority = rightReview?.reviewStatus === 'review' ? 0 : rightReview?.reviewStatus === 'keep' ? 1 : 2
+
+    if (leftPriority !== rightPriority) return leftPriority - rightPriority
+
+    if (left.short_code !== right.short_code) {
+      return left.short_code.localeCompare(right.short_code)
+    }
+
+    return left.name.localeCompare(right.name)
+  })
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -167,13 +239,27 @@ function AdminDataPageClient() {
         <h1 className="text-3xl font-black italic tracking-tighter flex items-center text-red-500">
           <Database className="w-8 h-8 mr-3" /> SOURCE MAPPING
         </h1>
-        <p className="text-slate-400">Open this only when OpenF1 cannot match a driver or circuit cleanly. Most weekends should not need manual reference work.</p>
+        <p className="text-slate-400">Use this workspace for reference cleanup and the rare manual race fallback. Most weekends should still flow through schedule sync.</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <a href="#manual-race" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-slate-200 transition-colors hover:bg-white/10">
+            Add race weekend
+          </a>
+          <a href="#constructor-mapping" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-slate-200 transition-colors hover:bg-white/10">
+            Constructors
+          </a>
+          <a href="#driver-mapping" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-slate-200 transition-colors hover:bg-white/10">
+            Drivers
+          </a>
+          <a href="#circuit-mapping" className="rounded-full border border-white/10 bg-white/5 px-4 py-2 text-sm font-bold text-slate-200 transition-colors hover:bg-white/10">
+            Circuits
+          </a>
+        </div>
       </div>
 
       <div className="grid md:grid-cols-3 gap-8">
         
         {/* Drivers List */}
-        <div className="md:col-span-2 space-y-4">
+        <div id="driver-mapping" className="md:col-span-2 space-y-4 scroll-mt-24">
           <h2 className="text-xl font-bold mb-4">Driver mapping</h2>
           <div className="bg-card border border-white/5 rounded-2xl shadow-xl overflow-hidden">
             <div className="overflow-x-auto">
@@ -219,6 +305,9 @@ function AdminDataPageClient() {
         </div>
 
         <div className="space-y-6">
+          <div id="manual-race" className="scroll-mt-24">
+            <CreateRaceForm circuits={circuits || []} />
+          </div>
           <AddConstructorForm />
           <AddDriverForm constructors={constructors || []} />
           <AddCircuitForm />
@@ -226,8 +315,11 @@ function AdminDataPageClient() {
 
       </div>
 
-      <div className="space-y-4">
+      <div id="constructor-mapping" className="space-y-4 scroll-mt-24">
         <h2 className="text-xl font-bold">Constructor mapping</h2>
+        <div className="rounded-2xl border border-amber-500/20 bg-amber-500/10 px-4 py-3 text-sm text-amber-100">
+          Safe cleanup: keep the row carrying live driver references first, then move bonus-only or empty duplicates off it before deleting them.
+        </div>
         <div className="bg-card border border-white/5 rounded-2xl shadow-xl overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -241,10 +333,9 @@ function AdminDataPageClient() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5 text-sm">
-                {constructors.length ? (
-                  constructors.map((constructorRow) => {
-                    const key = `${constructorRow.name.trim().toLowerCase()}::${constructorRow.short_code.trim().toLowerCase()}`
-                    const isDuplicate = (constructorKeyCounts.get(key) || 0) > 1
+                {sortedConstructors.length ? (
+                  sortedConstructors.map((constructorRow) => {
+                    const review = constructorReviewById.get(constructorRow.id)
                     const driverCount = constructorRow.driver_count || 0
                     const bonusOptionCount = constructorRow.bonus_option_count || 0
                     const canDelete = driverCount === 0 && bonusOptionCount === 0
@@ -264,12 +355,27 @@ function AdminDataPageClient() {
                         </td>
                         <td className="p-4">
                           <span className={`rounded-full border px-2 py-1 text-xs font-bold uppercase ${
-                            isDuplicate
+                            review?.reviewStatus === 'review'
                               ? 'border-amber-500/20 bg-amber-500/10 text-amber-200'
-                              : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
+                              : review?.reviewStatus === 'keep'
+                                ? 'border-sky-500/20 bg-sky-500/10 text-sky-200'
+                                : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
                           }`}>
-                            {isDuplicate ? 'Duplicate' : 'Ready'}
+                            {review?.reviewStatus === 'review'
+                              ? 'Review'
+                              : review?.reviewStatus === 'keep'
+                                ? 'Keep'
+                                : 'Ready'}
                           </span>
+                          {(review?.hasCodeCollision || review?.hasNameCollision) && (
+                            <div className="mt-2 text-xs text-slate-500">
+                              {review.hasCodeCollision && review.hasNameCollision
+                                ? 'Shared name and code'
+                                : review.hasCodeCollision
+                                  ? 'Shared code'
+                                  : 'Shared name'}
+                            </div>
+                          )}
                         </td>
                         <td className="p-4">
                           <div className="flex items-start justify-end gap-2">
@@ -297,7 +403,7 @@ function AdminDataPageClient() {
         </div>
       </div>
 
-      <div className="space-y-4">
+      <div id="circuit-mapping" className="space-y-4 scroll-mt-24">
         <h2 className="text-xl font-bold">Circuit mapping</h2>
         <div className="bg-card border border-white/5 rounded-2xl shadow-xl overflow-hidden">
           <div className="overflow-x-auto">

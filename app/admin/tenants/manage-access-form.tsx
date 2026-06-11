@@ -6,6 +6,7 @@ import { ChevronDown, ChevronUp } from 'lucide-react'
 import { updateProfileAccess } from '@/app/actions/admin-data'
 import { getProfileDisplayName } from '@/utils/profile-name'
 import { initialTenantAdminActionState } from './action-state'
+import { DeleteUserButton } from './delete-user-button'
 import { TestModeToggleButton } from './test-mode-toggle-button'
 
 type Tenant = {
@@ -23,6 +24,9 @@ type Profile = {
   admin_scope?: 'platform' | 'tenant' | null
   tenant_id?: string | null
   is_test?: boolean | null
+  last_activity_at?: string | null
+  last_login_at?: string | null
+  last_prediction_at?: string | null
 }
 
 type ManageAccessFormProps = {
@@ -94,6 +98,16 @@ function getRowStatus(profile: Profile, currentUserId: string) {
   }
 }
 
+function formatLifecycleDate(value?: string | null, emptyLabel = 'None') {
+  if (!value) return emptyLabel
+
+  return new Intl.DateTimeFormat('en', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(new Date(value))
+}
+
 export function ManageAccessForm({
   profile,
   tenants,
@@ -125,6 +139,8 @@ export function ManageAccessForm({
   const rowStatus = getRowStatus(profile, currentUserId)
   const currentAccessLabel = getCurrentAccessLabel(profile, tenants)
   const actionLabel = profile.role === 'user' && !profile.tenant_id ? 'Fix' : 'Edit'
+  const profileLabel = getProfileDisplayName(profile.display_name, profile.email, 'Unnamed user')
+  const isPlatformAdmin = profile.role === 'admin' && getResolvedAdminScope(profile) === 'platform'
 
   return (
     <form action={formAction} className="rounded-2xl border border-white/5 bg-black/25 p-3.5 sm:p-4">
@@ -133,7 +149,7 @@ export function ManageAccessForm({
         <div className="grid gap-3 lg:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)_minmax(0,0.95fr)_auto] lg:items-center">
           <div className="min-w-0">
             <div className="font-semibold leading-tight text-white">
-              {getProfileDisplayName(profile.display_name, profile.email, 'Unnamed user')}
+              {profileLabel}
               {profile.is_test && (
                 <span className="ml-2 rounded-full border border-amber-500/20 bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-amber-200">
                   Test
@@ -148,6 +164,10 @@ export function ManageAccessForm({
           <div>
             <div className="inline-flex max-w-full rounded-full bg-white/6 px-2.5 py-1 text-[11px] font-semibold text-slate-200 sm:px-3 sm:py-1.5 sm:text-xs">
               {currentAccessLabel}
+            </div>
+            <div className="mt-2 space-y-1 text-xs text-slate-500">
+              <div>Last login: {formatLifecycleDate(profile.last_login_at, 'Never')}</div>
+              <div>Last activity: {formatLifecycleDate(profile.last_activity_at, 'No recorded activity')}</div>
             </div>
           </div>
 
@@ -251,13 +271,24 @@ export function ManageAccessForm({
             </div>
 
             <div className="mt-3 flex justify-stretch xl:justify-end">
-              <SubmitButton pending={pending} disabled={submitDisabled} />
+              <div className="flex w-full flex-col gap-3 sm:flex-row sm:justify-end">
+                <DeleteUserButton
+                  profileId={profile.id}
+                  userLabel={profileLabel}
+                  disabled={isEditingSelf || isPlatformAdmin}
+                />
+                <SubmitButton pending={pending} disabled={submitDisabled} />
+              </div>
             </div>
 
             <div className="mt-3 space-y-3">
               {isEditingSelf ? (
                 <div className="rounded-xl border border-amber-500/20 bg-amber-500/10 px-3 py-2.5 text-sm font-medium text-amber-300">
                   Your own role and scope stay locked here, but you can still join a group and compete.
+                </div>
+              ) : isPlatformAdmin ? (
+                <div className="rounded-xl border border-sky-500/20 bg-sky-500/10 px-3 py-2.5 text-sm font-medium text-sky-200">
+                  Platform admin accounts are protected from deletion here.
                 </div>
               ) : selectedRole === 'admin' && selectedAdminScope === 'tenant' && !selectedTenantId ? (
                 <div className="rounded-xl border border-red-500/20 bg-red-500/10 px-3 py-2.5 text-sm font-medium text-red-300">
