@@ -9,6 +9,7 @@ import { AddConstructorForm } from './add-constructor-form'
 import { AddDriverForm } from './add-driver-form'
 import { AddCircuitForm } from './add-circuit-form'
 import { EditConstructorForm } from './edit-constructor-form'
+import { DeleteConstructorButton } from './delete-constructor-button'
 import { EditCircuitForm } from './edit-circuit-form'
 import { PageBackLink } from '@/components/ui/page-back-link'
 import { useState, useEffect } from 'react'
@@ -25,6 +26,8 @@ type Constructor = {
   name: string
   short_code: string
   emoji?: string | null
+  driver_count?: number
+  bonus_option_count?: number
 }
 
 type DriverRow = {
@@ -103,9 +106,29 @@ function AdminDataPageClient() {
       const { data: constructors } = await supabase.from('constructors').select('*').order('name')
       const { data: drivers } = await supabase.from('drivers').select('*, constructors(name, short_code)').order('full_name')
       const { data: circuits } = await supabase.from('circuits').select('id, name, city, country, emoji').order('name')
+      const constructorsWithUsage = await Promise.all(
+        ((constructors || []) as Constructor[]).map(async (constructorRow) => {
+          const [driverUsage, bonusOptionUsage] = await Promise.all([
+            supabase
+              .from('drivers')
+              .select('id', { count: 'exact', head: true })
+              .eq('constructor_id', constructorRow.id),
+            supabase
+              .from('bonus_options')
+              .select('id', { count: 'exact', head: true })
+              .eq('constructor_id', constructorRow.id),
+          ])
+
+          return {
+            ...constructorRow,
+            driver_count: driverUsage.count || 0,
+            bonus_option_count: bonusOptionUsage.count || 0,
+          }
+        })
+      )
 
       setData({
-        constructors: constructors || [],
+        constructors: constructorsWithUsage,
         drivers: drivers || [],
         circuits: circuits || [],
         profile,
@@ -212,6 +235,7 @@ function AdminDataPageClient() {
                 <tr className="bg-white/5 text-slate-400 text-sm">
                   <th className="p-4 font-bold">Constructor</th>
                   <th className="p-4 font-bold">Short Code</th>
+                  <th className="p-4 font-bold">Used By</th>
                   <th className="p-4 font-bold">Status</th>
                   <th className="p-4 font-bold text-right">Actions</th>
                 </tr>
@@ -221,6 +245,10 @@ function AdminDataPageClient() {
                   constructors.map((constructorRow) => {
                     const key = `${constructorRow.name.trim().toLowerCase()}::${constructorRow.short_code.trim().toLowerCase()}`
                     const isDuplicate = (constructorKeyCounts.get(key) || 0) > 1
+                    const driverCount = constructorRow.driver_count || 0
+                    const bonusOptionCount = constructorRow.bonus_option_count || 0
+                    const canDelete = driverCount === 0 && bonusOptionCount === 0
+                    const deleteBlockReason = `Used by ${driverCount} driver${driverCount === 1 ? '' : 's'} and ${bonusOptionCount} bonus option${bonusOptionCount === 1 ? '' : 's'}.`
 
                     return (
                       <tr key={constructorRow.id} className="hover:bg-white/[0.02] transition-colors">
@@ -231,6 +259,9 @@ function AdminDataPageClient() {
                           </div>
                         </td>
                         <td className="p-4 font-bold text-red-500">{constructorRow.short_code}</td>
+                        <td className="p-4 text-slate-300">
+                          {driverCount} driver{driverCount === 1 ? '' : 's'} · {bonusOptionCount} bonus option{bonusOptionCount === 1 ? '' : 's'}
+                        </td>
                         <td className="p-4">
                           <span className={`rounded-full border px-2 py-1 text-xs font-bold uppercase ${
                             isDuplicate
@@ -241,14 +272,21 @@ function AdminDataPageClient() {
                           </span>
                         </td>
                         <td className="p-4">
-                          <EditConstructorForm constructor={constructorRow} />
+                          <div className="flex items-start justify-end gap-2">
+                            <EditConstructorForm constructor={constructorRow} />
+                            <DeleteConstructorButton
+                              id={constructorRow.id}
+                              disabled={!canDelete}
+                              reason={deleteBlockReason}
+                            />
+                          </div>
                         </td>
                       </tr>
                     )
                   })
                 ) : (
                   <tr>
-                    <td colSpan={4} className="p-6 text-center text-slate-500 italic">
+                    <td colSpan={5} className="p-6 text-center text-slate-500 italic">
                       No constructors defined yet.
                     </td>
                   </tr>

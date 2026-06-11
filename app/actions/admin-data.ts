@@ -104,6 +104,40 @@ export async function updateConstructor(formData: FormData) {
   revalidatePath('/admin/tenant')
 }
 
+export async function deleteConstructor(constructorId: string) {
+  const { supabase } = await assertPlatformAdmin()
+  const id = constructorId.trim()
+
+  if (!id) throw new Error('Constructor ID is required')
+
+  const [{ count: driverCount, error: driverCountError }, { count: bonusOptionCount, error: bonusOptionCountError }] =
+    await Promise.all([
+      supabase
+        .from('drivers')
+        .select('id', { count: 'exact', head: true })
+        .eq('constructor_id', id),
+      supabase
+        .from('bonus_options')
+        .select('id', { count: 'exact', head: true })
+        .eq('constructor_id', id),
+    ])
+
+  if (driverCountError) throw new Error('Could not check linked drivers: ' + driverCountError.message)
+  if (bonusOptionCountError) throw new Error('Could not check linked bonus options: ' + bonusOptionCountError.message)
+
+  if ((driverCount || 0) > 0 || (bonusOptionCount || 0) > 0) {
+    throw new Error(
+      `Cannot delete this constructor while it is used by ${driverCount || 0} driver${driverCount === 1 ? '' : 's'} and ${bonusOptionCount || 0} bonus option${bonusOptionCount === 1 ? '' : 's'}.`
+    )
+  }
+
+  const { error } = await supabase.from('constructors').delete().eq('id', id)
+
+  if (error) throw new Error('Failed to delete constructor: ' + error.message)
+
+  revalidatePath('/admin/data')
+}
+
 export async function addCircuit(formData: FormData) {
   const { supabase } = await assertPlatformAdmin()
   const name = (formData.get('name') as string | null)?.trim()
