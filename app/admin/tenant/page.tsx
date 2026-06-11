@@ -5,11 +5,13 @@ import {
   Building2,
   CalendarClock,
   CalendarSync,
+  CheckCircle2,
   ChevronRight,
   ClipboardCheck,
   HelpCircle,
   MailCheck,
   Trophy,
+  XCircle,
 } from 'lucide-react'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { getCurrentSeason } from '@/utils/season'
@@ -73,8 +75,25 @@ type LeaderboardEntry = {
 }
 
 type PredictionEntry = {
+  id: string
   user_id: string
   race_id: string
+  p1_driver_id?: string | null
+  p2_driver_id?: string | null
+  p3_driver_id?: string | null
+}
+
+type PredictionBonusAnswerEntry = {
+  prediction_id: string
+  bonus_question_id: string
+  bonus_option_id: string
+}
+
+type DriverRecord = {
+  id: string
+  code: string
+  full_name: string
+  emoji?: string | null
 }
 
 type RaceScoreEntry = {
@@ -132,6 +151,11 @@ function isActiveGroupInvite(invite: GroupInviteRecord) {
   if (invite.revoked_at) return false
   if (new Date(invite.expires_at).getTime() <= Date.now()) return false
   return invite.accepted_count < invite.max_uses
+}
+
+function getDriverLabel(driver?: DriverRecord | null) {
+  if (!driver) return 'Not set'
+  return `${driver.code}${driver.emoji ? ` ${driver.emoji}` : ''}`
 }
 
 export default async function TenantAdminPage() {
@@ -287,10 +311,27 @@ export default async function TenantAdminPage() {
     seasonRaceIds.length > 0 && memberIds.length > 0
       ? await supabase
           .from('predictions')
-          .select('user_id, race_id')
+          .select('id, user_id, race_id, p1_driver_id, p2_driver_id, p3_driver_id')
           .in('race_id', seasonRaceIds)
           .in('user_id', memberIds)
       : { data: [] as PredictionEntry[] }
+  const typedSeasonRacePredictions = (seasonRacePredictions || []) as PredictionEntry[]
+  const predictionIds = typedSeasonRacePredictions.map((prediction) => prediction.id)
+
+  const [{ data: drivers }, { data: predictionBonusAnswers }] = await Promise.all([
+    supabase
+      .from('drivers')
+      .select('id, code, full_name, emoji')
+      .order('full_name'),
+    predictionIds.length > 0
+      ? supabase
+          .from('prediction_bonus_answers')
+          .select('prediction_id, bonus_question_id, bonus_option_id')
+          .in('prediction_id', predictionIds)
+      : Promise.resolve({ data: [] as PredictionBonusAnswerEntry[] }),
+  ])
+  const typedDrivers = (drivers || []) as DriverRecord[]
+  const typedPredictionBonusAnswers = (predictionBonusAnswers || []) as PredictionBonusAnswerEntry[]
 
   const { data: seasonRaceScores } =
     seasonRaceIds.length > 0 && memberIds.length > 0
@@ -345,7 +386,7 @@ export default async function TenantAdminPage() {
   const leaderboardByUserId = new Map(leaderboard.map((entry) => [entry.user_id, entry]))
   const memberById = new Map(operationalMembers.map((member) => [member.id, member]))
   const predictionUserIdsByRaceId = new Map<string, Set<string>>()
-  for (const entry of (seasonRacePredictions || []) as PredictionEntry[]) {
+  for (const entry of typedSeasonRacePredictions) {
     const userIds = predictionUserIdsByRaceId.get(entry.race_id) || new Set<string>()
     userIds.add(entry.user_id)
     predictionUserIdsByRaceId.set(entry.race_id, userIds)
@@ -366,6 +407,24 @@ export default async function TenantAdminPage() {
       })
     )
   }
+  const driverById = new Map(typedDrivers.map((driver) => [driver.id, driver]))
+  const predictionByRaceAndUserId = new Map(
+    typedSeasonRacePredictions.map((prediction) => [`${prediction.race_id}:${prediction.user_id}`, prediction])
+  )
+  const bonusOptionLabelById = new Map<string, string>()
+  typedTenantBonusQuestions.forEach((question) => {
+    question.bonus_options?.forEach((option) => {
+      if (option.label) {
+        bonusOptionLabelById.set(option.id, option.label)
+      }
+    })
+  })
+  const predictionBonusAnswerByPredictionAndQuestionId = new Map(
+    typedPredictionBonusAnswers.map((answer) => [
+      `${answer.prediction_id}:${answer.bonus_question_id}`,
+      answer.bonus_option_id,
+    ])
+  )
   const nextRacePredictionUserIds =
     featuredRace ? predictionUserIdsByRaceId.get(featuredRace.id) || new Set<string>() : new Set<string>()
   const tenantAdminCount = typedMembers.filter(
@@ -375,13 +434,41 @@ export default async function TenantAdminPage() {
   const missingFeaturedRaceMembers = featuredRace
     ? operationalMembers.filter((member) => !nextRacePredictionUserIds.has(member.id))
     : []
+  const featuredRaceStatus = featuredRace ? getEffectiveRaceStatus(featuredRace) : null
+  const featuredRaceQuestions = featuredRace
+    ? typedTenantBonusQuestions.filter((question) => question.race_id === featuredRace.id)
+    : []
+  const submittedFeaturedRaceMembers = featuredRace
+    ? operationalMembers.flatMap((member) => {
+        const prediction = predictionByRaceAndUserId.get(`${featuredRace.id}:${member.id}`)
+        if (!prediction) return []
+
+        return [{
+          member,
+          podiumLabels: [
+            `P1 ${getDriverLabel(driverById.get(prediction.p1_driver_id || ''))}`,
+            `P2 ${getDriverLabel(driverById.get(prediction.p2_driver_id || ''))}`,
+            `P3 ${getDriverLabel(driverById.get(prediction.p3_driver_id || ''))}`,
+          ],
+          bonusLabels: featuredRaceQuestions
+            .map((question) => {
+              const optionId = predictionBonusAnswerByPredictionAndQuestionId.get(`${prediction.id}:${question.id}`)
+              const label = optionId ? bonusOptionLabelById.get(optionId) : null
+
+              return label ? `${question.question_text}: ${label}` : null
+            })
+            .filter((label): label is string => Boolean(label)),
+        }]
+      })
+    : []
+  const showMissingFirst = featuredRaceStatus === 'upcoming' || featuredRaceStatus === 'locked'
   const coveragePercent =
     featuredRace && operationalMembers.length > 0
       ? Math.round((nextRaceCoverage / operationalMembers.length) * 100)
       : 0
   const tenantRaceRows = sortRacesByFocus(typedRaces).filter((race) => {
     const status = getEffectiveRaceStatus(race)
-    return status === 'locked' || status === 'completed' || status === 'scored'
+    return race.id !== featuredRace?.id && (status === 'locked' || status === 'completed' || status === 'scored')
   }).slice(0, 6).map((race) => {
     const predictionUserIds = predictionUserIdsByRaceId.get(race.id) || new Set<string>()
     const scoreRows = scoreRowsByRaceId.get(race.id) || []
@@ -403,6 +490,9 @@ export default async function TenantAdminPage() {
             : 'Scores not published yet',
     }
   })
+  const futureRaceRows = raceFocus.upcomingRaces
+    .filter((race) => race.id !== featuredRace?.id)
+    .slice(0, 5)
   const openItemsCount =
     (featuredRace ? missingFeaturedRaceMembers.length : 0) +
     (activeInviteCount === 0 ? 1 : 0) +
@@ -567,22 +657,31 @@ export default async function TenantAdminPage() {
 
         <div className="space-y-5">
           {featuredRace ? (
-            <section className="rounded-3xl border border-red-500/20 bg-red-500/8 p-5 shadow-2xl md:p-6">
-              <div>
-                <div className="text-xs font-bold uppercase tracking-[0.2em] text-red-200">
-                  {getRaceStageLabel(getEffectiveRaceStatus(featuredRace))}
+            <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-2xl md:p-6">
+              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-[0.2em] text-red-400">
+                    {getRaceStageLabel(getEffectiveRaceStatus(featuredRace))}
+                  </div>
+                  <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">{featuredRace.race_name}</h2>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-emerald-200">
+                      {nextRaceCoverage} submitted
+                    </span>
+                    <span className="rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-red-200">
+                      {missingFeaturedRaceMembers.length} missing
+                    </span>
+                    <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-slate-300">
+                      {coveragePercent}%
+                    </span>
+                    {featuredRaceReminderAt && (
+                      <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-slate-300">
+                        {formatAmsterdamDateTime(featuredRaceReminderAt, { includeZone: true })}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">{nextRaceCoverage}/{operationalMembers.length} entered</h2>
-                <p className="mt-2 text-sm text-red-100/80">
-                  {featuredRace.race_name}: {coveragePercent}% of members have saved an entry.
-                </p>
-                {featuredRaceReminderAt && (
-                  <p className="mt-3 flex items-center gap-2 text-sm text-red-100/70">
-                    <CalendarClock className="h-4 w-4 shrink-0" />
-                    Reminder scheduled for {formatAmsterdamDateTime(featuredRaceReminderAt, { includeZone: true })}.
-                  </p>
-                )}
-                <div className="mt-5 flex flex-wrap gap-3">
+                <div className="flex flex-wrap gap-3">
                   <PendingLink
                     href={`/admin/tenant/races/${featuredRace.id}`}
                     className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
@@ -590,36 +689,77 @@ export default async function TenantAdminPage() {
                     Open race admin
                     <ArrowRight className="h-4 w-4" />
                   </PendingLink>
-                  <a
-                    href="#group-invites"
-                    className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/25 px-5 py-3 font-bold text-red-50 transition-colors hover:bg-white/10"
-                  >
-                    Invite members
-                  </a>
+                  {missingFeaturedRaceMembers.length > 0 && (
+                    <a
+                      href="#group-invites"
+                      className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/25 px-5 py-3 font-bold text-red-50 transition-colors hover:bg-white/10"
+                    >
+                      Invites
+                    </a>
+                  )}
                 </div>
               </div>
 
-              <div className="mt-5 rounded-2xl border border-white/10 bg-black/25 p-4">
-                <div className="text-xs font-bold uppercase tracking-[0.22em] text-slate-500">Still missing</div>
-                {missingFeaturedRaceMembers.length === 0 ? (
-                  <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-200">
-                    Everyone has submitted for this race.
+              <div className="mt-5 grid gap-4 lg:grid-cols-2">
+                <div className={`${showMissingFirst ? 'order-1' : 'order-2'} rounded-2xl border border-red-500/20 bg-red-500/8 p-4 lg:order-none`}>
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-red-200">
+                    <XCircle className="h-4 w-4" />
+                    Missing
                   </div>
-                ) : (
-                  <div className="mt-4 max-h-64 space-y-2 overflow-y-auto pr-1">
-                    {missingFeaturedRaceMembers.slice(0, 8).map((member) => (
-                      <div key={member.id} className="rounded-xl border border-white/5 bg-black/25 px-3 py-2">
-                        <div className="font-semibold text-slate-100">{getProfileDisplayName(member.display_name, member.email)}</div>
-                        <div className="text-xs text-slate-500">{member.email}</div>
-                      </div>
-                    ))}
-                    {missingFeaturedRaceMembers.length > 8 && (
-                      <div className="text-sm text-slate-400">
-                        +{missingFeaturedRaceMembers.length - 8} more in the roster below.
-                      </div>
-                    )}
+                  {missingFeaturedRaceMembers.length === 0 ? (
+                    <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-200">
+                      Everyone is in.
+                    </div>
+                  ) : (
+                    <div className="mt-4 max-h-96 space-y-2 overflow-y-auto pr-1">
+                      {missingFeaturedRaceMembers.map((member) => (
+                        <div key={member.id} className="rounded-xl border border-red-500/10 bg-black/25 px-3 py-2">
+                          <div className="font-semibold text-slate-100">{getProfileDisplayName(member.display_name, member.email)}</div>
+                          <div className="break-all text-xs text-red-100/60">{member.email || 'No email'}</div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className={`${showMissingFirst ? 'order-2' : 'order-1'} rounded-2xl border border-emerald-500/20 bg-emerald-500/8 p-4 lg:order-none`}>
+                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-emerald-200">
+                    <CheckCircle2 className="h-4 w-4" />
+                    Submitted
                   </div>
-                )}
+                  {submittedFeaturedRaceMembers.length === 0 ? (
+                    <div className="mt-4 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-bold text-slate-400">
+                      No entries yet.
+                    </div>
+                  ) : (
+                    <div className="mt-4 max-h-96 space-y-3 overflow-y-auto pr-1">
+                      {submittedFeaturedRaceMembers.map((entry) => (
+                        <div key={entry.member.id} className="rounded-xl border border-emerald-500/10 bg-black/25 px-3 py-3">
+                          <div className="font-semibold text-slate-100">
+                            {getProfileDisplayName(entry.member.display_name, entry.member.email)}
+                          </div>
+                          <div className="break-all text-xs text-emerald-100/60">{entry.member.email || 'No email'}</div>
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {entry.podiumLabels.map((label) => (
+                              <span key={label} className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-bold text-slate-200">
+                                {label}
+                              </span>
+                            ))}
+                          </div>
+                          {entry.bonusLabels.length > 0 && (
+                            <div className="mt-2 space-y-1">
+                              {entry.bonusLabels.map((label) => (
+                                <div key={label} className="break-words text-xs leading-5 text-emerald-100/75">
+                                  {label}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
               </div>
             </section>
           ) : (
@@ -635,8 +775,8 @@ export default async function TenantAdminPage() {
           <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-xl">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <div className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Race attention</div>
-                <h2 className="mt-1 text-xl font-bold tracking-tight text-white">Races needing review</h2>
+                <div className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Race operations</div>
+                <h2 className="mt-1 text-xl font-bold tracking-tight text-white">Past races needing review</h2>
               </div>
               <div className="text-sm font-bold text-slate-400">
                 {tenantRaceRows.length} race{tenantRaceRows.length === 1 ? '' : 's'}
@@ -675,6 +815,47 @@ export default async function TenantAdminPage() {
                 ))
               )}
             </div>
+
+            <details className="group mt-4 rounded-2xl border border-white/10 bg-black/20 p-4">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+                <div>
+                  <div className="text-xs font-bold uppercase tracking-[0.18em] text-slate-500">Future races</div>
+                  <div className="mt-1 font-bold text-white">{futureRaceRows.length} upcoming setup page{futureRaceRows.length === 1 ? '' : 's'}</div>
+                </div>
+                <ChevronRight className="h-5 w-5 shrink-0 text-slate-500 transition-transform group-open:rotate-90" />
+              </summary>
+
+              {futureRaceRows.length === 0 ? (
+                <div className="mt-4 rounded-xl border border-white/5 bg-black/20 px-4 py-3 text-sm text-slate-500">
+                  No future races to prepare.
+                </div>
+              ) : (
+                <div className="mt-4 overflow-hidden rounded-xl border border-white/5">
+                  {futureRaceRows.map((race) => {
+                    const raceQuestions = typedTenantBonusQuestions.filter((question) => question.race_id === race.id)
+
+                    return (
+                      <PendingLink
+                        key={race.id}
+                        href={`/admin/tenant/races/${race.id}`}
+                        className="group grid min-w-0 gap-3 border-b border-white/5 p-4 transition-colors last:border-b-0 hover:bg-white/[0.03] sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold uppercase tracking-widest text-red-500">
+                            Round {race.round} · Future setup
+                          </div>
+                          <div className="mt-1 break-words font-bold text-white">{race.race_name}</div>
+                          <div className="mt-1 text-sm text-slate-500">
+                            {raceQuestions.length} bonus question{raceQuestions.length === 1 ? '' : 's'}
+                          </div>
+                        </div>
+                        <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
+                      </PendingLink>
+                    )
+                  })}
+                </div>
+              )}
+            </details>
           </section>
 
           <div id="reminders" className="scroll-mt-28">
