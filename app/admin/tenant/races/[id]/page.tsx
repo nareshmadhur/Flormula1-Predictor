@@ -15,10 +15,7 @@ import {
   type TenantBonusConstructorOption,
   type TenantBonusDriverOption,
   type TenantBonusQuestion,
-  type TenantBonusVenueOption,
 } from '@/app/admin/tenant/tenant-bonus-panel'
-import { BonusAuditLog } from '@/components/ui/bonus-audit-log'
-import { getRaceBonusAuditEntries } from '@/utils/bonus-audit'
 import { fetchOpenF1PodiumSuggestion, getOpenF1ErrorMessage } from '@/utils/openf1'
 
 export const revalidate = 0
@@ -137,7 +134,6 @@ export default async function TenantRaceAdminPage(props: { params: Promise<{ id:
     membersResult,
     driversResult,
     constructorsResult,
-    circuitsResult,
     officialResult,
     bonusQuestionResult,
   ] = await Promise.all([
@@ -154,7 +150,6 @@ export default async function TenantRaceAdminPage(props: { params: Promise<{ id:
       .order('display_name'),
     supabase.from('drivers').select('id, code, full_name, emoji, active').order('full_name'),
     supabase.from('constructors').select('id, name, short_code, emoji').order('name'),
-    supabase.from('circuits').select('id, name, country, emoji').order('name'),
     supabase.from('race_results').select('p1_driver_id, p2_driver_id, p3_driver_id, entered_at').eq('race_id', id).maybeSingle(),
     supabase
       .from('bonus_questions')
@@ -207,7 +202,6 @@ export default async function TenantRaceAdminPage(props: { params: Promise<{ id:
       emoji: driver.emoji,
     })) satisfies TenantBonusDriverOption[]
   const typedConstructors = (constructorsResult.data || []) as TenantBonusConstructorOption[]
-  const venueOptions = (circuitsResult.data || []) as TenantBonusVenueOption[]
   const typedOfficialResult = (officialResult.data || null) as RaceResultRecord | null
   const typedBonusQuestions = (bonusQuestionResult.data || []) as TenantBonusQuestion[]
   const questionIds = typedBonusQuestions.map((question) => question.id)
@@ -219,7 +213,6 @@ export default async function TenantRaceAdminPage(props: { params: Promise<{ id:
           .in('bonus_question_id', questionIds)
       : { data: [] as TenantBonusAnswer[] }
   const typedBonusAnswers = (bonusAnswers || []) as TenantBonusAnswer[]
-  const bonusAuditEntries = await getRaceBonusAuditEntries(supabase, id)
 
   let suggestedPodium = null
   let openF1PodiumError: string | null = null
@@ -426,11 +419,8 @@ export default async function TenantRaceAdminPage(props: { params: Promise<{ id:
         answers={typedBonusAnswers}
         driverOptions={activeDriverOptions}
         constructorOptions={typedConstructors}
-        venueOptions={venueOptions}
         scopeTenantId={access.tenantId}
       />
-
-      <BonusAuditLog entries={bonusAuditEntries} />
 
       <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-xl md:p-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

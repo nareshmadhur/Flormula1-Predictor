@@ -1,7 +1,7 @@
 'use client'
 
 import { useActionState } from 'react'
-import { Clock3 } from 'lucide-react'
+import { ChevronRight, Clock3 } from 'lucide-react'
 import {
   clearTenantNotificationTiming,
   saveTenantNotificationTiming,
@@ -31,27 +31,29 @@ export function TenantNotificationTimingPanel({
   const hasOverride = Boolean(overrideLeadHours)
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-card p-5 shadow-xl md:p-6">
-      <div className="space-y-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
+    <details id="group-reminders" className="group scroll-mt-28 rounded-2xl border border-white/10 bg-card p-5 shadow-xl md:p-6">
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-400">
               <Clock3 className="h-4 w-4 text-red-400" />
-              Reminder timing
+              Reminders
             </div>
-            <h2 className="mt-2 text-2xl font-bold tracking-tight text-white">
-              {currentLeadHoursLabel}
-            </h2>
-            <p className="mt-2 text-sm leading-6 text-slate-400">
-              Reminder emails for {groupName} use this timing before prediction lock.
-            </p>
+            <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-300">
+              {hasOverride ? 'Custom timing' : 'Default timing'}
+            </span>
           </div>
-
-          <div className="w-fit rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-bold uppercase tracking-[0.14em] text-slate-300">
-            {hasOverride ? 'Custom timing' : 'Default timing'}
-          </div>
+          <h2 className="mt-3 text-2xl font-bold tracking-tight text-white">
+            {currentLeadHoursLabel}
+          </h2>
+          <p className="mt-2 text-sm leading-6 text-slate-400">
+            Reminder emails for {groupName} use this timing before prediction lock.
+          </p>
         </div>
+        <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-slate-500 transition-transform group-open:rotate-90" />
+      </summary>
 
+      <div className="mt-5 space-y-5">
         <p className="rounded-xl border border-white/5 bg-black/20 px-4 py-3 text-sm leading-6 text-slate-400">
           {timingSummary}
         </p>
@@ -95,6 +97,6 @@ export function TenantNotificationTimingPanel({
           )}
         </div>
       </div>
-    </section>
+    </details>
   )
 }

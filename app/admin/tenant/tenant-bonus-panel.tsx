@@ -1,4 +1,4 @@
-import { Building2, Car, CheckCircle2, HelpCircle, Lock, MapPin } from 'lucide-react'
+import { Building2, Car, CheckCircle2, HelpCircle, Lock } from 'lucide-react'
 import { FormActionButton } from '@/components/ui/form-action-button'
 import { RaceStatusPill } from '@/components/ui/race-status-pill'
 import { getRoundLabel } from '@/utils/race-copy'
@@ -19,13 +19,6 @@ type TenantBonusRace = {
 type TenantBonusOption = {
   id: string
   label?: string | null
-}
-
-export type TenantBonusVenueOption = {
-  id: string
-  name: string
-  country?: string | null
-  emoji?: string | null
 }
 
 export type TenantBonusDriverOption = {
@@ -62,7 +55,6 @@ type TenantBonusPanelProps = {
   races: TenantBonusRace[]
   questions: TenantBonusQuestion[]
   answers: TenantBonusAnswer[]
-  venueOptions?: TenantBonusVenueOption[]
   driverOptions?: TenantBonusDriverOption[]
   constructorOptions?: TenantBonusConstructorOption[]
   scopeTenantId?: string
@@ -78,12 +70,26 @@ function getBonusStatusCopy(status: RaceStatus) {
   return 'Cancelled races do not need bonus management.'
 }
 
+function getDedupedConstructorOptions(options: TenantBonusConstructorOption[]) {
+  const optionByKey = new Map<string, TenantBonusConstructorOption>()
+
+  for (const option of options) {
+    const key = `${option.name.trim().toLowerCase()}::${option.short_code.trim().toLowerCase()}`
+    const existing = optionByKey.get(key)
+
+    if (!existing || (!existing.emoji && option.emoji)) {
+      optionByKey.set(key, option)
+    }
+  }
+
+  return Array.from(optionByKey.values()).sort((left, right) => left.name.localeCompare(right.name))
+}
+
 export function TenantBonusPanel({
   groupName,
   races,
   questions,
   answers,
-  venueOptions = [],
   driverOptions = [],
   constructorOptions = [],
   scopeTenantId,
@@ -92,6 +98,7 @@ export function TenantBonusPanel({
 }: TenantBonusPanelProps) {
   const questionsByRaceId = new Map<string, TenantBonusQuestion[]>()
   const answerByQuestionId = new Map<string, string>()
+  const dedupedConstructorOptions = getDedupedConstructorOptions(constructorOptions)
 
   questions.forEach((question) => {
     const current = questionsByRaceId.get(question.race_id) || []
@@ -154,7 +161,7 @@ export function TenantBonusPanel({
         <div className="mt-6 grid gap-4">
           {highlightedRaces.map((race) => {
             const raceQuestions = questionsByRaceId.get(race.id) || []
-            const canEditQuestions = race.effectiveStatus === 'upcoming'
+            const canEditQuestions = race.effectiveStatus === 'upcoming' || isPlatformScope
             const canSaveAnswers = raceQuestions.length > 0 && race.effectiveStatus !== 'upcoming'
 
             return (
@@ -256,14 +263,14 @@ export function TenantBonusPanel({
                       </details>
                     )}
 
-                    {constructorOptions.length > 0 && (
+                    {dedupedConstructorOptions.length > 0 && (
                       <details className="rounded-xl border border-white/10 bg-black/20 p-3">
                         <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-400 [&::-webkit-details-marker]:hidden">
                           <Building2 className="h-3.5 w-3.5 text-red-300" />
                           Constructor options
                         </summary>
                         <div className="mt-3 grid max-h-56 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
-                          {constructorOptions.map((constructorOption) => (
+                          {dedupedConstructorOptions.map((constructorOption) => (
                             <label
                               key={constructorOption.id}
                               className="flex items-start gap-2 rounded-lg border border-white/5 bg-black/25 px-3 py-2 text-sm text-slate-300"
@@ -286,40 +293,6 @@ export function TenantBonusPanel({
                       </details>
                     )}
 
-                    {venueOptions.length > 0 && (
-                      <details className="rounded-xl border border-white/10 bg-black/20 p-3">
-                        <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-bold uppercase tracking-[0.18em] text-slate-400 [&::-webkit-details-marker]:hidden">
-                          <MapPin className="h-3.5 w-3.5 text-red-300" />
-                          Add venue options
-                        </summary>
-                        <div className="mt-3 grid max-h-56 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
-                          {venueOptions.map((venue) => (
-                            <label
-                              key={venue.id}
-                              className="flex items-start gap-2 rounded-lg border border-white/5 bg-black/25 px-3 py-2 text-sm text-slate-300"
-                            >
-                              <input
-                                type="checkbox"
-                                name="venue_options"
-                                value={venue.id}
-                                className="mt-1"
-                              />
-                              <span>
-                                <span className="font-semibold text-slate-100">
-                                  {venue.name}{venue.emoji ? ` ${venue.emoji}` : ''}
-                                </span>
-                                {venue.country && (
-                                  <span className="block text-xs text-slate-500">{venue.country}</span>
-                                )}
-                              </span>
-                            </label>
-                          ))}
-                        </div>
-                        <p className="mt-3 text-xs text-slate-500">
-                          Venue options are stored as circuit references, not just typed labels.
-                        </p>
-                      </details>
-                    )}
                     <FormActionButton idleLabel="Save question" pendingLabel="Saving question..." tone="amber" />
                   </form>
                 )}

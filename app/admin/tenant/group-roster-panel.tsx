@@ -2,7 +2,7 @@
 
 import { useActionState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { Crown, ShieldCheck, UserCheck, Users } from 'lucide-react'
+import { ChevronRight, Crown, ShieldCheck, UserCheck, Users } from 'lucide-react'
 import { updateGroupMemberAccess } from '@/app/actions/group-admin'
 import { FormActionButton } from '@/components/ui/form-action-button'
 import { getProfileDisplayName } from '@/utils/profile-name'
@@ -138,29 +138,28 @@ export function GroupRosterPanel({
   })
 
   return (
-    <section id="group-roster" className="scroll-mt-28 rounded-3xl border border-white/10 bg-card p-6 shadow-2xl md:p-8">
-      <div className="flex flex-col gap-4 border-b border-white/5 pb-5 lg:flex-row lg:items-end lg:justify-between">
-        <div>
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-slate-300">
-            <UserCheck className="h-3.5 w-3.5 text-red-400" />
-            Roster
+    <details id="group-roster" className="group scroll-mt-28 rounded-3xl border border-white/10 bg-card p-6 shadow-2xl md:p-8">
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-slate-300">
+              <UserCheck className="h-3.5 w-3.5 text-red-400" />
+              Roster
+            </div>
+            <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-300">
+              {roster.length} members
+            </span>
+            <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-300">
+              {tenantAdminCount} admins
+            </span>
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-white">Group members and access</h2>
+          <h2 className="mt-3 text-2xl font-bold tracking-tight text-white">Group members and access</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
             Promote trusted members, move people back to Main Group, and check race entries in one place.
           </p>
         </div>
-        <div className="grid grid-cols-2 gap-3 sm:min-w-64">
-          <div className="rounded-2xl border border-white/5 bg-black/25 p-4">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Members</div>
-            <div className="mt-2 text-3xl font-bold text-white">{roster.length}</div>
-          </div>
-          <div className="rounded-2xl border border-white/5 bg-black/25 p-4">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Admins</div>
-            <div className="mt-2 text-3xl font-bold text-white">{tenantAdminCount}</div>
-          </div>
-        </div>
-      </div>
+        <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-slate-500 transition-transform group-open:rotate-90" />
+      </summary>
 
       {sortedRoster.length === 0 ? (
         <div className="mt-5 rounded-2xl border border-dashed border-white/10 bg-black/20 p-6 text-center text-slate-400">
@@ -264,6 +263,6 @@ export function GroupRosterPanel({
           </table>
         </div>
       )}
-    </section>
+    </details>
   )
 }

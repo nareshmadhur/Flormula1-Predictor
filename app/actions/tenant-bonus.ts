@@ -10,7 +10,6 @@ import {
   buildBonusOptionInsertRows,
   getCleanBonusOptionLabels,
   getSelectedConstructorOptionIds,
-  getSelectedCircuitOptionIds,
   getSelectedDriverOptionIds,
 } from '@/utils/bonus-option-inputs'
 
@@ -111,8 +110,7 @@ export async function addTenantBonusQuestion(formData: FormData) {
   const optionCount =
     getCleanBonusOptionLabels(formData).length +
     getSelectedDriverOptionIds(formData).length +
-    getSelectedConstructorOptionIds(formData).length +
-    getSelectedCircuitOptionIds(formData).length
+    getSelectedConstructorOptionIds(formData).length
 
   if (!raceId || !questionText) {
     throw new Error('Race and question text are required.')

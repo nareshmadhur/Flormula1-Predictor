@@ -5,8 +5,10 @@ import { redirect } from 'next/navigation'
 import { Database } from 'lucide-react'
 import { ToggleDriverButton } from './toggle-driver-button'
 import { DeleteDriverButton } from './delete-driver-button'
+import { AddConstructorForm } from './add-constructor-form'
 import { AddDriverForm } from './add-driver-form'
 import { AddCircuitForm } from './add-circuit-form'
+import { EditConstructorForm } from './edit-constructor-form'
 import { EditCircuitForm } from './edit-circuit-form'
 import { PageBackLink } from '@/components/ui/page-back-link'
 import { useState, useEffect } from 'react'
@@ -129,6 +131,11 @@ function AdminDataPageClient() {
   }
 
   const { constructors, drivers, circuits } = data
+  const constructorKeyCounts = constructors.reduce((counts, constructor) => {
+    const key = `${constructor.name.trim().toLowerCase()}::${constructor.short_code.trim().toLowerCase()}`
+    counts.set(key, (counts.get(key) || 0) + 1)
+    return counts
+  }, new Map<string, number>())
 
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
@@ -189,10 +196,67 @@ function AdminDataPageClient() {
         </div>
 
         <div className="space-y-6">
+          <AddConstructorForm />
           <AddDriverForm constructors={constructors || []} />
           <AddCircuitForm />
         </div>
 
+      </div>
+
+      <div className="space-y-4">
+        <h2 className="text-xl font-bold">Constructor mapping</h2>
+        <div className="bg-card border border-white/5 rounded-2xl shadow-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-white/5 text-slate-400 text-sm">
+                  <th className="p-4 font-bold">Constructor</th>
+                  <th className="p-4 font-bold">Short Code</th>
+                  <th className="p-4 font-bold">Status</th>
+                  <th className="p-4 font-bold text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-white/5 text-sm">
+                {constructors.length ? (
+                  constructors.map((constructorRow) => {
+                    const key = `${constructorRow.name.trim().toLowerCase()}::${constructorRow.short_code.trim().toLowerCase()}`
+                    const isDuplicate = (constructorKeyCounts.get(key) || 0) > 1
+
+                    return (
+                      <tr key={constructorRow.id} className="hover:bg-white/[0.02] transition-colors">
+                        <td className="p-4">
+                          <div className="font-bold text-base text-slate-200">
+                            {constructorRow.emoji ? `${constructorRow.emoji} ` : ''}
+                            {constructorRow.name}
+                          </div>
+                        </td>
+                        <td className="p-4 font-bold text-red-500">{constructorRow.short_code}</td>
+                        <td className="p-4">
+                          <span className={`rounded-full border px-2 py-1 text-xs font-bold uppercase ${
+                            isDuplicate
+                              ? 'border-amber-500/20 bg-amber-500/10 text-amber-200'
+                              : 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
+                          }`}>
+                            {isDuplicate ? 'Duplicate' : 'Ready'}
+                          </span>
+                        </td>
+                        <td className="p-4">
+                          <EditConstructorForm constructor={constructorRow} />
+                        </td>
+                      </tr>
+                    )
+                  })
+                ) : (
+                  <tr>
+                    <td colSpan={4} className="p-6 text-center text-slate-500 italic">
+                      No constructors defined yet.
+                    </td>
+                  </tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
       <div className="space-y-4">

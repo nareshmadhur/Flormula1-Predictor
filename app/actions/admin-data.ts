@@ -28,6 +28,82 @@ export async function addDriver(formData: FormData) {
   revalidatePath('/admin/data')
 }
 
+export async function addConstructor(formData: FormData) {
+  const { supabase } = await assertPlatformAdmin()
+  const name = (formData.get('name') as string | null)?.trim()
+  const shortCode = (formData.get('short_code') as string | null)?.trim().toUpperCase()
+  const emoji = (formData.get('emoji') as string | null)?.trim() || null
+
+  if (!name || !shortCode) throw new Error('Constructor name and short code are required')
+
+  const { data: existingConstructors } = await supabase
+    .from('constructors')
+    .select('id, name, short_code')
+    .order('name')
+
+  const normalizedName = name.toLowerCase()
+  const normalizedCode = shortCode.toLowerCase()
+  const duplicate = (existingConstructors || []).find((constructor) => (
+    constructor.name.toLowerCase() === normalizedName ||
+    constructor.short_code.toLowerCase() === normalizedCode
+  ))
+
+  if (duplicate) {
+    throw new Error('That constructor already exists in reference data.')
+  }
+
+  const { error } = await supabase.from('constructors').insert({
+    name,
+    short_code: shortCode,
+    emoji,
+  })
+
+  if (error) throw new Error('Failed to add constructor: ' + error.message)
+  revalidatePath('/admin/data')
+}
+
+export async function updateConstructor(formData: FormData) {
+  const { supabase } = await assertPlatformAdmin()
+  const constructorId = (formData.get('constructor_id') as string | null)?.trim()
+  const name = (formData.get('name') as string | null)?.trim()
+  const shortCode = (formData.get('short_code') as string | null)?.trim().toUpperCase()
+  const emoji = (formData.get('emoji') as string | null)?.trim() || null
+
+  if (!constructorId) throw new Error('Constructor ID is required')
+  if (!name || !shortCode) throw new Error('Constructor name and short code are required')
+
+  const { data: existingConstructors } = await supabase
+    .from('constructors')
+    .select('id, name, short_code')
+    .neq('id', constructorId)
+
+  const normalizedName = name.toLowerCase()
+  const normalizedCode = shortCode.toLowerCase()
+  const duplicate = (existingConstructors || []).find((constructor) => (
+    constructor.name.toLowerCase() === normalizedName ||
+    constructor.short_code.toLowerCase() === normalizedCode
+  ))
+
+  if (duplicate) {
+    throw new Error('Another constructor already uses that name or short code.')
+  }
+
+  const { error } = await supabase
+    .from('constructors')
+    .update({
+      name,
+      short_code: shortCode,
+      emoji,
+    })
+    .eq('id', constructorId)
+
+  if (error) throw new Error('Failed to update constructor: ' + error.message)
+
+  revalidatePath('/admin/data')
+  revalidatePath('/admin/races')
+  revalidatePath('/admin/tenant')
+}
+
 export async function addCircuit(formData: FormData) {
   const { supabase } = await assertPlatformAdmin()
   const name = (formData.get('name') as string | null)?.trim()

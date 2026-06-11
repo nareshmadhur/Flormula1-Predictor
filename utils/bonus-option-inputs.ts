@@ -16,30 +16,18 @@ type ConstructorOptionRow = {
   emoji?: string | null
 }
 
-type CircuitOptionRow = {
-  id: string
-  name: string
-  country?: string | null
-  emoji?: string | null
-}
-
 export type BonusOptionInsertRow = {
   bonus_question_id: string
-  option_type: 'custom_text' | 'driver' | 'constructor' | 'circuit'
+  option_type: 'custom_text' | 'driver' | 'constructor'
   label: string
   driver_id?: string
   constructor_id?: string
-  circuit_id?: string
 }
 
 export function getCleanBonusOptionLabels(formData: FormData) {
   return Array.from(formData.getAll('options'))
     .map((value) => String(value).trim())
     .filter(Boolean)
-}
-
-export function getSelectedCircuitOptionIds(formData: FormData) {
-  return getUniqueFormIds(formData, 'venue_options')
 }
 
 export function getSelectedDriverOptionIds(formData: FormData) {
@@ -69,11 +57,6 @@ export function getConstructorOptionLabel(constructor: ConstructorOptionRow) {
   return `${constructor.short_code} · ${constructor.name}${suffix}`
 }
 
-export function getCircuitOptionLabel(circuit: CircuitOptionRow) {
-  const suffix = circuit.country ? ` · ${circuit.country}` : ''
-  return `${circuit.name}${circuit.emoji ? ` ${circuit.emoji}` : ''}${suffix}`
-}
-
 export async function buildBonusOptionInsertRows(
   supabase: BonusOptionInputClient,
   questionId: string,
@@ -82,7 +65,6 @@ export async function buildBonusOptionInsertRows(
   const optionLabels = getCleanBonusOptionLabels(formData)
   const driverIds = getSelectedDriverOptionIds(formData)
   const constructorIds = getSelectedConstructorOptionIds(formData)
-  const circuitIds = getSelectedCircuitOptionIds(formData)
   const customOptions: BonusOptionInsertRow[] = optionLabels.map((label) => ({
     bonus_question_id: questionId,
     option_type: 'custom_text',
@@ -158,42 +140,6 @@ export async function buildBonusOptionInsertRows(
           option_type: 'constructor' as const,
           constructor_id: constructor.id,
           label: getConstructorOptionLabel(constructor),
-        }
-      })
-    )
-  }
-
-  if (circuitIds.length > 0) {
-    const { data: circuits, error } = await supabase
-      .from('circuits')
-      .select('id, name, country, emoji')
-      .in('id', circuitIds)
-
-    if (error) {
-      throw new Error(error.message || 'Could not load venue options.')
-    }
-
-    const circuitById = new Map(
-      ((circuits || []) as CircuitOptionRow[]).map((circuit) => [circuit.id, circuit])
-    )
-
-    if (circuitById.size !== circuitIds.length) {
-      throw new Error('One or more venue options are invalid.')
-    }
-
-    referenceOptions.push(
-      ...circuitIds.map((circuitId) => {
-        const circuit = circuitById.get(circuitId)
-
-        if (!circuit) {
-          throw new Error('One or more venue options are invalid.')
-        }
-
-        return {
-          bonus_question_id: questionId,
-          option_type: 'circuit' as const,
-          circuit_id: circuit.id,
-          label: getCircuitOptionLabel(circuit),
         }
       })
     )

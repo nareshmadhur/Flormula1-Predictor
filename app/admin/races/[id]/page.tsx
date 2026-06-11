@@ -8,7 +8,6 @@ import { OfficialResultsForm } from './official-results-form'
 import { updateRace } from '@/app/actions/admin'
 import { calculateRaceScoresAction } from '@/app/actions/scoring'
 import { getAdminAccessContext } from '@/utils/admin-access'
-import { getProfileDisplayName } from '@/utils/profile-name'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { recalculateRaceScores, recalculateRaceScoresIfResultExists } from '@/utils/race-scoring'
 import { saveHistoricPrediction, saveOfficialRaceResult } from '@/utils/result-pipeline'
@@ -33,10 +32,8 @@ import {
   type TenantBonusConstructorOption,
   type TenantBonusDriverOption,
   type TenantBonusQuestion,
-  type TenantBonusVenueOption,
 } from '@/app/admin/tenant/tenant-bonus-panel'
-import { BonusAuditLog } from '@/components/ui/bonus-audit-log'
-import { getRaceBonusAuditEntries } from '@/utils/bonus-audit'
+import { HistoricPredictionForm } from './historic-prediction-form'
 
 export const revalidate = 0
 
@@ -82,6 +79,7 @@ type ProfileRecord = {
   id: string
   display_name?: string | null
   email?: string | null
+  tenant_id?: string | null
 }
 
 type TenantRecord = {
@@ -140,11 +138,42 @@ export async function proxyPrediction(formData: FormData) {
       return
   }
 
+  const { data: targetProfile } = await supabase
+    .from('profiles')
+    .select('tenant_id')
+    .eq('id', targetUserId)
+    .maybeSingle()
+  const targetTenantId = targetProfile?.tenant_id || null
+  const { data: bonusQuestions } = targetTenantId
+    ? await supabase
+        .from('bonus_questions')
+        .select('id, bonus_options(id)')
+        .eq('race_id', raceId)
+        .eq('tenant_id', targetTenantId)
+        .eq('is_active', true)
+    : { data: [] }
+  const bonusAnswers = ((bonusQuestions || []) as Array<{ id: string; bonus_options?: Array<{ id: string }> | null }>)
+    .map((question) => {
+      const optionId = String(formData.get(`historic_bonus_${question.id}`) || '').trim()
+      if (!optionId) return null
+
+      const validOptionIds = new Set((question.bonus_options || []).map((option) => option.id))
+      if (!validOptionIds.has(optionId)) {
+        throw new Error('Historic bonus answer does not match the selected user group.')
+      }
+
+      return {
+        questionId: question.id,
+        optionId,
+      }
+    })
+    .filter((answer): answer is { questionId: string; optionId: string } => Boolean(answer))
+
   const result = await saveHistoricPrediction(supabase, {
     raceId,
     userId: targetUserId,
     podium: { p1, p2, p3 },
-    bonusAnswers: [],
+    bonusAnswers,
   })
 
   if (result.shouldRecalculate) {
@@ -207,7 +236,6 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
           .in('bonus_question_id', tenantBonusQuestionIds)
       : { data: [] as TenantBonusAnswer[] }
   const typedTenantBonusAnswers = (tenantBonusAnswers || []) as TenantBonusAnswer[]
-  const bonusAuditEntries = await getRaceBonusAuditEntries(supabase, id)
   const effectiveStatus = getEffectiveRaceStatus(typedRace)
   let suggestedPodium = null
   let openF1Review: OpenF1ScheduleReviewRow | null = null
@@ -300,13 +328,6 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
     code: driver.code,
     full_name: driver.full_name,
   })) satisfies TenantBonusDriverOption[]
-  const venueOptions = typedCircuits.map((circuit) => ({
-    id: circuit.id,
-    name: circuit.name,
-    country: circuit.country,
-    emoji: circuit.emoji,
-  })) satisfies TenantBonusVenueOption[]
-
   return (
     <div className="space-y-8 animate-in fade-in duration-500">
       
@@ -655,7 +676,6 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
                     answers={answers}
                     driverOptions={driverOptions}
                     constructorOptions={typedConstructors}
-                    venueOptions={venueOptions}
                     scopeTenantId={tenant.id}
                     isPlatformScope
                     sectionId={`group-bonus-${tenant.id}`}
@@ -664,8 +684,6 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
               </div>
             )}
           </section>
-
-          <BonusAuditLog entries={bonusAuditEntries} />
 
           <details id="scoring" className="group bg-card border border-amber-500/10 rounded-2xl p-6 shadow-xl scroll-mt-28">
              <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
@@ -704,51 +722,13 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
                </span>
              </summary>
              <div className="mt-6 border-t border-white/10 pt-6">
-               <form action={proxyPrediction} className="space-y-4">
-                   <input type="hidden" name="race_id" value={typedRace.id} />
-                   
-                   <div>
-                      <label className="block text-sm font-medium text-slate-400 mb-1">Select User</label>
-                      <select name="user_id" required defaultValue="" className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-2">
-                        <option value="" disabled className="bg-slate-900 text-white">Choose user</option>
-                        {typedProfiles.map((p) => (
-                          <option key={p.id} value={p.id} className="bg-slate-900 text-white">
-                            {getProfileDisplayName(p.display_name, p.email)}
-                          </option>
-                        ))}
-                      </select>
-                   </div>
-
-	                   <div className="grid grid-cols-3 gap-2">
-                       <div>
-                          <label className="block text-xs font-bold text-slate-500 mb-1">P1</label>
-                          <select name="p1" required defaultValue="" className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-2 text-sm">
-                             <option value="" disabled>---</option>
-                             {typedDrivers.map((d) => <option key={d.id} value={d.id} className="bg-slate-900 text-white">{d.code}</option>)}
-                          </select>
-                       </div>
-                       <div>
-                          <label className="block text-xs font-bold text-slate-500 mb-1">P2</label>
-                          <select name="p2" required defaultValue="" className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-2 text-sm">
-                             <option value="" disabled>---</option>
-                             {typedDrivers.map((d) => <option key={d.id} value={d.id} className="bg-slate-900 text-white">{d.code}</option>)}
-                          </select>
-                       </div>
-                       <div>
-                          <label className="block text-xs font-bold text-slate-500 mb-1">P3</label>
-                          <select name="p3" required defaultValue="" className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-2 text-sm">
-                             <option value="" disabled>---</option>
-                             {typedDrivers.map((d) => <option key={d.id} value={d.id} className="bg-slate-900 text-white">{d.code}</option>)}
-                          </select>
-                       </div>
-	                   </div>
-
-                       <div className="rounded-xl border border-white/10 bg-black/20 p-4 text-sm text-slate-400">
-                         This tool saves only the historic podium pick. Group bonus answers remain tenant-owned and are not changed by platform backfills.
-                       </div>
-
-	                   <FormActionButton idleLabel="Submit prediction for user" pendingLabel="Saving prediction..." tone="secondary" className="mt-2" />
-               </form>
+               <HistoricPredictionForm
+                 raceId={typedRace.id}
+                 action={proxyPrediction}
+                 profiles={typedProfiles}
+                 drivers={typedDrivers}
+                 bonusQuestions={typedTenantBonusQuestions}
+               />
              </div>
           </details>
         </div>

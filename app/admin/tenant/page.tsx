@@ -379,7 +379,10 @@ export default async function TenantAdminPage() {
     featuredRace && operationalMembers.length > 0
       ? Math.round((nextRaceCoverage / operationalMembers.length) * 100)
       : 0
-  const tenantRaceRows = sortRacesByFocus(typedRaces).slice(0, 6).map((race) => {
+  const tenantRaceRows = sortRacesByFocus(typedRaces).filter((race) => {
+    const status = getEffectiveRaceStatus(race)
+    return status === 'locked' || status === 'completed' || status === 'scored'
+  }).slice(0, 6).map((race) => {
     const predictionUserIds = predictionUserIdsByRaceId.get(race.id) || new Set<string>()
     const scoreRows = scoreRowsByRaceId.get(race.id) || []
     const topScore = scoreRows[0] || null
@@ -632,8 +635,8 @@ export default async function TenantAdminPage() {
           <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-xl">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
               <div>
-                <div className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Race review</div>
-                <h2 className="mt-1 text-xl font-bold tracking-tight text-white">Entries and group results by race</h2>
+                <div className="text-xs font-bold uppercase tracking-[0.2em] text-slate-500">Race attention</div>
+                <h2 className="mt-1 text-xl font-bold tracking-tight text-white">Races needing review</h2>
               </div>
               <div className="text-sm font-bold text-slate-400">
                 {tenantRaceRows.length} race{tenantRaceRows.length === 1 ? '' : 's'}
@@ -642,7 +645,7 @@ export default async function TenantAdminPage() {
 
             <div className="mt-4 overflow-hidden rounded-2xl border border-white/5 bg-black/20">
               {tenantRaceRows.length === 0 ? (
-                <div className="p-6 text-center text-sm text-slate-500">No races available for this season.</div>
+                <div className="p-6 text-center text-sm text-slate-500">No locked, completed, or scored races need review.</div>
               ) : (
                 tenantRaceRows.map((row) => (
                   <PendingLink

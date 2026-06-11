@@ -2,7 +2,7 @@
 
 import { useActionState, useMemo, useState } from 'react'
 import { format, formatDistanceToNowStrict } from 'date-fns'
-import { Copy, Link2, ShieldOff, Users } from 'lucide-react'
+import { ChevronRight, Copy, Link2, ShieldOff, Users } from 'lucide-react'
 import { createCopyableGroupInvite, createGroupInvite, revokeGroupInvite } from '@/app/actions/group-invites'
 import { FormActionButton } from '@/components/ui/form-action-button'
 import {
@@ -152,32 +152,28 @@ export function GroupInvitePanel({ groupName, invites, setupMessage, migrationNo
   )
 
   return (
-    <section id="group-invites" className="scroll-mt-28 rounded-3xl border border-white/10 bg-card p-6 shadow-2xl md:p-8">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div>
-          <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-red-200">
-            <Link2 className="h-3.5 w-3.5" />
-            Group invites
+    <details id="group-invites" className="group scroll-mt-28 rounded-3xl border border-white/10 bg-card p-6 shadow-2xl md:p-8">
+      <summary className="flex cursor-pointer list-none items-start justify-between gap-4 [&::-webkit-details-marker]:hidden">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="inline-flex items-center gap-2 rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.2em] text-red-200">
+              <Link2 className="h-3.5 w-3.5" />
+              Invites
+            </div>
+            <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-300">
+              {activeInviteCount} active
+            </span>
+            <span className="rounded-full border border-white/10 bg-black/20 px-3 py-1 text-xs font-bold uppercase tracking-[0.18em] text-slate-300">
+              {invites.reduce((total, invite) => total + invite.accepted_count, 0)} joined
+            </span>
           </div>
-          <h2 className="text-2xl font-bold tracking-tight text-white">Invite people to {groupName}</h2>
+          <h2 className="mt-3 text-2xl font-bold tracking-tight text-white">Invite people to {groupName}</h2>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">
             Create a link for people who should move from Main Group into this private group after signing in.
           </p>
         </div>
-
-        <div className="grid grid-cols-2 gap-3 sm:min-w-64">
-          <div className="rounded-2xl border border-white/5 bg-black/30 p-4">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Active</div>
-            <div className="mt-2 text-3xl font-bold text-white">{activeInviteCount}</div>
-          </div>
-          <div className="rounded-2xl border border-white/5 bg-black/30 p-4">
-            <div className="text-xs font-bold uppercase tracking-wider text-slate-500">Joined</div>
-            <div className="mt-2 text-3xl font-bold text-white">
-              {invites.reduce((total, invite) => total + invite.accepted_count, 0)}
-            </div>
-          </div>
-        </div>
-      </div>
+        <ChevronRight className="mt-1 h-5 w-5 shrink-0 text-slate-500 transition-transform group-open:rotate-90" />
+      </summary>
 
       {migrationNotice && (
         <div className="mt-5 rounded-2xl border border-amber-500/20 bg-amber-500/10 p-4 text-sm leading-6 text-amber-100">
@@ -335,6 +331,6 @@ export function GroupInvitePanel({ groupName, invites, setupMessage, migrationNo
           </div>
         </div>
       )}
-    </section>
+    </details>
   )
 }

@@ -68,7 +68,7 @@ type RaceBonusAnswerRow = {
   correct_bonus_option_id: string
 }
 
-type BonusAuditItem = {
+type BonusHistoryItem = {
   questionText: string
   selectedLabel: string
   officialLabel: string | null
@@ -83,7 +83,7 @@ type HistoryEntry = {
   score?: ScoreRow
   category: 'awaiting' | 'scored' | 'missed' | 'upcoming'
   summary: string
-  bonusAudit: BonusAuditItem[]
+  bonusHistory: BonusHistoryItem[]
 }
 
 function getCategoryTitle(category: HistoryEntry['category']) {
@@ -237,7 +237,7 @@ export default async function UserHistoryPage() {
     else if ((status === 'locked' || status === 'completed') && hasPredicted) category = 'awaiting'
     else if ((status === 'locked' || status === 'completed' || status === 'scored') && !hasPredicted) category = 'missed'
 
-    const bonusAudit = predictionId
+    const bonusHistory = predictionId
       ? raceQuestions.flatMap((question) => {
           const selectedOptionId = predictionBonusAnswerMap.get(`${predictionId}:${question.id}`)
           const officialOptionId = raceBonusAnswerMap.get(`${race.id}:${question.id}`) || null
@@ -258,7 +258,7 @@ export default async function UserHistoryPage() {
               officialLabel,
               isCorrect: Boolean(selectedOptionId && officialOptionId && selectedOptionId === officialOptionId),
               isResolved: Boolean(officialOptionId),
-            } satisfies BonusAuditItem,
+            } satisfies BonusHistoryItem,
           ]
         })
       : []
@@ -270,7 +270,7 @@ export default async function UserHistoryPage() {
       score,
       category,
       summary: getEntrySummary(status, hasPredicted, score),
-      bonusAudit,
+      bonusHistory,
     }
   })
 
@@ -387,9 +387,9 @@ export default async function UserHistoryPage() {
                           {entry.race.circuits?.emoji} {entry.race.circuits?.name}, {entry.race.circuits?.country}
                         </div>
                         <p className="max-w-2xl text-sm text-slate-300">{entry.summary}</p>
-                        {entry.bonusAudit.length > 0 && (entry.category === 'scored' || entry.category === 'awaiting') && (
+                        {entry.bonusHistory.length > 0 && (entry.category === 'scored' || entry.category === 'awaiting') && (
                           <div className="flex flex-wrap gap-2 pt-1">
-                            {entry.bonusAudit.map((item) => (
+                            {entry.bonusHistory.map((item) => (
                               <span
                                 key={`${entry.race.id}-${item.questionText}`}
                                 className={`inline-flex max-w-full items-center gap-2 rounded-full border px-3 py-1.5 text-xs ${
