@@ -119,9 +119,13 @@ export function TenantBonusPanel({
 
   const liveRaces = races.filter((race) => race.effectiveStatus !== 'cancelled')
   const highlightedRaces = liveRaces
-    .filter((race) => race.effectiveStatus !== 'scored' || (questionsByRaceId.get(race.id) || []).length > 0)
+    .filter((race) => {
+      if (isPlatformScope) return true
+      return race.effectiveStatus !== 'scored' || (questionsByRaceId.get(race.id) || []).length > 0
+    })
     .slice(0, 6)
   const unansweredCount = questions.filter((question) => !answerByQuestionId.has(question.id)).length
+  const hasQuestions = questions.length > 0
 
   return (
     <section id={sectionId} className="rounded-3xl border border-white/10 bg-card p-6 shadow-2xl md:p-8">
@@ -135,7 +139,9 @@ export function TenantBonusPanel({
             Group bonus questions
           </h2>
           <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-400">
-            Add questions for {groupName} before entries close. After the race, set the correct answers from this race workspace.
+            {isPlatformScope
+              ? `Add or correct questions for ${groupName} from this race workspace, including historical backfills.`
+              : `Add questions for ${groupName} before entries close. After the race, set the correct answers from this race workspace.`}
           </p>
         </div>
 
@@ -145,10 +151,16 @@ export function TenantBonusPanel({
             Answers
           </div>
           <div className="mt-2 font-semibold text-white">
-            {unansweredCount === 0 ? 'All answers saved' : `${unansweredCount} answer${unansweredCount === 1 ? '' : 's'} pending`}
+            {!hasQuestions
+              ? 'No questions yet'
+              : unansweredCount === 0
+                ? 'All answers saved'
+                : `${unansweredCount} answer${unansweredCount === 1 ? '' : 's'} pending`}
           </div>
           <p className="mt-1 text-xs leading-5 text-slate-500">
-            Bonus points count once this group saves the official answers.
+            {hasQuestions
+              ? 'Bonus points count once this group saves the official answers.'
+              : 'Add questions here to start this group bonus set.'}
           </p>
         </div>
       </div>
