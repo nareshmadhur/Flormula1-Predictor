@@ -7,6 +7,10 @@ import {
   addTenantBonusQuestion,
   saveTenantBonusAnswers,
 } from '@/app/actions/tenant-bonus'
+import {
+  ReferenceOptionPicker,
+  type ReferenceOptionPickerOption,
+} from './reference-option-picker'
 import { TenantBonusQuestionCard } from './tenant-bonus-question-card'
 
 type TenantBonusRace = {
@@ -85,6 +89,26 @@ function getDedupedConstructorOptions(options: TenantBonusConstructorOption[]) {
   return Array.from(optionByKey.values()).sort((left, right) => left.name.localeCompare(right.name))
 }
 
+function getDriverPickerOptions(options: TenantBonusDriverOption[]): ReferenceOptionPickerOption[] {
+  return options.map((driver) => ({
+    id: driver.id,
+    primary: `${driver.code}${driver.emoji ? ` ${driver.emoji}` : ''}`,
+    secondary: driver.full_name,
+    searchText: `${driver.code} ${driver.full_name}`,
+  }))
+}
+
+function getConstructorPickerOptions(
+  options: TenantBonusConstructorOption[]
+): ReferenceOptionPickerOption[] {
+  return options.map((constructorOption) => ({
+    id: constructorOption.id,
+    primary: `${constructorOption.short_code}${constructorOption.emoji ? ` ${constructorOption.emoji}` : ''}`,
+    secondary: constructorOption.name,
+    searchText: `${constructorOption.short_code} ${constructorOption.name}`,
+  }))
+}
+
 export function TenantBonusPanel({
   groupName,
   races,
@@ -99,6 +123,8 @@ export function TenantBonusPanel({
   const questionsByRaceId = new Map<string, TenantBonusQuestion[]>()
   const answerByQuestionId = new Map<string, string>()
   const dedupedConstructorOptions = getDedupedConstructorOptions(constructorOptions)
+  const driverPickerOptions = getDriverPickerOptions(driverOptions)
+  const constructorPickerOptions = getConstructorPickerOptions(dedupedConstructorOptions)
 
   questions.forEach((question) => {
     const current = questionsByRaceId.get(question.race_id) || []
@@ -251,27 +277,11 @@ export function TenantBonusPanel({
                           <Car className="h-3.5 w-3.5 text-red-300" />
                           Driver options
                         </summary>
-                        <div className="mt-3 grid max-h-56 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
-                          {driverOptions.map((driver) => (
-                            <label
-                              key={driver.id}
-                              className="flex items-start gap-2 rounded-lg border border-white/5 bg-black/25 px-3 py-2 text-sm text-slate-300"
-                            >
-                              <input
-                                type="checkbox"
-                                name="driver_options"
-                                value={driver.id}
-                                className="mt-1"
-                              />
-                              <span>
-                                <span className="font-semibold text-slate-100">
-                                  {driver.code}{driver.emoji ? ` ${driver.emoji}` : ''}
-                                </span>
-                                <span className="block text-xs text-slate-500">{driver.full_name}</span>
-                              </span>
-                            </label>
-                          ))}
-                        </div>
+                        <ReferenceOptionPicker
+                          name="driver_options"
+                          options={driverPickerOptions}
+                          searchPlaceholder="Search drivers"
+                        />
                       </details>
                     )}
 
@@ -281,27 +291,11 @@ export function TenantBonusPanel({
                           <Building2 className="h-3.5 w-3.5 text-red-300" />
                           Constructor options
                         </summary>
-                        <div className="mt-3 grid max-h-56 gap-2 overflow-y-auto pr-1 sm:grid-cols-2">
-                          {dedupedConstructorOptions.map((constructorOption) => (
-                            <label
-                              key={constructorOption.id}
-                              className="flex items-start gap-2 rounded-lg border border-white/5 bg-black/25 px-3 py-2 text-sm text-slate-300"
-                            >
-                              <input
-                                type="checkbox"
-                                name="constructor_options"
-                                value={constructorOption.id}
-                                className="mt-1"
-                              />
-                              <span>
-                                <span className="font-semibold text-slate-100">
-                                  {constructorOption.short_code}{constructorOption.emoji ? ` ${constructorOption.emoji}` : ''}
-                                </span>
-                                <span className="block text-xs text-slate-500">{constructorOption.name}</span>
-                              </span>
-                            </label>
-                          ))}
-                        </div>
+                        <ReferenceOptionPicker
+                          name="constructor_options"
+                          options={constructorPickerOptions}
+                          searchPlaceholder="Search constructors"
+                        />
                       </details>
                     )}
 

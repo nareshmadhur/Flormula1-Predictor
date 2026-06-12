@@ -82,6 +82,20 @@ type ProfileRecord = {
   tenant_id?: string | null
 }
 
+type PredictionRecord = {
+  id: string
+  user_id: string
+  p1_driver_id?: string | null
+  p2_driver_id?: string | null
+  p3_driver_id?: string | null
+}
+
+type PredictionBonusAnswerRecord = {
+  prediction_id: string
+  bonus_question_id: string
+  bonus_option_id: string
+}
+
 type TenantRecord = {
   id: string
   name: string
@@ -127,23 +141,63 @@ export async function proxyPrediction(formData: FormData) {
   const access = await getAdminAccessContext(supabase)
   if (!access?.isPlatformAdmin) return
 
-  const raceId = formData.get('race_id') as string
-  const targetUserId = formData.get('user_id') as string
-  const p1 = formData.get('p1') as string
-  const p2 = formData.get('p2') as string
-  const p3 = formData.get('p3') as string
-
-  if (p1 === p2 || p1 === p3 || p2 === p3) {
-      // In production we would return an error toast, but here we just throw or abort
-      return
+  const raceId = String(formData.get('race_id') || '').trim()
+  const targetUserId = String(formData.get('user_id') || '').trim()
+  const podiumInput = {
+    p1: String(formData.get('p1') || '').trim(),
+    p2: String(formData.get('p2') || '').trim(),
+    p3: String(formData.get('p3') || '').trim(),
   }
 
-  const { data: targetProfile } = await supabase
-    .from('profiles')
-    .select('tenant_id')
-    .eq('id', targetUserId)
-    .maybeSingle()
+  if (!raceId || !targetUserId) {
+    throw new Error('Race and user are required.')
+  }
+
+  const [{ data: targetProfile }, { data: existingPrediction }] = await Promise.all([
+    supabase
+      .from('profiles')
+      .select('tenant_id')
+      .eq('id', targetUserId)
+      .maybeSingle(),
+    supabase
+      .from('predictions')
+      .select('id, p1_driver_id, p2_driver_id, p3_driver_id')
+      .eq('race_id', raceId)
+      .eq('user_id', targetUserId)
+      .maybeSingle(),
+  ])
+
+  const finalPodium = {
+    p1: podiumInput.p1 || existingPrediction?.p1_driver_id || '',
+    p2: podiumInput.p2 || existingPrediction?.p2_driver_id || '',
+    p3: podiumInput.p3 || existingPrediction?.p3_driver_id || '',
+  }
+
+  if (!finalPodium.p1 || !finalPodium.p2 || !finalPodium.p3) {
+    throw new Error('Choose a full podium before saving a historic entry for a user with no saved prediction yet.')
+  }
+
+  if (
+    finalPodium.p1 === finalPodium.p2 ||
+    finalPodium.p1 === finalPodium.p3 ||
+    finalPodium.p2 === finalPodium.p3
+  ) {
+    throw new Error('Historic podium must contain three different drivers.')
+  }
+
   const targetTenantId = targetProfile?.tenant_id || null
+  const { data: existingBonusAnswerRows } =
+    existingPrediction?.id
+      ? await supabase
+          .from('prediction_bonus_answers')
+          .select('bonus_question_id, bonus_option_id')
+          .eq('prediction_id', existingPrediction.id)
+      : { data: [] as Array<{ bonus_question_id: string; bonus_option_id: string }> }
+  const existingBonusAnswerByQuestionId = new Map(
+    ((existingBonusAnswerRows || []) as Array<{ bonus_question_id: string; bonus_option_id: string }>).map(
+      (answer) => [answer.bonus_question_id, answer.bonus_option_id]
+    )
+  )
   const { data: bonusQuestions } = targetTenantId
     ? await supabase
         .from('bonus_questions')
@@ -154,7 +208,8 @@ export async function proxyPrediction(formData: FormData) {
     : { data: [] }
   const bonusAnswers = ((bonusQuestions || []) as Array<{ id: string; bonus_options?: Array<{ id: string }> | null }>)
     .map((question) => {
-      const optionId = String(formData.get(`historic_bonus_${question.id}`) || '').trim()
+      const submittedOptionId = String(formData.get(`historic_bonus_${question.id}`) || '').trim()
+      const optionId = submittedOptionId || existingBonusAnswerByQuestionId.get(question.id) || ''
       if (!optionId) return null
 
       const validOptionIds = new Set((question.bonus_options || []).map((option) => option.id))
@@ -172,7 +227,7 @@ export async function proxyPrediction(formData: FormData) {
   const result = await saveHistoricPrediction(supabase, {
     raceId,
     userId: targetUserId,
-    podium: { p1, p2, p3 },
+    podium: finalPodium,
     bonusAnswers,
   })
 
@@ -218,6 +273,14 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
     .eq('race_id', id)
     .eq('is_active', true)
     .order('display_order', { ascending: true })
+  const { data: historicPredictions } =
+    (profiles || []).length > 0
+      ? await supabase
+          .from('predictions')
+          .select('id, user_id, p1_driver_id, p2_driver_id, p3_driver_id')
+          .eq('race_id', id)
+          .in('user_id', (profiles || []).map((profile) => profile.id))
+      : { data: [] as PredictionRecord[] }
 
   const typedRace = race as RaceRecord
   const typedDrivers = (drivers || []) as DriverRecord[]
@@ -227,6 +290,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
   const typedProfiles = (profiles || []) as ProfileRecord[]
   const typedTenants = (tenants || []) as TenantRecord[]
   const typedTenantBonusQuestions = (tenantBonusQuestions || []) as PlatformTenantBonusQuestion[]
+  const typedHistoricPredictions = (historicPredictions || []) as PredictionRecord[]
   const tenantBonusQuestionIds = typedTenantBonusQuestions.map((question) => question.id)
   const { data: tenantBonusAnswers } =
     tenantBonusQuestionIds.length > 0
@@ -235,7 +299,30 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
           .select('race_id, bonus_question_id, correct_bonus_option_id')
           .in('bonus_question_id', tenantBonusQuestionIds)
       : { data: [] as TenantBonusAnswer[] }
+  const historicPredictionIds = typedHistoricPredictions.map((prediction) => prediction.id)
+  const { data: historicPredictionBonusAnswers } =
+    historicPredictionIds.length > 0
+      ? await supabase
+          .from('prediction_bonus_answers')
+          .select('prediction_id, bonus_question_id, bonus_option_id')
+          .in('prediction_id', historicPredictionIds)
+      : { data: [] as PredictionBonusAnswerRecord[] }
   const typedTenantBonusAnswers = (tenantBonusAnswers || []) as TenantBonusAnswer[]
+  const typedHistoricPredictionBonusAnswers =
+    (historicPredictionBonusAnswers || []) as PredictionBonusAnswerRecord[]
+  const historicBonusAnswersByPredictionId = new Map<string, Record<string, string>>()
+  typedHistoricPredictionBonusAnswers.forEach((answer) => {
+    const current = historicBonusAnswersByPredictionId.get(answer.prediction_id) || {}
+    current[answer.bonus_question_id] = answer.bonus_option_id
+    historicBonusAnswersByPredictionId.set(answer.prediction_id, current)
+  })
+  const historicPredictionEntries = typedHistoricPredictions.map((prediction) => ({
+    user_id: prediction.user_id,
+    p1_driver_id: prediction.p1_driver_id || null,
+    p2_driver_id: prediction.p2_driver_id || null,
+    p3_driver_id: prediction.p3_driver_id || null,
+    bonus_answers: historicBonusAnswersByPredictionId.get(prediction.id) || {},
+  }))
   const effectiveStatus = getEffectiveRaceStatus(typedRace)
   let suggestedPodium = null
   let openF1Review: OpenF1ScheduleReviewRow | null = null
@@ -728,6 +815,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
                  profiles={typedProfiles}
                  drivers={typedDrivers}
                  bonusQuestions={typedTenantBonusQuestions}
+                 existingPredictions={historicPredictionEntries}
                />
              </div>
           </details>
