@@ -16,6 +16,7 @@ import { PendingLink } from '@/components/ui/pending-link'
 import { RaceStatusPill } from '@/components/ui/race-status-pill'
 import { RaceMetaStrip } from '@/components/ui/race-meta-strip'
 import { SectionHeader } from '@/components/ui/section-header'
+import { ShareImageActions, type RaceResultShareCardData } from '@/components/ui/share-image-actions'
 import { getRaceTone } from '@/utils/race-experience'
 
 export const revalidate = 0
@@ -128,6 +129,41 @@ export default async function PublicRacePage({ params }: PageProps) {
         { label: 'P3', value: getDriverLabel(drivers, raceResult.p3_driver_id) },
       ]
     : []
+  const raceShareCard: RaceResultShareCardData | null =
+    effectiveStatus === 'scored' && officialPodium.length > 0
+      ? {
+          kind: 'race-result',
+          season: race.season,
+          title: race.race_name,
+          subtitle: race.round ? getRoundLabel(race.round) : 'Race recap',
+          headline: 'Official podium and top scorers',
+          detail:
+            topScorers.length > 0
+              ? `${topScorers.length} player${topScorers.length === 1 ? '' : 's'} published for this race recap.`
+              : 'Official podium is live.',
+          footer:
+            topScorers.length > 0
+              ? `${getProfileDisplayName(
+                  getTopScorerProfile(topScorers[0])?.display_name,
+                  getTopScorerProfile(topScorers[0])?.email
+                )} led the race on ${winningScore ?? 0} pts.`
+              : `${race.race_name} official result is live.`,
+          podium: officialPodium.map((entry) => ({
+            slot: entry.label,
+            value: entry.value,
+          })),
+          scorers: topScorers.slice(0, 5).map((score, index) => {
+            const profile = getTopScorerProfile(score)
+
+            return {
+              rank: getRaceScoreRank(topScorers, index),
+              name: getProfileDisplayName(profile?.display_name, profile?.email),
+              points: score.total_points,
+              highlight: winningScore !== null && score.total_points === winningScore,
+            }
+          }),
+        }
+      : null
 
   return (
     <div className="space-y-6 animate-in fade-in duration-500">
@@ -220,6 +256,17 @@ export default async function PublicRacePage({ params }: PageProps) {
               </span>
             }
           />
+
+          {raceShareCard && (
+            <div className="mt-4">
+              <ShareImageActions
+                title="Copy a race recap card"
+                description="Builds a share-ready PNG for the official podium and top scorers."
+                fileName={`flormula1-${race.season}-${race.round || 'race'}-recap.png`}
+                data={raceShareCard}
+              />
+            </div>
+          )}
 
           <div className="mt-4 space-y-4">
             <div className="rounded-2xl border border-white/5 bg-black/20 p-4">

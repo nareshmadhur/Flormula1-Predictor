@@ -7,6 +7,7 @@ import { getUserTenantContext } from '@/utils/tenant'
 import { getProfileDisplayName } from '@/utils/profile-name'
 import { getCompetitionRank, sortCompetitionStandings } from '@/utils/competition'
 import { PendingLink } from '@/components/ui/pending-link'
+import { ShareImageActions, type StandingsShareCardData } from '@/components/ui/share-image-actions'
 import {
   buildUserLeaderboardBreakdowns,
   type PodiumSlotBreakdown,
@@ -208,6 +209,38 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
     activeView === 'tenant' && groupContext.tenantName
       ? `${groupContext.tenantName.toUpperCase()} STANDINGS`
       : 'SEASON STANDINGS'
+  const scoredRaceCount = sortedVisibleLeaderboard[0]?.races_scored ?? 0
+  const standingsShareCard: StandingsShareCardData | null =
+    sortedVisibleLeaderboard.length > 0
+      ? {
+          kind: 'standings',
+          season: currentSeason,
+          title:
+            activeView === 'tenant' && groupContext.tenantName
+              ? groupContext.tenantName
+              : 'Season standings',
+          subtitle:
+            activeView === 'tenant' && groupContext.tenantName
+              ? `${groupContext.tenantName} private table`
+              : 'Global season table',
+          caption: `${sortedVisibleLeaderboard.length} player${sortedVisibleLeaderboard.length === 1 ? '' : 's'}`,
+          footer:
+            currentUserRank && currentUserEntry && currentUserRank > 5
+              ? `You are #${currentUserRank} with ${currentUserEntry.total_points} pts after ${scoredRaceCount} scored races.`
+              : `After ${scoredRaceCount} scored race${scoredRaceCount === 1 ? '' : 's'}.`,
+          entries: sortedVisibleLeaderboard.slice(0, 5).map((entry, index) => {
+            const profile = getLeaderboardProfile(entry)
+
+            return {
+              rank: index + 1,
+              name: getProfileDisplayName(profile?.display_name, profile?.email),
+              points: entry.total_points,
+              exactHits: entry.exact_hits,
+              highlight: entry.user_id === user?.id,
+            }
+          }),
+        }
+      : null
 
   const { data: scoredRaces } =
     visibleUserIds.length > 0
@@ -367,6 +400,15 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
           </span>
         )}
       </div>
+
+      {standingsShareCard && (
+        <ShareImageActions
+          title="Copy a standings card"
+          description="Creates a polished PNG you can paste straight into group chats, stories, or social posts."
+          fileName={`flormula1-${activeView === 'tenant' ? 'group' : 'season'}-standings-${currentSeason}.png`}
+          data={standingsShareCard}
+        />
+      )}
 
       {user && groupContext.role === 'user' && groupContext.tenantSlug === 'main' && (
         <section className="flex flex-col gap-3 rounded-2xl border border-red-500/15 bg-red-500/8 p-4 sm:flex-row sm:items-center sm:justify-between">
