@@ -364,26 +364,37 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
           </div>
         </div>
 
-        {hasGroup && (
-          <div className="inline-flex rounded-2xl border border-white/10 bg-black/20 p-1">
-            <PendingLink
-              href="/leaderboard?view=tenant"
-              className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${
-                activeView === 'tenant' ? 'bg-red-600 text-white' : 'text-slate-300 hover:bg-white/5'
-              }`}
-            >
-              My Group
-            </PendingLink>
-            <PendingLink
-              href="/leaderboard?view=global"
-              className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${
-                activeView === 'global' ? 'bg-red-600 text-white' : 'text-slate-300 hover:bg-white/5'
-              }`}
-            >
-              Everyone
-            </PendingLink>
-          </div>
-        )}
+        <div className="flex items-center gap-2 self-end">
+          {hasGroup && (
+            <div className="inline-flex rounded-2xl border border-white/10 bg-black/20 p-1">
+              <PendingLink
+                href="/leaderboard?view=tenant"
+                className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${
+                  activeView === 'tenant' ? 'bg-red-600 text-white' : 'text-slate-300 hover:bg-white/5'
+                }`}
+              >
+                My Group
+              </PendingLink>
+              <PendingLink
+                href="/leaderboard?view=global"
+                className={`rounded-xl px-4 py-2 text-sm font-bold transition-colors ${
+                  activeView === 'global' ? 'bg-red-600 text-white' : 'text-slate-300 hover:bg-white/5'
+                }`}
+              >
+                Everyone
+              </PendingLink>
+            </div>
+          )}
+
+          {standingsShareCard && (
+            <ShareImageActions
+              title="Share standings card"
+              description="Creates a polished PNG you can paste straight into group chats, stories, or social posts."
+              fileName={`flormula1-${activeView === 'tenant' ? 'group' : 'season'}-standings-${currentSeason}.png`}
+              data={standingsShareCard}
+            />
+          )}
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -400,15 +411,6 @@ export default async function LeaderboardPage({ searchParams }: LeaderboardPageP
           </span>
         )}
       </div>
-
-      {standingsShareCard && (
-        <ShareImageActions
-          title="Copy a standings card"
-          description="Creates a polished PNG you can paste straight into group chats, stories, or social posts."
-          fileName={`flormula1-${activeView === 'tenant' ? 'group' : 'season'}-standings-${currentSeason}.png`}
-          data={standingsShareCard}
-        />
-      )}
 
       {user && groupContext.role === 'user' && groupContext.tenantSlug === 'main' && (
         <section className="flex flex-col gap-3 rounded-2xl border border-red-500/15 bg-red-500/8 p-4 sm:flex-row sm:items-center sm:justify-between">

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Check, Copy, Download, Loader2, Share2 } from 'lucide-react'
 
 type StandingsShareEntry = {
@@ -510,169 +510,202 @@ export function ShareImageActions({ title, description, fileName, data }: ShareI
   const [activeAction, setActiveAction] = useState<ActiveAction>(null)
   const [status, setStatus] = useState<StatusMessage | null>(null)
   const [supportsNativeShare, setSupportsNativeShare] = useState(false)
+  const actionInFlightRef = useRef(false)
 
   useEffect(() => {
     setSupportsNativeShare(typeof navigator !== 'undefined' && typeof navigator.share === 'function')
   }, [])
 
-  const copyImage = async () => {
-    setActiveAction('copy')
+  useEffect(() => {
+    if (!status) {
+      return
+    }
+
+    const timeoutId = window.setTimeout(() => {
+      setStatus(null)
+    }, status.tone === 'error' ? 5200 : 3600)
+
+    return () => window.clearTimeout(timeoutId)
+  }, [status])
+
+  const runAction = async (action: Exclude<ActiveAction, null>, handler: () => Promise<void>) => {
+    if (actionInFlightRef.current) {
+      return
+    }
+
+    actionInFlightRef.current = true
+    setActiveAction(action)
     setStatus(null)
 
     try {
-      const blob = await svgToBlob(data)
-
-      if (!navigator.clipboard?.write || typeof window.ClipboardItem === 'undefined') {
-        setStatus({
-          tone: 'info',
-          text: 'Image clipboard support is not available here. Use Share or Download PNG instead.',
-        })
-        return
-      }
-
-      await navigator.clipboard.write([
-        new window.ClipboardItem({
-          [blob.type]: blob,
-        }),
-      ])
-
-      setStatus({
-        tone: 'success',
-        text: 'Share image copied. Paste it straight into Messages, WhatsApp, Instagram, or Slack.',
-      })
-    } catch (error) {
-      setStatus({
-        tone: 'info',
-        text: getClipboardErrorMessage(error),
-      })
+      await handler()
     } finally {
+      actionInFlightRef.current = false
       setActiveAction(null)
     }
+  }
+
+  const copyImage = async () => {
+    await runAction('copy', async () => {
+      try {
+        const blob = await svgToBlob(data)
+
+        if (!navigator.clipboard?.write || typeof window.ClipboardItem === 'undefined') {
+          setStatus({
+            tone: 'info',
+            text: 'Image clipboard support is not available here. Use Share or Download PNG instead.',
+          })
+          return
+        }
+
+        await navigator.clipboard.write([
+          new window.ClipboardItem(
+            {
+              [blob.type]: Promise.resolve(blob),
+            },
+            { presentationStyle: 'inline' }
+          ),
+        ])
+
+        setStatus({
+          tone: 'success',
+          text: 'Share image copied. Paste it straight into Messages, WhatsApp, Instagram, or Slack.',
+        })
+      } catch (error) {
+        setStatus({
+          tone: 'info',
+          text: getClipboardErrorMessage(error),
+        })
+      }
+    })
   }
 
   const downloadImage = async () => {
-    setActiveAction('download')
-    setStatus(null)
-
-    try {
-      const blob = await svgToBlob(data)
-      downloadBlob(blob, fileName)
-      setStatus({
-        tone: 'success',
-        text: 'PNG downloaded. You can drop it into any chat or social composer.',
-      })
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'The share image could not be downloaded.'
-      setStatus({
-        tone: 'error',
-        text: message,
-      })
-    } finally {
-      setActiveAction(null)
-    }
-  }
-
-  const shareImage = async () => {
-    setActiveAction('share')
-    setStatus(null)
-
-    try {
-      if (typeof navigator.share !== 'function') {
+    await runAction('download', async () => {
+      try {
+        const blob = await svgToBlob(data)
+        downloadBlob(blob, fileName)
         setStatus({
-          tone: 'info',
-          text: 'Native sharing is not available in this browser. Try Copy image or Download PNG instead.',
+          tone: 'success',
+          text: 'PNG downloaded. You can drop it into any chat or social composer.',
         })
-        return
-      }
-
-      const blob = await svgToBlob(data)
-      const file = new File([blob], fileName, { type: 'image/png' })
-
-      if (typeof navigator.canShare === 'function' && !navigator.canShare({ files: [file] })) {
-        setStatus({
-          tone: 'info',
-          text: 'This browser can share links, but not image files. Download the PNG instead.',
-        })
-        return
-      }
-
-      await navigator.share({
-        title,
-        text: description,
-        files: [file],
-      })
-    } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        setStatus({
-          tone: 'info',
-          text: 'Share cancelled.',
-        })
-      } else {
-        const message = error instanceof Error ? error.message : 'The share sheet could not open.'
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'The share image could not be downloaded.'
         setStatus({
           tone: 'error',
           text: message,
         })
       }
-    } finally {
-      setActiveAction(null)
-    }
+    })
+  }
+
+  const shareImage = async () => {
+    await runAction('share', async () => {
+      try {
+        if (typeof navigator.share !== 'function') {
+          setStatus({
+            tone: 'info',
+            text: 'Native sharing is not available in this browser. Try Copy image or Download PNG instead.',
+          })
+          return
+        }
+
+        const blob = await svgToBlob(data)
+        const file = new File([blob], fileName, { type: 'image/png' })
+
+        if (typeof navigator.canShare === 'function' && !navigator.canShare({ files: [file] })) {
+          setStatus({
+            tone: 'info',
+            text: 'This browser can share links, but not image files. Download the PNG instead.',
+          })
+          return
+        }
+
+        await navigator.share({
+          title,
+          text: description,
+          files: [file],
+        })
+      } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          setStatus({
+            tone: 'info',
+            text: 'Share cancelled.',
+          })
+        } else {
+          const message = error instanceof Error ? error.message : 'The share sheet could not open.'
+          setStatus({
+            tone: 'error',
+            text: message,
+          })
+        }
+      }
+    })
+  }
+
+  const isBusy = activeAction !== null
+
+  const buttonBaseClassName =
+    'inline-flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/35 text-slate-200 transition-colors hover:bg-white/10 hover:text-white disabled:cursor-not-allowed disabled:opacity-70'
+
+  const getActionLabel = (action: Exclude<ActiveAction, null>) => {
+    if (action === 'copy') return 'Copy image'
+    if (action === 'download') return 'Download PNG'
+    return 'Share image'
   }
 
   return (
-    <section className="rounded-2xl border border-white/10 bg-black/20 p-4 shadow-xl md:p-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-        <div className="space-y-1.5">
-          <div className="text-[11px] font-bold uppercase tracking-[0.22em] text-red-200">Share card</div>
-          <h2 className="text-lg font-bold text-white">{title}</h2>
-          <p className="max-w-2xl text-sm leading-6 text-slate-400">{description}</p>
-        </div>
+    <div className="relative">
+      <div
+        className="inline-flex items-center gap-1 rounded-full border border-white/10 bg-black/30 p-1 shadow-lg backdrop-blur-sm"
+        aria-label={title}
+      >
+        <button
+          type="button"
+          onClick={copyImage}
+          disabled={isBusy}
+          className={buttonBaseClassName}
+          aria-label={getActionLabel('copy')}
+          title={getActionLabel('copy')}
+        >
+          {activeAction === 'copy' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" />}
+        </button>
 
-        <div className="flex flex-wrap gap-2">
+        <button
+          type="button"
+          onClick={downloadImage}
+          disabled={isBusy}
+          className={buttonBaseClassName}
+          aria-label={getActionLabel('download')}
+          title={getActionLabel('download')}
+        >
+          {activeAction === 'download' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+        </button>
+
+        {supportsNativeShare && (
           <button
             type="button"
-            onClick={copyImage}
-            disabled={activeAction !== null}
-            className="inline-flex items-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-500 disabled:cursor-not-allowed disabled:opacity-70"
+            onClick={shareImage}
+            disabled={isBusy}
+            className={buttonBaseClassName}
+            aria-label={getActionLabel('share')}
+            title={getActionLabel('share')}
           >
-            {activeAction === 'copy' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Copy className="h-4 w-4" />}
-            Copy image
+            {activeAction === 'share' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
           </button>
-
-          <button
-            type="button"
-            onClick={downloadImage}
-            disabled={activeAction !== null}
-            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-70"
-          >
-            {activeAction === 'download' ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4" />
-            )}
-            Download PNG
-          </button>
-
-          {supportsNativeShare && (
-            <button
-              type="button"
-              onClick={shareImage}
-              disabled={activeAction !== null}
-              className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-black/30 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-70"
-            >
-              {activeAction === 'share' ? <Loader2 className="h-4 w-4 animate-spin" /> : <Share2 className="h-4 w-4" />}
-              Share
-            </button>
-          )}
-        </div>
+        )}
       </div>
 
       {status && (
-        <p className={`mt-4 flex items-start gap-2 rounded-xl border px-3 py-2.5 text-sm leading-6 ${getStatusClasses(status.tone)}`}>
+        <p
+          className={`absolute right-0 top-full z-10 mt-2 flex w-72 items-start gap-2 rounded-xl border px-3 py-2.5 text-sm leading-6 shadow-xl ${getStatusClasses(status.tone)}`}
+          role="status"
+        >
           {status.tone === 'success' && <Check className="mt-0.5 h-4 w-4 shrink-0" />}
           <span>{status.text}</span>
         </p>
       )}
-    </section>
+      <span className="sr-only">{description}</span>
+    </div>
   )
 }

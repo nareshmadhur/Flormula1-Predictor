@@ -251,22 +251,21 @@ export default async function PublicRacePage({ params }: PageProps) {
             eyebrow="Race recap"
             title="Result and top scorers"
             aside={
-              <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.2em] text-slate-300">
-                {topScorers.length} player{topScorers.length === 1 ? '' : 's'}
-              </span>
+              <div className="flex items-center gap-2">
+                <span className="rounded-full border border-white/10 bg-black/30 px-3 py-1.5 text-xs font-bold uppercase tracking-[0.2em] text-slate-300">
+                  {topScorers.length} player{topScorers.length === 1 ? '' : 's'}
+                </span>
+                {raceShareCard && (
+                  <ShareImageActions
+                    title="Share race recap card"
+                    description="Builds a share-ready PNG for the official podium and top scorers."
+                    fileName={`flormula1-${race.season}-${race.round || 'race'}-recap.png`}
+                    data={raceShareCard}
+                  />
+                )}
+              </div>
             }
           />
-
-          {raceShareCard && (
-            <div className="mt-4">
-              <ShareImageActions
-                title="Copy a race recap card"
-                description="Builds a share-ready PNG for the official podium and top scorers."
-                fileName={`flormula1-${race.season}-${race.round || 'race'}-recap.png`}
-                data={raceShareCard}
-              />
-            </div>
-          )}
 
           <div className="mt-4 space-y-4">
             <div className="rounded-2xl border border-white/5 bg-black/20 p-4">
