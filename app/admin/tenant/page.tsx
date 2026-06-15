@@ -32,7 +32,14 @@ import {
   getPlatformNotificationTiming,
 } from '@/utils/notification-settings'
 import { formatAmsterdamDateTime } from '@/utils/amsterdam-time'
-import { getRaceFocus, sortRacesByFocus } from '@/utils/race-focus'
+import { getRaceFocus } from '@/utils/race-focus'
+import {
+  getTenantRaceActionBadgeClasses,
+  getTenantRaceActionLabel,
+  getTenantRaceActionPriority,
+  getTenantRaceActionState,
+  type TenantRaceActionState,
+} from '@/utils/admin-race-actions'
 
 export const revalidate = 0
 
@@ -119,12 +126,13 @@ type TenantNotificationSettingRow = {
   race_reminder_lead_hours?: number | null
 }
 
-function getRaceStatusCopy(status: RaceStatus) {
-  if (status === 'upcoming') return 'Prediction window is open.'
-  if (status === 'locked') return 'Predictions are locked.'
-  if (status === 'completed') return 'Race finished. Scoring still needs to be published.'
-  if (status === 'scored') return 'Race scored and standings updated.'
-  return 'Race cancelled.'
+type TenantRaceActionRow = {
+  race: RaceRecord
+  actionState: TenantRaceActionState
+  effectiveStatus: RaceStatus
+  totalBonusQuestionCount: number
+  answeredBonusQuestionCount: number
+  pendingBonusQuestionCount: number
 }
 
 function getRaceStageLabel(status: RaceStatus) {
@@ -156,6 +164,58 @@ function isActiveGroupInvite(invite: GroupInviteRecord) {
 function getDriverLabel(driver?: DriverRecord | null) {
   if (!driver) return 'Not set'
   return `${driver.code}${driver.emoji ? ` ${driver.emoji}` : ''}`
+}
+
+function getTenantActionDescription(
+  actionState: TenantRaceActionState | null,
+  coveragePercent: number,
+  submittedCount: number,
+  memberCount: number,
+  answeredBonusCount: number,
+  totalBonusCount: number
+) {
+  if (actionState === 'needs_bonus_answers') {
+    return `${answeredBonusCount}/${totalBonusCount} bonus answers saved. Group scoring still needs the remaining answer${totalBonusCount - answeredBonusCount === 1 ? '' : 's'}.`
+  }
+
+  if (actionState === 'weekend_live') {
+    return `${coveragePercent}% submitted. Predictions are locked while the race weekend is live.`
+  }
+
+  if (actionState === 'awaiting_results') {
+    return `${submittedCount}/${memberCount} entries are in. Official podium publication is still pending.`
+  }
+
+  if (actionState === 'race_readiness') {
+    return `${coveragePercent}% submitted. Prediction window is still open for this race.`
+  }
+
+  return `${submittedCount}/${memberCount} entries were logged. Scores are published and ready for recap.`
+}
+
+function getTenantActionButtonLabel(actionState: TenantRaceActionState | null) {
+  if (actionState === 'needs_bonus_answers') return 'Open bonus admin'
+  return 'Open race admin'
+}
+
+function getTenantReviewNote(row: TenantRaceActionRow) {
+  if (row.actionState === 'needs_bonus_answers') {
+    return `${row.answeredBonusQuestionCount}/${row.totalBonusQuestionCount} bonus answers saved`
+  }
+
+  if (row.actionState === 'awaiting_results') {
+    return 'Waiting for platform podium publication'
+  }
+
+  if (row.actionState === 'weekend_live') {
+    return 'Prediction window locked while race is live'
+  }
+
+  if (row.actionState === 'race_readiness') {
+    return 'Prediction window still open'
+  }
+
+  return 'Scored recap available'
 }
 
 export default async function TenantAdminPage() {
@@ -292,20 +352,60 @@ export default async function TenantAdminPage() {
   const statusByRaceId = new Map(
     typedRaces.map((race) => [race.id, getEffectiveRaceStatus(race)])
   )
+  const bonusQuestionsByRaceId = new Map<string, TenantBonusQuestion[]>()
+  typedTenantBonusQuestions.forEach((question) => {
+    const current = bonusQuestionsByRaceId.get(question.race_id) || []
+    current.push(question)
+    bonusQuestionsByRaceId.set(question.race_id, current)
+  })
+  const answerByQuestionId = new Map(
+    typedTenantBonusAnswers.map((answer) => [answer.bonus_question_id, answer.correct_bonus_option_id])
+  )
   const pendingTenantBonusAnswerCount = typedTenantBonusQuestions.filter((question) => {
     const status = statusByRaceId.get(question.race_id)
     return status && status !== 'upcoming' && !tenantAnsweredQuestionIds.has(question.id)
   }).length
 
   const raceFocus = getRaceFocus(typedRaces)
-  const featuredRace = raceFocus.primaryRace || null
+  const tenantRaceActionRows = typedRaces
+    .map((race) => {
+      const raceQuestions = bonusQuestionsByRaceId.get(race.id) || []
+      const effectiveStatus = getEffectiveRaceStatus(race)
+      const answeredBonusQuestionCount = raceQuestions.filter((question) => tenantAnsweredQuestionIds.has(question.id)).length
+      const pendingBonusQuestionCount = raceQuestions.filter((question) => !tenantAnsweredQuestionIds.has(question.id)).length
+
+      return {
+        race,
+        actionState: getTenantRaceActionState(race, effectiveStatus === 'upcoming' ? 0 : pendingBonusQuestionCount),
+        effectiveStatus,
+        totalBonusQuestionCount: raceQuestions.length,
+        answeredBonusQuestionCount,
+        pendingBonusQuestionCount: effectiveStatus === 'upcoming' ? 0 : pendingBonusQuestionCount,
+      } satisfies TenantRaceActionRow
+    })
+    .sort((left, right) => {
+      const priorityDelta =
+        getTenantRaceActionPriority(left.actionState) - getTenantRaceActionPriority(right.actionState)
+      if (priorityDelta !== 0) return priorityDelta
+
+      if (left.actionState === 'race_readiness' || left.actionState === 'weekend_live') {
+        return new Date(left.race.race_start_at).getTime() - new Date(right.race.race_start_at).getTime()
+      }
+
+      return new Date(right.race.race_start_at).getTime() - new Date(left.race.race_start_at).getTime()
+    })
+  const featuredRaceRow = tenantRaceActionRows[0] || null
+  const featuredRace = featuredRaceRow?.race || null
+  const featuredActionState = featuredRaceRow?.actionState || null
   const featuredRaceReminderAt =
-    featuredRace && getEffectiveRaceStatus(featuredRace) === 'upcoming'
+    featuredRace && featuredActionState === 'race_readiness'
       ? new Date(
           new Date(featuredRace.prediction_lock_at).getTime() - defaultTenantLeadHours * 60 * 60 * 1000
         ).toISOString()
       : null
-  const featuredRaceAdminHref = featuredRace ? `/admin/tenant/races/${featuredRace.id}` : '/season'
+  const featuredRaceAdminHref = featuredRace
+    ? `/admin/tenant/races/${featuredRace.id}${featuredActionState === 'needs_bonus_answers' ? '#group-bonus' : ''}`
+    : '/season'
 
   const { data: seasonRacePredictions } =
     seasonRaceIds.length > 0 && memberIds.length > 0
@@ -434,10 +534,7 @@ export default async function TenantAdminPage() {
   const missingFeaturedRaceMembers = featuredRace
     ? operationalMembers.filter((member) => !nextRacePredictionUserIds.has(member.id))
     : []
-  const featuredRaceStatus = featuredRace ? getEffectiveRaceStatus(featuredRace) : null
-  const featuredRaceQuestions = featuredRace
-    ? typedTenantBonusQuestions.filter((question) => question.race_id === featuredRace.id)
-    : []
+  const featuredRaceQuestions = featuredRace ? bonusQuestionsByRaceId.get(featuredRace.id) || [] : []
   const submittedFeaturedRaceMembers = featuredRace
     ? operationalMembers.flatMap((member) => {
         const prediction = predictionByRaceAndUserId.get(`${featuredRace.id}:${member.id}`)
@@ -461,40 +558,59 @@ export default async function TenantAdminPage() {
         }]
       })
     : []
-  const showMissingFirst = featuredRaceStatus === 'upcoming' || featuredRaceStatus === 'locked'
+  const featuredPendingBonusQuestions = featuredRaceQuestions.filter(
+    (question) => !tenantAnsweredQuestionIds.has(question.id)
+  )
+  const featuredAnsweredBonusRows = featuredRaceQuestions.flatMap((question) => {
+    const optionId = answerByQuestionId.get(question.id)
+    const optionLabel = optionId ? question.bonus_options?.find((option) => option.id === optionId)?.label : null
+    if (!optionLabel) return []
+
+    return [{
+      questionText: question.question_text,
+      answerLabel: optionLabel,
+    }]
+  })
+  const showMissingFirst = featuredActionState === 'race_readiness' || featuredActionState === 'weekend_live'
   const coveragePercent =
     featuredRace && operationalMembers.length > 0
       ? Math.round((nextRaceCoverage / operationalMembers.length) * 100)
       : 0
-  const tenantRaceRows = sortRacesByFocus(typedRaces).filter((race) => {
-    const status = getEffectiveRaceStatus(race)
-    return race.id !== featuredRace?.id && (status === 'locked' || status === 'completed' || status === 'scored')
-  }).slice(0, 6).map((race) => {
-    const predictionUserIds = predictionUserIdsByRaceId.get(race.id) || new Set<string>()
-    const scoreRows = scoreRowsByRaceId.get(race.id) || []
-    const topScore = scoreRows[0] || null
-    const topScoreMember = topScore ? memberById.get(topScore.user_id) || null : null
-    const status = getEffectiveRaceStatus(race)
+  const tenantRaceRows = tenantRaceActionRows
+    .filter((row) =>
+      row.race.id !== featuredRace?.id &&
+      row.actionState !== 'race_readiness' &&
+      row.actionState !== 'scored_review'
+    )
+    .slice(0, 6)
+    .map((row) => {
+      const predictionUserIds = predictionUserIdsByRaceId.get(row.race.id) || new Set<string>()
+      const scoreRows = scoreRowsByRaceId.get(row.race.id) || []
+      const topScore = scoreRows[0] || null
+      const topScoreMember = topScore ? memberById.get(topScore.user_id) || null : null
 
-    return {
-      race,
-      status,
-      entryCount: predictionUserIds.size,
-      scoreCount: scoreRows.length,
-      topScoreLabel: topScore
-        ? `${getProfileDisplayName(topScoreMember?.display_name, topScoreMember?.email)} · ${topScore.total_points} pts`
-        : status === 'scored'
-          ? 'No group scores yet'
-          : status === 'completed'
+      return {
+        ...row,
+        entryCount: predictionUserIds.size,
+        scoreCount: scoreRows.length,
+        topScoreLabel: topScore
+          ? `${getProfileDisplayName(topScoreMember?.display_name, topScoreMember?.email)} · ${topScore.total_points} pts`
+          : row.actionState === 'awaiting_results'
             ? 'Waiting for platform results'
-            : 'Scores not published yet',
-    }
-  })
+            : row.actionState === 'needs_bonus_answers'
+              ? `${row.answeredBonusQuestionCount}/${row.totalBonusQuestionCount} answers saved`
+              : 'Scores not published yet',
+      }
+    })
   const futureRaceRows = raceFocus.upcomingRaces
     .filter((race) => race.id !== featuredRace?.id)
     .slice(0, 5)
+  const featuredEntryOpenItemCount =
+    featuredActionState === 'race_readiness' || featuredActionState === 'weekend_live'
+      ? missingFeaturedRaceMembers.length
+      : 0
   const openItemsCount =
-    (featuredRace ? missingFeaturedRaceMembers.length : 0) +
+    featuredEntryOpenItemCount +
     (activeInviteCount === 0 ? 1 : 0) +
     pendingTenantBonusAnswerCount
   const pendingBonusRaceId = typedTenantBonusQuestions.find((question) => {
@@ -555,20 +671,41 @@ export default async function TenantAdminPage() {
         </div>
 
         <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-none" aria-label="Group admin shortcuts">
-          <a
-            href="#race-week-ops"
-            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-red-600 px-4 py-2 text-sm font-bold text-white transition-all hover:bg-red-500"
-          >
-            <ClipboardCheck className="h-4 w-4" />
-            Race ops
-          </a>
-          <PendingLink
-            href={bonusAdminHref}
-            className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-sm font-bold text-slate-100 transition-all hover:bg-white/10"
-          >
-            <HelpCircle className="h-4 w-4" />
-            Bonus
-          </PendingLink>
+          {pendingBonusRaceId ? (
+            <>
+              <PendingLink
+                href={bonusAdminHref}
+                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-red-600 px-4 py-2 text-sm font-bold text-white transition-all hover:bg-red-500"
+              >
+                <HelpCircle className="h-4 w-4" />
+                Bonus
+              </PendingLink>
+              <a
+                href="#race-week-ops"
+                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-sm font-bold text-slate-100 transition-all hover:bg-white/10"
+              >
+                <ClipboardCheck className="h-4 w-4" />
+                Race ops
+              </a>
+            </>
+          ) : (
+            <>
+              <a
+                href="#race-week-ops"
+                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full bg-red-600 px-4 py-2 text-sm font-bold text-white transition-all hover:bg-red-500"
+              >
+                <ClipboardCheck className="h-4 w-4" />
+                Race ops
+              </a>
+              <PendingLink
+                href={bonusAdminHref}
+                className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-sm font-bold text-slate-100 transition-all hover:bg-white/10"
+              >
+                <HelpCircle className="h-4 w-4" />
+                Bonus
+              </PendingLink>
+            </>
+          )}
           <a
             href="#group-invites"
             className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-full border border-white/10 bg-black/30 px-4 py-2 text-sm font-bold text-slate-100 transition-all hover:bg-white/10"
@@ -623,11 +760,15 @@ export default async function TenantAdminPage() {
           >
             <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.22em] text-red-100">
               <ClipboardCheck className="h-4 w-4" />
-              Race entries
+              {featuredActionState === 'needs_bonus_answers' ? 'Bonus answers' : 'Race operations'}
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end">
               <div className="text-5xl font-bold leading-none text-white">
-                {featuredRace ? `${nextRaceCoverage}/${operationalMembers.length}` : '0/0'}
+                {featuredRace
+                  ? featuredActionState === 'needs_bonus_answers'
+                    ? `${featuredRaceRow?.answeredBonusQuestionCount || 0}/${featuredRaceRow?.totalBonusQuestionCount || 0}`
+                    : `${nextRaceCoverage}/${operationalMembers.length}`
+                  : '0/0'}
               </div>
               <div className="min-w-0">
                 <h2 className="text-xl font-bold tracking-tight text-white">
@@ -635,13 +776,20 @@ export default async function TenantAdminPage() {
                 </h2>
                 <p className="mt-1 text-sm text-red-100/80">
                   {featuredRace
-                    ? `${coveragePercent}% submitted. ${getRaceStatusCopy(getEffectiveRaceStatus(featuredRace))}`
+                    ? getTenantActionDescription(
+                        featuredActionState,
+                        coveragePercent,
+                        nextRaceCoverage,
+                        operationalMembers.length,
+                        featuredRaceRow?.answeredBonusQuestionCount || 0,
+                        featuredRaceRow?.totalBonusQuestionCount || 0
+                      )
                     : 'No race is open, live, or waiting on results for this group.'}
                 </p>
               </div>
             </div>
             <span className="mt-5 inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white transition-colors group-hover:bg-red-500">
-              Open race admin
+              {getTenantActionButtonLabel(featuredActionState)}
               <ArrowRight className="h-4 w-4" />
             </span>
           </PendingLink>
@@ -661,18 +809,33 @@ export default async function TenantAdminPage() {
               <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
                 <div>
                   <div className="text-xs font-bold uppercase tracking-[0.2em] text-red-400">
-                    {getRaceStageLabel(getEffectiveRaceStatus(featuredRace))}
+                    {featuredActionState ? getTenantRaceActionLabel(featuredActionState) : getRaceStageLabel(getEffectiveRaceStatus(featuredRace))}
                   </div>
                   <h2 className="mt-2 text-3xl font-bold tracking-tight text-white">{featuredRace.race_name}</h2>
                   <div className="mt-3 flex flex-wrap gap-2">
-                    <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-emerald-200">
-                      {nextRaceCoverage} submitted
-                    </span>
-                    <span className="rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-red-200">
-                      {missingFeaturedRaceMembers.length} missing
-                    </span>
+                    {featuredActionState === 'needs_bonus_answers' ? (
+                      <>
+                        <span className="rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-red-200">
+                          {featuredRaceRow?.pendingBonusQuestionCount || 0} pending
+                        </span>
+                        <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-emerald-200">
+                          {featuredRaceRow?.answeredBonusQuestionCount || 0} answered
+                        </span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="rounded-full border border-emerald-500/20 bg-emerald-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-emerald-200">
+                          {nextRaceCoverage} submitted
+                        </span>
+                        <span className="rounded-full border border-red-500/20 bg-red-500/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-red-200">
+                          {missingFeaturedRaceMembers.length} missing
+                        </span>
+                      </>
+                    )}
                     <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-slate-300">
-                      {coveragePercent}%
+                      {featuredActionState === 'needs_bonus_answers'
+                        ? `${featuredRaceRow?.totalBonusQuestionCount || 0} total`
+                        : `${coveragePercent}%`}
                     </span>
                     {featuredRaceReminderAt && (
                       <span className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-slate-300">
@@ -683,13 +846,13 @@ export default async function TenantAdminPage() {
                 </div>
                 <div className="flex flex-wrap gap-3">
                   <PendingLink
-                    href={`/admin/tenant/races/${featuredRace.id}`}
+                    href={`/admin/tenant/races/${featuredRace.id}${featuredActionState === 'needs_bonus_answers' ? '#group-bonus' : ''}`}
                     className="inline-flex items-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
                   >
-                    Open race admin
+                    {getTenantActionButtonLabel(featuredActionState)}
                     <ArrowRight className="h-4 w-4" />
                   </PendingLink>
-                  {missingFeaturedRaceMembers.length > 0 && (
+                  {featuredActionState !== 'needs_bonus_answers' && missingFeaturedRaceMembers.length > 0 && (
                     <a
                       href="#group-invites"
                       className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-black/25 px-5 py-3 font-bold text-red-50 transition-colors hover:bg-white/10"
@@ -701,65 +864,115 @@ export default async function TenantAdminPage() {
               </div>
 
               <div className="mt-5 grid gap-4 lg:grid-cols-2">
-                <div className={`${showMissingFirst ? 'order-1' : 'order-2'} rounded-2xl border border-red-500/20 bg-red-500/8 p-4 lg:order-none`}>
-                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-red-200">
-                    <XCircle className="h-4 w-4" />
-                    Missing
-                  </div>
-                  {missingFeaturedRaceMembers.length === 0 ? (
-                    <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-200">
-                      Everyone is in.
-                    </div>
-                  ) : (
-                    <div className="mt-4 max-h-96 space-y-2 overflow-y-auto pr-1">
-                      {missingFeaturedRaceMembers.map((member) => (
-                        <div key={member.id} className="rounded-xl border border-red-500/10 bg-black/25 px-3 py-2">
-                          <div className="font-semibold text-slate-100">{getProfileDisplayName(member.display_name, member.email)}</div>
-                          <div className="break-all text-xs text-red-100/60">{member.email || 'No email'}</div>
+                {featuredActionState === 'needs_bonus_answers' ? (
+                  <>
+                    <div className="rounded-2xl border border-red-500/20 bg-red-500/8 p-4">
+                      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-red-200">
+                        <XCircle className="h-4 w-4" />
+                        Pending answers
+                      </div>
+                      {featuredPendingBonusQuestions.length === 0 ? (
+                        <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-200">
+                          All bonus answers are saved.
                         </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                <div className={`${showMissingFirst ? 'order-2' : 'order-1'} rounded-2xl border border-emerald-500/20 bg-emerald-500/8 p-4 lg:order-none`}>
-                  <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-emerald-200">
-                    <CheckCircle2 className="h-4 w-4" />
-                    Submitted
-                  </div>
-                  {submittedFeaturedRaceMembers.length === 0 ? (
-                    <div className="mt-4 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-bold text-slate-400">
-                      No entries yet.
-                    </div>
-                  ) : (
-                    <div className="mt-4 max-h-96 space-y-3 overflow-y-auto pr-1">
-                      {submittedFeaturedRaceMembers.map((entry) => (
-                        <div key={entry.member.id} className="rounded-xl border border-emerald-500/10 bg-black/25 px-3 py-3">
-                          <div className="font-semibold text-slate-100">
-                            {getProfileDisplayName(entry.member.display_name, entry.member.email)}
-                          </div>
-                          <div className="break-all text-xs text-emerald-100/60">{entry.member.email || 'No email'}</div>
-                          <div className="mt-3 flex flex-wrap gap-1.5">
-                            {entry.podiumLabels.map((label) => (
-                              <span key={label} className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-bold text-slate-200">
-                                {label}
-                              </span>
-                            ))}
-                          </div>
-                          {entry.bonusLabels.length > 0 && (
-                            <div className="mt-2 space-y-1">
-                              {entry.bonusLabels.map((label) => (
-                                <div key={label} className="break-words text-xs leading-5 text-emerald-100/75">
-                                  {label}
-                                </div>
-                              ))}
+                      ) : (
+                        <div className="mt-4 max-h-96 space-y-2 overflow-y-auto pr-1">
+                          {featuredPendingBonusQuestions.map((question) => (
+                            <div key={question.id} className="rounded-xl border border-red-500/10 bg-black/25 px-3 py-3">
+                              <div className="font-semibold text-slate-100">{question.question_text}</div>
+                              <div className="mt-1 text-xs text-red-100/60">
+                                Correct answer still needs to be saved for this group.
+                              </div>
                             </div>
-                          )}
+                          ))}
                         </div>
-                      ))}
+                      )}
                     </div>
-                  )}
-                </div>
+
+                    <div className="rounded-2xl border border-emerald-500/20 bg-emerald-500/8 p-4">
+                      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-emerald-200">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Saved answers
+                      </div>
+                      {featuredAnsweredBonusRows.length === 0 ? (
+                        <div className="mt-4 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-bold text-slate-400">
+                          No answers saved yet.
+                        </div>
+                      ) : (
+                        <div className="mt-4 max-h-96 space-y-2 overflow-y-auto pr-1">
+                          {featuredAnsweredBonusRows.map((answer) => (
+                            <div key={`${answer.questionText}:${answer.answerLabel}`} className="rounded-xl border border-emerald-500/10 bg-black/25 px-3 py-3">
+                              <div className="font-semibold text-slate-100">{answer.questionText}</div>
+                              <div className="mt-1 text-sm text-emerald-100/75">{answer.answerLabel}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className={`${showMissingFirst ? 'order-1' : 'order-2'} rounded-2xl border border-red-500/20 bg-red-500/8 p-4 lg:order-none`}>
+                      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-red-200">
+                        <XCircle className="h-4 w-4" />
+                        Missing
+                      </div>
+                      {missingFeaturedRaceMembers.length === 0 ? (
+                        <div className="mt-4 rounded-xl border border-emerald-500/20 bg-emerald-500/10 px-4 py-3 text-sm font-bold text-emerald-200">
+                          Everyone is in.
+                        </div>
+                      ) : (
+                        <div className="mt-4 max-h-96 space-y-2 overflow-y-auto pr-1">
+                          {missingFeaturedRaceMembers.map((member) => (
+                            <div key={member.id} className="rounded-xl border border-red-500/10 bg-black/25 px-3 py-2">
+                              <div className="font-semibold text-slate-100">{getProfileDisplayName(member.display_name, member.email)}</div>
+                              <div className="break-all text-xs text-red-100/60">{member.email || 'No email'}</div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className={`${showMissingFirst ? 'order-2' : 'order-1'} rounded-2xl border border-emerald-500/20 bg-emerald-500/8 p-4 lg:order-none`}>
+                      <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.2em] text-emerald-200">
+                        <CheckCircle2 className="h-4 w-4" />
+                        Submitted
+                      </div>
+                      {submittedFeaturedRaceMembers.length === 0 ? (
+                        <div className="mt-4 rounded-xl border border-white/10 bg-black/20 px-4 py-3 text-sm font-bold text-slate-400">
+                          No entries yet.
+                        </div>
+                      ) : (
+                        <div className="mt-4 max-h-96 space-y-3 overflow-y-auto pr-1">
+                          {submittedFeaturedRaceMembers.map((entry) => (
+                            <div key={entry.member.id} className="rounded-xl border border-emerald-500/10 bg-black/25 px-3 py-3">
+                              <div className="font-semibold text-slate-100">
+                                {getProfileDisplayName(entry.member.display_name, entry.member.email)}
+                              </div>
+                              <div className="break-all text-xs text-emerald-100/60">{entry.member.email || 'No email'}</div>
+                              <div className="mt-3 flex flex-wrap gap-1.5">
+                                {entry.podiumLabels.map((label) => (
+                                  <span key={label} className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-xs font-bold text-slate-200">
+                                    {label}
+                                  </span>
+                                ))}
+                              </div>
+                              {entry.bonusLabels.length > 0 && (
+                                <div className="mt-2 space-y-1">
+                                  {entry.bonusLabels.map((label) => (
+                                    <div key={label} className="break-words text-xs leading-5 text-emerald-100/75">
+                                      {label}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
               </div>
             </section>
           ) : (
@@ -783,19 +996,19 @@ export default async function TenantAdminPage() {
               </div>
             </div>
 
-            <div className="mt-4 overflow-hidden rounded-2xl border border-white/5 bg-black/20">
+              <div className="mt-4 overflow-hidden rounded-2xl border border-white/5 bg-black/20">
               {tenantRaceRows.length === 0 ? (
-                <div className="p-6 text-center text-sm text-slate-500">No locked, completed, or scored races need review.</div>
+                <div className="p-6 text-center text-sm text-slate-500">No live races, result waits, or bonus follow-up tasks need review.</div>
               ) : (
                 tenantRaceRows.map((row) => (
                   <PendingLink
                     key={row.race.id}
-                    href={`/admin/tenant/races/${row.race.id}`}
+                    href={`/admin/tenant/races/${row.race.id}${row.actionState === 'needs_bonus_answers' ? '#group-bonus' : ''}`}
                     className="group grid min-w-0 gap-3 border-b border-white/5 p-4 transition-colors last:border-b-0 hover:bg-white/[0.03] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
                   >
                     <div className="min-w-0">
                       <div className="text-xs font-bold uppercase tracking-widest text-red-500">
-                        Round {row.race.round} · {getRaceStageLabel(row.status)}
+                        Round {row.race.round} · {getTenantRaceActionLabel(row.actionState)}
                       </div>
                       <div className="mt-1 break-words text-base font-bold leading-tight text-white">{row.race.race_name}</div>
                       <div className="mt-1 break-words text-sm text-slate-400">
@@ -804,11 +1017,11 @@ export default async function TenantAdminPage() {
                     </div>
 
                     <div className="flex min-w-0 flex-col gap-2 lg:items-end">
-                      <div className="rounded-full border border-white/10 bg-black/25 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-slate-300">
-                        {getRaceStageLabel(row.status)}
+                      <div className={`rounded-full border px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] ${getTenantRaceActionBadgeClasses(row.actionState)}`}>
+                        {getTenantRaceActionLabel(row.actionState)}
                       </div>
                       <div className="max-w-full break-words text-sm text-slate-400 lg:text-right">
-                        {row.topScoreLabel}
+                        {getTenantReviewNote(row)} · {row.topScoreLabel}
                       </div>
                     </div>
                   </PendingLink>

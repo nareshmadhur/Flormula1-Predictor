@@ -2,7 +2,6 @@ import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { ChevronRight, ClipboardCheck, Database, MailCheck, PlusCircle, Search, Settings, Users } from 'lucide-react'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
-import { getAdminRaceStatusClasses, getAdminRaceStatusLabel } from '@/utils/admin-race-status'
 import { getAdminUserLifecycle } from '@/utils/admin-user-lifecycle'
 import { MaintenanceSection } from '@/components/ui/maintenance-section'
 import { getAdminAccessContext } from '@/utils/admin-access'
@@ -10,6 +9,13 @@ import { PendingLink } from '@/components/ui/pending-link'
 import { SectionHeader } from '@/components/ui/section-header'
 import { getRaceFocus } from '@/utils/race-focus'
 import { getProfileDisplayName } from '@/utils/profile-name'
+import {
+  getPlatformRaceActionBadgeClasses,
+  getPlatformRaceActionLabel,
+  getPlatformRaceActionPriority,
+  getPlatformRaceActionState,
+  type PlatformRaceActionState,
+} from '@/utils/admin-race-actions'
 
 export const revalidate = 0
 
@@ -40,6 +46,7 @@ type TenantAdminProfile = {
 type PlatformBonusQuestion = {
   id: string
   race_id: string
+  tenant_id?: string | null
 }
 
 type PlatformBonusAnswer = {
@@ -54,6 +61,14 @@ type AdminUserSummary = {
   tenant_id?: string | null
 }
 
+type PlatformRaceActionRow = {
+  race: AdminRace
+  effectiveStatus: ReturnType<typeof getEffectiveRaceStatus>
+  actionState: PlatformRaceActionState
+  pendingBonusQuestionCount: number
+  pendingBonusGroupCount: number
+}
+
 function formatLifecycleDate(value?: string | null) {
   if (!value) return 'None'
 
@@ -62,6 +77,66 @@ function formatLifecycleDate(value?: string | null) {
     day: 'numeric',
     year: 'numeric',
   }).format(new Date(value))
+}
+
+function getPlatformActionDescription(row: PlatformRaceActionRow | null, nextSetupRace: AdminRace | null) {
+  if (!row) {
+    return nextSetupRace
+      ? 'Review schedule timing and OpenF1 linkage before the next lock.'
+      : 'Use schedule sync when a new race needs setup.'
+  }
+
+  if (row.actionState === 'needs_results') {
+    if (row.pendingBonusQuestionCount > 0) {
+      return `Publish the official podium first. ${row.pendingBonusQuestionCount} tenant bonus answer${row.pendingBonusQuestionCount === 1 ? '' : 's'} still need follow-up after that.`
+    }
+
+    return 'Enter official podium results, then publish scoring.'
+  }
+
+  if (row.actionState === 'bonus_follow_up') {
+    return `${row.pendingBonusQuestionCount} tenant bonus answer${row.pendingBonusQuestionCount === 1 ? '' : 's'} still need attention across ${row.pendingBonusGroupCount} group${row.pendingBonusGroupCount === 1 ? '' : 's'}.`
+  }
+
+  if (row.actionState === 'weekend_live') {
+    return 'Prediction window is closed. Monitor the weekend until official results are ready.'
+  }
+
+  if (row.actionState === 'needs_setup') {
+    return 'Review schedule timing and OpenF1 linkage before the next lock.'
+  }
+
+  return 'Published results and tenant bonus work are complete.'
+}
+
+function getPlatformActionButtonLabel(state: PlatformRaceActionState | null) {
+  if (state === 'needs_results') return 'Enter results'
+  if (state === 'bonus_follow_up') return 'Open bonus follow-up'
+  if (state === 'weekend_live') return 'Open live race'
+  if (state === 'needs_setup') return 'Open setup'
+  return 'Open race'
+}
+
+function getPlatformReviewNote(row: PlatformRaceActionRow) {
+  if (row.actionState === 'needs_results') {
+    return row.pendingBonusQuestionCount > 0
+      ? `${row.pendingBonusQuestionCount} tenant bonus answer${row.pendingBonusQuestionCount === 1 ? '' : 's'} queued after results`
+      : 'Official podium still missing'
+  }
+
+  if (row.actionState === 'bonus_follow_up') {
+    return `${row.pendingBonusGroupCount} group${row.pendingBonusGroupCount === 1 ? '' : 's'} still need bonus answers`
+  }
+
+  if (row.actionState === 'weekend_live') {
+    return 'Race is live and locked for predictions'
+  }
+
+  if (row.actionState === 'needs_setup') {
+    return 'Upcoming weekend waiting on setup review'
+  }
+
+  return 'Ready for recap only'
 }
 
 export default async function AdminDashboardPage() {
@@ -122,8 +197,6 @@ export default async function AdminDashboardPage() {
   const nextSetupRace = raceFocus.nextOpenRace
   const liveRaces = raceFocus.lockedRaces
   const resultRaces = raceFocus.completedRaces
-  const currentWeekendRace = raceFocus.currentWeekend
-  const currentWeekendStatus = currentWeekendRace ? getEffectiveRaceStatus(currentWeekendRace) : null
   const liveCount = liveRaces.length
   const resultsCount = resultRaces.length
   const unassignedCount = unassignedUsersResult.count || 0
@@ -151,24 +224,79 @@ export default async function AdminDashboardPage() {
   const answeredActionBonusQuestionIds = new Set(
     ((actionBonusAnswers || []) as PlatformBonusAnswer[]).map((answer) => answer.bonus_question_id)
   )
+  const pendingBonusQuestionCountByRaceId = new Map<string, number>()
+  const pendingBonusGroupIdsByRaceId = new Map<string, Set<string>>()
+  typedActionBonusQuestions.forEach((question) => {
+    if (answeredActionBonusQuestionIds.has(question.id)) return
+
+    pendingBonusQuestionCountByRaceId.set(
+      question.race_id,
+      (pendingBonusQuestionCountByRaceId.get(question.race_id) || 0) + 1
+    )
+
+    if (question.tenant_id) {
+      const currentGroupIds = pendingBonusGroupIdsByRaceId.get(question.race_id) || new Set<string>()
+      currentGroupIds.add(question.tenant_id)
+      pendingBonusGroupIdsByRaceId.set(question.race_id, currentGroupIds)
+    }
+  })
   const pendingGroupBonusAnswerCount = typedActionBonusQuestions.filter(
     (question) => !answeredActionBonusQuestionIds.has(question.id)
   ).length
+  const platformRaceActionRows = typedRaces
+    .filter((race) => getEffectiveRaceStatus(race) !== 'cancelled')
+    .map((race) => {
+      const effectiveStatus = getEffectiveRaceStatus(race)
+      const pendingBonusQuestionCount = pendingBonusQuestionCountByRaceId.get(race.id) || 0
+      const pendingBonusGroupCount = pendingBonusGroupIdsByRaceId.get(race.id)?.size || 0
+
+      return {
+        race,
+        effectiveStatus,
+        actionState: getPlatformRaceActionState(race, pendingBonusQuestionCount),
+        pendingBonusQuestionCount,
+        pendingBonusGroupCount,
+      } satisfies PlatformRaceActionRow
+    })
+    .sort((left, right) => {
+      const priorityDelta =
+        getPlatformRaceActionPriority(left.actionState) - getPlatformRaceActionPriority(right.actionState)
+      if (priorityDelta !== 0) return priorityDelta
+
+      if (left.actionState === 'needs_setup' || left.actionState === 'weekend_live') {
+        return new Date(left.race.race_start_at).getTime() - new Date(right.race.race_start_at).getTime()
+      }
+
+      return new Date(right.race.race_start_at).getTime() - new Date(left.race.race_start_at).getTime()
+    })
+  const platformRaceActionByRaceId = new Map(
+    platformRaceActionRows.map((row) => [row.race.id, row])
+  )
+  const currentActionRaceRow = platformRaceActionRows[0] || null
+  const currentActionRace = currentActionRaceRow?.race || null
+  const currentActionState = currentActionRaceRow?.actionState || null
+  const bonusFollowUpRows = platformRaceActionRows.filter((row) => row.pendingBonusQuestionCount > 0)
+  const bonusFollowUpRaceCount = bonusFollowUpRows.length
   const needsAttentionCount =
     resultsCount + liveCount + unassignedCount + groupsWithoutAdmins.length + pendingGroupBonusAnswerCount
   const firstLiveRace = liveRaces[0] || null
-  const reviewRaces = [...resultRaces, ...liveRaces].sort(
-    (left, right) => new Date(right.race_start_at).getTime() - new Date(left.race_start_at).getTime()
+  const reviewRaceRows = platformRaceActionRows.filter(
+    (row) => row.actionState !== 'done' && row.actionState !== 'needs_setup'
   )
   const raceSetupHref = nextSetupRace ? `/admin/races/${nextSetupRace.id}#openf1-sync` : '/admin/schedule'
-  const raceWeekendHref = currentWeekendRace
-    ? `/admin/races/${currentWeekendRace.id}${currentWeekendStatus === 'completed' ? '#official-results' : ''}`
+  const bonusFollowUpHref = bonusFollowUpRows[0] ? `/admin/races/${bonusFollowUpRows[0].race.id}#group-bonus` : '/admin/tenants'
+  const raceWeekendHref = currentActionRaceRow
+    ? `/admin/races/${currentActionRace.id}${
+        currentActionState === 'needs_results'
+          ? '#official-results'
+          : currentActionState === 'bonus_follow_up'
+            ? '#group-bonus'
+            : currentActionState === 'needs_setup'
+              ? '#openf1-sync'
+              : ''
+      }`
     : raceSetupHref
-  const raceWeekendLabel = currentWeekendStatus
-    ? getAdminRaceStatusLabel(currentWeekendStatus)
-    : nextSetupRace
-      ? 'NEXT SETUP'
-      : 'NO RACE'
+  const raceWeekendLabel = currentActionState ? getPlatformRaceActionLabel(currentActionState) : 'NO RACE'
   const recentUserRows = [...typedUserProfiles]
     .sort((left, right) => {
       const leftActivity = userLifecycleById.get(left.id)?.lastActivityAt
@@ -203,24 +331,18 @@ export default async function AdminDashboardPage() {
               Race weekend
             </div>
             <div className="mt-4 grid gap-4 sm:grid-cols-[auto_minmax(0,1fr)] sm:items-end">
-              <div className="text-4xl font-bold leading-none text-white">{raceWeekendLabel}</div>
-              <div className="min-w-0">
-                <h2 className="break-words text-xl font-bold tracking-tight text-white">
-                  {currentWeekendRace?.race_name || nextSetupRace?.race_name || 'No race weekend active'}
-                </h2>
-                <p className="mt-1 break-words text-sm text-red-100/80">
-                  {currentWeekendStatus === 'completed'
-                    ? 'Enter official results, then publish scoring.'
-                    : currentWeekendStatus === 'locked'
-                      ? 'Prediction window is closed. Monitor the weekend until results are ready.'
-                      : nextSetupRace
-                        ? 'Review schedule timing and OpenF1 linkage before the next lock.'
-                        : 'Use schedule sync when a new race needs setup.'}
-                </p>
-              </div>
-            </div>
-            <span className="mt-5 inline-flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-1 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white transition-colors group-hover:bg-red-500">
-              {currentWeekendStatus === 'completed' ? 'Enter results' : currentWeekendRace ? 'Open race' : 'Open setup'}
+                  <div className="text-4xl font-bold leading-none text-white">{raceWeekendLabel}</div>
+                  <div className="min-w-0">
+                    <h2 className="break-words text-xl font-bold tracking-tight text-white">
+                      {currentActionRace?.race_name || nextSetupRace?.race_name || 'No race weekend active'}
+                    </h2>
+                    <p className="mt-1 break-words text-sm text-red-100/80">
+                      {getPlatformActionDescription(currentActionRaceRow, nextSetupRace)}
+                    </p>
+                  </div>
+                </div>
+                <span className="mt-5 inline-flex max-w-full flex-wrap items-center gap-x-1.5 gap-y-1 rounded-xl bg-red-600 px-4 py-2 text-sm font-bold text-white transition-colors group-hover:bg-red-500">
+              {getPlatformActionButtonLabel(currentActionState)}
               <ChevronRight className="h-4 w-4" />
             </span>
           </PendingLink>
@@ -285,26 +407,33 @@ export default async function AdminDashboardPage() {
           </div>
         </div>
 
-        <div className="mt-5 grid gap-3 md:grid-cols-3">
-          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-100">Upcoming setup</div>
-            <div className="mt-2 text-3xl font-bold text-white">{nextSetupRace ? 1 : 0}</div>
-            <p className="mt-1 text-sm text-red-100/75">
-              {nextSetupRace ? 'One race ready for timing/source review.' : 'No upcoming setup queue.'}
-            </p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-100">Locked weekends</div>
+          <div className="mt-5 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-100">Upcoming setup</div>
+              <div className="mt-2 text-3xl font-bold text-white">{nextSetupRace ? 1 : 0}</div>
+              <p className="mt-1 text-sm text-red-100/75">
+                {nextSetupRace ? 'One race ready for timing/source review.' : 'No upcoming setup queue.'}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-100">Live weekends</div>
             <div className="mt-2 text-3xl font-bold text-white">{liveCount}</div>
             <p className="mt-1 text-sm text-red-100/75">Windows closed and races still in progress.</p>
-          </div>
-          <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
-            <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-100">Results pending</div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+            <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-100">Official results</div>
             <div className="mt-2 text-3xl font-bold text-white">{resultsCount}</div>
             <p className="mt-1 text-sm text-red-100/75">Completed races waiting on official publication.</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-4">
+              <div className="text-xs font-bold uppercase tracking-[0.18em] text-red-100">Tenant bonus follow-up</div>
+              <div className="mt-2 text-3xl font-bold text-white">{bonusFollowUpRaceCount}</div>
+              <p className="mt-1 text-sm text-red-100/75">
+                Scored or completed races with unanswered tenant bonus work.
+              </p>
+            </div>
           </div>
-        </div>
-      </section>
+        </section>
 
       <section className="rounded-3xl border border-white/10 bg-card p-5 shadow-xl md:p-6">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
@@ -347,7 +476,7 @@ export default async function AdminDashboardPage() {
           </PendingLink>
 
           <PendingLink
-            href="/admin/tenants"
+            href={bonusFollowUpHref}
             className="group grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-start gap-3 rounded-2xl border border-red-500/15 bg-red-500/8 p-4 transition-colors hover:bg-red-500/12"
           >
             <div className="min-w-0">
@@ -478,36 +607,39 @@ export default async function AdminDashboardPage() {
         </div>
       </section>
 
-      {reviewRaces.length > 0 && (
+      {reviewRaceRows.length > 0 && (
         <section className="space-y-4">
           <SectionHeader
             eyebrow="Current races"
             title="Races to review"
-            description="Only locked races or races waiting for results appear here."
+            description="Live races, official results, and tenant bonus follow-up stay visible until the work is actually done."
           />
 
           <div className="overflow-hidden rounded-2xl border border-white/5 bg-card shadow-xl">
-            {reviewRaces.map((race) => (
+            {reviewRaceRows.map((row) => (
               <PendingLink
-                href={`/admin/races/${race.id}`}
-                key={race.id}
+                href={`/admin/races/${row.race.id}${row.actionState === 'bonus_follow_up' ? '#group-bonus' : row.actionState === 'needs_results' ? '#official-results' : ''}`}
+                key={row.race.id}
                 className="group grid min-w-0 gap-3 border-b border-white/5 p-4 transition-colors last:border-b-0 hover:bg-white/[0.02] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
               >
                 <div className="min-w-0 space-y-1">
                   <div className="text-xs font-bold uppercase tracking-widest text-red-500">
-                    Round {race.round} • {race.season}
+                    Round {row.race.round} • {row.race.season}
                   </div>
-                  <div className="break-words text-base font-bold leading-tight text-white">{race.race_name}</div>
+                  <div className="break-words text-base font-bold leading-tight text-white">{row.race.race_name}</div>
                   <div className="break-words text-sm text-slate-400">
-                    {race.circuits?.name} {race.circuits?.emoji}
+                    {row.race.circuits?.name} {row.race.circuits?.emoji}
                   </div>
                 </div>
 
                 <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 lg:justify-end">
-                  <div className="max-w-full rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-left text-[11px] font-bold uppercase leading-4 tracking-[0.14em] sm:tracking-[0.18em] lg:text-right">
-                    <span className={getAdminRaceStatusClasses(getEffectiveRaceStatus(race))}>
-                      {getAdminRaceStatusLabel(getEffectiveRaceStatus(race))}
-                    </span>
+                  <div className="flex min-w-0 flex-col gap-2 lg:items-end">
+                    <div className={`max-w-full rounded-full border px-3 py-1.5 text-left text-[11px] font-bold uppercase leading-4 tracking-[0.14em] sm:tracking-[0.18em] lg:text-right ${getPlatformRaceActionBadgeClasses(row.actionState)}`}>
+                      {getPlatformRaceActionLabel(row.actionState)}
+                    </div>
+                    <div className="max-w-full break-words text-sm text-slate-400 lg:text-right">
+                      {getPlatformReviewNote(row)}
+                    </div>
                   </div>
                   <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
                 </div>
@@ -572,32 +704,34 @@ export default async function AdminDashboardPage() {
           {typedRaces.length === 0 ? (
             <div className="p-8 text-center italic text-slate-500">No races defined.</div>
           ) : (
-            typedRaces.map((race) => (
-              <PendingLink
-                href={`/admin/races/${race.id}`}
-                key={race.id}
-                className="group grid min-w-0 gap-3 border-b border-white/5 p-4 transition-colors last:border-b-0 hover:bg-white/[0.02] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
-              >
-                <div className="min-w-0 space-y-1">
-                  <div className="text-xs font-bold uppercase tracking-widest text-red-500">
-                    Round {race.round} • {race.season}
-                  </div>
-                  <div className="break-words text-base font-bold leading-tight text-white">{race.race_name}</div>
-                  <div className="break-words text-sm text-slate-400">
-                    {race.circuits?.name} {race.circuits?.emoji}
-                  </div>
-                </div>
+            typedRaces.map((race) => {
+              const actionRow = platformRaceActionByRaceId.get(race.id) || null
 
-                <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 lg:justify-end">
-                  <div className="max-w-full rounded-full border border-white/10 bg-black/20 px-3 py-1.5 text-left text-[11px] font-bold uppercase leading-4 tracking-[0.14em] sm:tracking-[0.18em] lg:text-right">
-                    <span className={getAdminRaceStatusClasses(getEffectiveRaceStatus(race))}>
-                      {getAdminRaceStatusLabel(getEffectiveRaceStatus(race))}
-                    </span>
+              return (
+                <PendingLink
+                  href={`/admin/races/${race.id}`}
+                  key={race.id}
+                  className="group grid min-w-0 gap-3 border-b border-white/5 p-4 transition-colors last:border-b-0 hover:bg-white/[0.02] lg:grid-cols-[minmax(0,1fr)_auto] lg:items-center"
+                >
+                  <div className="min-w-0 space-y-1">
+                    <div className="text-xs font-bold uppercase tracking-widest text-red-500">
+                      Round {race.round} • {race.season}
+                    </div>
+                    <div className="break-words text-base font-bold leading-tight text-white">{race.race_name}</div>
+                    <div className="break-words text-sm text-slate-400">
+                      {race.circuits?.name} {race.circuits?.emoji}
+                    </div>
                   </div>
-                  <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
-                </div>
-              </PendingLink>
-            ))
+
+                  <div className="flex min-w-0 flex-wrap items-center justify-between gap-3 lg:justify-end">
+                    <div className={`max-w-full rounded-full border px-3 py-1.5 text-left text-[11px] font-bold uppercase leading-4 tracking-[0.14em] sm:tracking-[0.18em] lg:text-right ${getPlatformRaceActionBadgeClasses(actionRow?.actionState || 'done')}`}>
+                      {getPlatformRaceActionLabel(actionRow?.actionState || 'done')}
+                    </div>
+                    <ChevronRight className="h-5 w-5 shrink-0 text-slate-600 transition-colors group-hover:text-red-500" />
+                  </div>
+                </PendingLink>
+              )
+            })
           )}
         </div>
       </details>

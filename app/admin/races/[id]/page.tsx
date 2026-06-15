@@ -397,13 +397,22 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
   const tenantBonusGroups = typedTenants.map((tenant) => {
     const questionsForTenant = typedTenantBonusQuestions.filter((question) => question.tenant_id === tenant.id)
     const questionIds = new Set(questionsForTenant.map((question) => question.id))
+    const answersForTenant = typedTenantBonusAnswers.filter((answer) => questionIds.has(answer.bonus_question_id))
+    const answeredQuestionIds = new Set(answersForTenant.map((answer) => answer.bonus_question_id))
+    const pendingCount = questionsForTenant.filter((question) => !answeredQuestionIds.has(question.id)).length
 
     return {
       tenant,
       questions: questionsForTenant,
-      answers: typedTenantBonusAnswers.filter((answer) => questionIds.has(answer.bonus_question_id)),
+      answers: answersForTenant,
+      pendingCount,
     }
+  }).sort((left, right) => {
+    if (right.pendingCount !== left.pendingCount) return right.pendingCount - left.pendingCount
+    if (right.questions.length !== left.questions.length) return right.questions.length - left.questions.length
+    return left.tenant.name.localeCompare(right.tenant.name)
   })
+  const groupsNeedingBonusAnswersCount = tenantBonusGroups.filter((group) => group.pendingCount > 0).length
   const bonusRace = {
     id: typedRace.id,
     round: typedRace.round,
@@ -744,7 +753,9 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
                 </p>
               </div>
               <div className="rounded-xl border border-white/10 bg-black/25 px-3 py-2 text-sm font-bold text-slate-300">
-                {typedTenantBonusQuestions.length} question{typedTenantBonusQuestions.length === 1 ? '' : 's'}
+                {groupsNeedingBonusAnswersCount > 0
+                  ? `${groupsNeedingBonusAnswersCount} group${groupsNeedingBonusAnswersCount === 1 ? '' : 's'} need answers`
+                  : `${typedTenantBonusQuestions.length} question${typedTenantBonusQuestions.length === 1 ? '' : 's'}`}
               </div>
             </div>
 

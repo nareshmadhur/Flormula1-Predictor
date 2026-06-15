@@ -9,6 +9,7 @@ import { PageBackLink } from '@/components/ui/page-back-link'
 import { SectionHeader } from '@/components/ui/section-header'
 import { RaceStatusPill } from '@/components/ui/race-status-pill'
 import { PendingLink } from '@/components/ui/pending-link'
+import { getTenantRaceActionLabel, getTenantRaceActionState } from '@/utils/admin-race-actions'
 import {
   TenantBonusPanel,
   type TenantBonusAnswer,
@@ -108,12 +109,24 @@ function getDriverLabel(drivers: DriverRecord[], driverId?: string | null) {
   return `${driver.code} · ${driver.full_name}`
 }
 
-function getRaceStatusCopy(status: RaceStatus) {
-  if (status === 'upcoming') return 'Predictions are open. Bonus questions can still be edited.'
-  if (status === 'locked') return 'Predictions are locked. Review entries and wait for official results.'
-  if (status === 'completed') return 'Official scoring is pending.'
-  if (status === 'scored') return 'Scores are published. Bonus answer changes rescore automatically.'
-  return 'This race has been cancelled.'
+function getTenantRaceActionCopy(actionState: ReturnType<typeof getTenantRaceActionState>, pendingBonusCount: number) {
+  if (actionState === 'needs_bonus_answers') {
+    return `${pendingBonusCount} group bonus answer${pendingBonusCount === 1 ? '' : 's'} still need to be saved before this race is operationally complete for the group.`
+  }
+
+  if (actionState === 'weekend_live') {
+    return 'Predictions are locked. Review entries and wait for official results.'
+  }
+
+  if (actionState === 'awaiting_results') {
+    return 'Official scoring is pending from platform admin.'
+  }
+
+  if (actionState === 'race_readiness') {
+    return 'Predictions are open. Bonus questions can still be edited.'
+  }
+
+  return 'Scores are published. Bonus answer changes rescore automatically.'
 }
 
 export default async function TenantRaceAdminPage(props: { params: Promise<{ id: string }> }) {
@@ -213,6 +226,10 @@ export default async function TenantRaceAdminPage(props: { params: Promise<{ id:
           .in('bonus_question_id', questionIds)
       : { data: [] as TenantBonusAnswer[] }
   const typedBonusAnswers = (bonusAnswers || []) as TenantBonusAnswer[]
+  const answeredQuestionIds = new Set(typedBonusAnswers.map((answer) => answer.bonus_question_id))
+  const pendingBonusQuestionCount = typedBonusQuestions.filter(
+    (question) => !answeredQuestionIds.has(question.id)
+  ).length
 
   let suggestedPodium = null
   let openF1PodiumError: string | null = null
@@ -236,6 +253,7 @@ export default async function TenantRaceAdminPage(props: { params: Promise<{ id:
   const memberById = new Map(operationalMembers.map((member) => [member.id, member]))
   const coveragePercent =
     operationalMembers.length > 0 ? Math.round((predictionUserIds.size / operationalMembers.length) * 100) : 0
+  const tenantActionState = getTenantRaceActionState(typedRace, effectiveStatus === 'upcoming' ? 0 : pendingBonusQuestionCount)
   const bonusRace = {
     id: typedRace.id,
     round: typedRace.round,
@@ -250,7 +268,7 @@ export default async function TenantRaceAdminPage(props: { params: Promise<{ id:
         <SectionHeader
           eyebrow={`Round ${typedRace.round}`}
           title={typedRace.race_name}
-          description={`Manage ${typedTenant?.name || 'this group'} entries, results visibility, and bonus scoring for this race.`}
+          description={`${getTenantRaceActionLabel(tenantActionState)} for ${typedTenant?.name || 'this group'}. Manage entries, results visibility, and group bonus scoring from one place.`}
           aside={<RaceStatusPill status={effectiveStatus} />}
         />
       </div>
@@ -268,22 +286,44 @@ export default async function TenantRaceAdminPage(props: { params: Promise<{ id:
           <div className="min-w-0">
             <div className="text-5xl font-bold leading-none text-white">{coveragePercent}%</div>
             <h2 className="mt-3 text-xl font-bold tracking-tight text-white">Entry coverage</h2>
-            <p className="mt-1 max-w-2xl text-sm text-slate-400">{getRaceStatusCopy(effectiveStatus)}</p>
+            <p className="mt-1 max-w-2xl text-sm text-slate-400">
+              {getTenantRaceActionCopy(tenantActionState, pendingBonusQuestionCount)}
+            </p>
           </div>
           <div className="flex flex-col gap-3 sm:flex-row md:justify-end">
-            <a
-              href="#entries"
-              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
-            >
-              Check entries
-              <ArrowRight className="h-4 w-4" />
-            </a>
-            <a
-              href="#group-bonus"
-              className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/25 px-5 py-3 font-bold text-slate-100 transition-colors hover:bg-white/10"
-            >
-              Bonus scoring
-            </a>
+            {tenantActionState === 'needs_bonus_answers' ? (
+              <>
+                <a
+                  href="#group-bonus"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
+                >
+                  Bonus scoring
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+                <a
+                  href="#entries"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/25 px-5 py-3 font-bold text-slate-100 transition-colors hover:bg-white/10"
+                >
+                  Check entries
+                </a>
+              </>
+            ) : (
+              <>
+                <a
+                  href="#entries"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-red-600 px-5 py-3 font-bold text-white transition-colors hover:bg-red-500"
+                >
+                  Check entries
+                  <ArrowRight className="h-4 w-4" />
+                </a>
+                <a
+                  href="#group-bonus"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-white/10 bg-black/25 px-5 py-3 font-bold text-slate-100 transition-colors hover:bg-white/10"
+                >
+                  Bonus scoring
+                </a>
+              </>
+            )}
           </div>
         </div>
       </section>
