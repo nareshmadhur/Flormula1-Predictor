@@ -299,5 +299,8 @@ export async function saveTenantBonusAnswers(formData: FormData) {
     bonusAnswers,
   })
 
-  await recalculateAndRevalidateRaceIfReady(supabase, raceId)
+  revalidateTenantBonusPaths(raceId)
+  revalidatePath('/admin')
+  revalidatePath('/admin/results')
+  revalidatePath('/season')
 }
