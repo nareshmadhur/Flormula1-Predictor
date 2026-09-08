@@ -13,8 +13,6 @@ function normalizeSiteUrl(value: string) {
 export function getSiteUrl() {
   const siteUrl =
     process.env.NEXT_PUBLIC_SITE_URL ||
-    process.env.VERCEL_PROJECT_PRODUCTION_URL ||
-    process.env.VERCEL_URL ||
     LOCAL_SITE_URL
 
   return normalizeSiteUrl(siteUrl)

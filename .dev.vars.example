@@ -1,0 +1,6 @@
+# Copy this file to .dev.vars before running `npm run preview`.
+# Keep production secrets in Cloudflare Worker secrets, not in this file.
+NEXTJS_ENV=development
+
+# Required to test the scheduled notification jobs locally.
+# CRON_SECRET=replace-with-the-same-secret-used-by-the-app

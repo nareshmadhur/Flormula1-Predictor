@@ -60,7 +60,7 @@ type LeaderboardEntry = {
 type RaceSummary = {
   id: string
   race_name: string
-  round: number | null
+  round: number
   status: RaceStatus
   race_start_at: string
   prediction_lock_at: string
@@ -332,13 +332,13 @@ export default async function HomePage() {
 
   const { data: latestScoredRaces } = await supabase
     .from('races')
-    .select('*, circuits(name, country, emoji)')
+    .select('id, season, round, race_name, status, race_start_at, prediction_lock_at, circuits(name, country, emoji)')
     .eq('season', currentSeason)
     .eq('status', 'scored')
     .order('race_start_at', { ascending: false })
     .limit(1)
 
-  const latestScored = latestScoredRaces?.[0]
+  const latestScored = ((latestScoredRaces || []) as RaceSummary[])[0]
   const showLatestRecapFirst = Boolean(
     user &&
       latestScored &&

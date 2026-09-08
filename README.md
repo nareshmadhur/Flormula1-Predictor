@@ -304,11 +304,11 @@ Notes:
 ## Setup
 
 ### Prerequisites
-- Node.js 18+
+- Node.js 20.9+
 - npm
 - Supabase project
 - Brevo transactional email account for app-triggered lifecycle emails
-- Vercel project for hosting and scheduled cron invocation
+- Cloudflare account with Workers enabled
 
 ### Install
 ```bash
@@ -317,8 +317,8 @@ npm install
 
 ### Environment
 
-Create `.env.local` for local development and mirror production-only secrets in Vercel Project Settings.
-Use `CRON_SECRET` for Vercel Cron; `NOTIFICATION_CRON_SECRET` is also supported for manual or non-Vercel runners.
+Create `.env.local` for local development. For Cloudflare, set runtime secrets in the Worker settings or with `wrangler secret put`.
+Use `CRON_SECRET` for Cloudflare Cron Triggers; `NOTIFICATION_CRON_SECRET` is also supported for manual or non-Cloudflare runners.
 
 ```bash
 NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
@@ -347,12 +347,47 @@ GROUP_WELCOME_EMAIL_FROM="Flormula1 <hello@flormula1.nl>"
 | Site URL | `NEXT_PUBLIC_SITE_URL` | Canonical app domain | Absolute email links, unsubscribe URLs, auth callbacks, metadata, robots, sitemap. |
 | Brevo transactional API | `BREVO_API_KEY` | Brevo account / SMTP & API / API keys | App-triggered lifecycle emails and optional group welcome emails. Brevo domain auth is still needed for deliverability, but it does not replace this API key. |
 | Email sender | `LIFECYCLE_EMAIL_FROM` | A Brevo-verified sender on the authenticated domain | Visible From address for prediction reminders and score recaps. |
-| Cron authentication | `CRON_SECRET` or `NOTIFICATION_CRON_SECRET` | Generate a long random secret | Protects `/api/notifications/*` runner endpoints. Vercel Cron automatically sends `CRON_SECRET` as `Authorization: Bearer ...`. |
+| Cron authentication | `CRON_SECRET` or `NOTIFICATION_CRON_SECRET` | Generate a long random secret | Protects `/api/notifications/*` runner endpoints. The Cloudflare Worker scheduled handler sends it as `Authorization: Bearer ...`. |
 | Reminder fallback window | `RACE_REMINDER_LEAD_HOURS` | App choice | Fallback prediction reminder window when no platform default or group override is configured. Platform admins can manage the platform default in `/admin/notifications`; group admins can override their group from `/admin/tenant`. |
 | Recap lookback | `SCORE_RECAP_LOOKBACK_DAYS` | App choice | How many recent scored races the recap runner scans. Default `14`. |
 | Welcome sender | `GROUP_WELCOME_EMAIL_FROM` | A Brevo-verified sender | Optional sender fallback for group welcome emails. |
 
 For local `.env.local` changes, restart `npm run dev`. Next.js reads server-side env vars when the dev server starts, so the admin monitor can show a missing cron secret until the process is restarted.
+
+### Cloudflare deployment
+
+This is deployed as a Cloudflare Worker through `@opennextjs/cloudflare`, not as a static Pages export. Server actions, Supabase session handling, server-rendered pages, and API routes all require a Worker runtime.
+
+Authenticate Wrangler once, then deploy:
+
+```bash
+npx wrangler login
+npm run deploy
+```
+
+If your Cloudflare account has more than one account, set `CLOUDFLARE_ACCOUNT_ID` before deploying. The deploy script minifies the Worker and preserves variables already configured in Cloudflare with `--keep-vars`.
+
+For a first production setup, configure these as Worker secrets or variables:
+
+```bash
+npx wrangler secret put NEXT_PUBLIC_SUPABASE_URL
+npx wrangler secret put NEXT_PUBLIC_SUPABASE_ANON_KEY
+npx wrangler secret put SUPABASE_SERVICE_ROLE_KEY
+npx wrangler secret put NEXT_PUBLIC_SITE_URL
+npx wrangler secret put BREVO_API_KEY
+npx wrangler secret put LIFECYCLE_EMAIL_FROM
+npx wrangler secret put CRON_SECRET
+```
+
+The `NEXT_PUBLIC_*` values must also be available while `npm run deploy` builds the app, either through `.env.local` or the shell environment. Assign the existing production hostname to the Worker as a custom domain after the first deploy, then keep `NEXT_PUBLIC_SITE_URL` and the Supabase Auth URL allowlist aligned with that hostname.
+
+For local Worker-runtime testing, copy `.dev.vars.example` to `.dev.vars` and run:
+
+```bash
+npm run preview
+```
+
+The minified bundle is configured to stay below the 3 MiB Workers Free plan limit. If future features push it above that limit, the paid Workers plan supports larger scripts.
 
 ### Lifecycle email scheduling
 
@@ -374,14 +409,12 @@ Recommended starting schedule:
 
 Both endpoints are idempotent. They claim a unique event per user, race, and email type before sending, so repeated cron calls do not resend the same reminder or recap.
 
-This repo includes `vercel.json` cron entries for Vercel:
+This repo includes Cloudflare Cron Triggers in `wrangler.jsonc`:
 
-- `/api/notifications/race-reminders` runs daily at `06:00 UTC`.
-- `/api/notifications/score-recaps` runs daily at `07:00 UTC`.
+- `0 6 * * *` invokes `/api/notifications/race-reminders` daily at `06:00 UTC`.
+- `0 7 * * *` invokes `/api/notifications/score-recaps` daily at `07:00 UTC`.
 
-Vercel Cron schedules are UTC. On Vercel Hobby, daily schedules are the most flexible supported option, and invocation timing can land anywhere within the scheduled hour. On Vercel Pro, change the reminder schedule to hourly if you want tighter pre-lock timing. Supabase Cron is more lenient for frequency and precision, but Vercel is the simplest fit for this app because the notification runners already live as Vercel API routes.
-
-For Vercel Cron, set `CRON_SECRET` in the Vercel production environment. Vercel automatically sends it as `Authorization: Bearer $CRON_SECRET` when invoking cron paths.
+`worker.ts` maps each trigger to the protected endpoint and sends the configured cron secret as a bearer token. Cloudflare cron schedules use UTC, and trigger changes can take several minutes to propagate after deployment.
 
 Before enabling cron, test the same production project safely:
 

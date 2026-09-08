@@ -6,14 +6,22 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "preview": "opennextjs-cloudflare build && wrangler dev --test-scheduled",
+    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy -- --keep-vars",
+    "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload -- --keep-vars",
+    "cf:typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "lint": "eslint",
+    "db:audit:schema": "node scripts/audit-schema-usage.mjs",
+    "db:audit:reference": "node scripts/audit-reference-data.mjs",
+    "db:audit:reference:openf1": "node scripts/audit-reference-data.mjs --openf1"
   },
   "dependencies": {
+    "@opennextjs/cloudflare": "1.20.6",
     "@supabase/ssr": "^0.9.0",
     "@supabase/supabase-js": "^2.100.0",
     "date-fns": "^4.1.0",
     "lucide-react": "^1.6.0",
-    "next": "16.2.1",
+    "next": "16.3.4",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
@@ -24,8 +32,9 @@
     "@types/react-dom": "^19",
     "dotenv": "^17.3.1",
     "eslint": "^9",
-    "eslint-config-next": "16.2.1",
+    "eslint-config-next": "16.3.4",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "wrangler": "4.129.0"
   }
 }
