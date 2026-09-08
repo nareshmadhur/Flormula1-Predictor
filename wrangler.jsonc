@@ -17,11 +17,5 @@
       "binding": "WORKER_SELF_REFERENCE",
       "service": "flormula1-predictor"
     }
-  ],
-  "triggers": {
-    "crons": [
-      "0 6 * * *",
-      "0 7 * * *"
-    ]
-  }
+  ]
 }
