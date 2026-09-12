@@ -5,6 +5,7 @@ import { revalidatePath } from 'next/cache'
 import { redirect } from 'next/navigation'
 import type { AuthActionState } from '@/app/auth/action-state'
 import { getAuthCallbackUrl, getSafeNextPath } from '@/utils/request-url'
+import { headers } from 'next/headers'
 
 function normalizeEmail(value: FormDataEntryValue | null) {
   return String(value ?? '').trim().toLowerCase()
@@ -37,10 +38,41 @@ function mapAuthError(message: string) {
   return message || 'Could not complete that request.'
 }
 
+async function hasTrustedActionOrigin() {
+  const requestHeaders = await headers()
+  const origin = requestHeaders.get('origin')?.trim()
+  const requestHost = (
+    requestHeaders.get('x-forwarded-host') || requestHeaders.get('host') || ''
+  )
+    .split(',')[0]
+    .trim()
+    .toLowerCase()
+
+  if (!origin || origin === 'null' || !requestHost) return false
+
+  try {
+    const originUrl = new URL(origin)
+    return (
+      (originUrl.protocol === 'https:' || originUrl.protocol === 'http:') &&
+      originUrl.host.toLowerCase() === requestHost
+    )
+  } catch {
+    return false
+  }
+}
+
+async function rejectUntrustedAction() {
+  return !(await hasTrustedActionOrigin())
+}
+
 export async function login(
   _prevState: AuthActionState,
   formData: FormData
 ): Promise<AuthActionState> {
+  if (await rejectUntrustedAction()) {
+    return { error: 'Please reload the sign-in page and try again.' }
+  }
+
   const supabase = await createClient()
 
   const email = normalizeEmail(formData.get('email'))
@@ -69,6 +101,10 @@ export async function signup(
   _prevState: AuthActionState,
   formData: FormData
 ): Promise<AuthActionState> {
+  if (await rejectUntrustedAction()) {
+    return { error: 'Please reload the sign-up page and try again.' }
+  }
+
   const supabase = await createClient()
   const email = normalizeEmail(formData.get('email'))
   const password = String(formData.get('password') ?? '')
@@ -118,6 +154,10 @@ export async function resendConfirmation(
   _prevState: AuthActionState,
   formData: FormData
 ): Promise<AuthActionState> {
+  if (await rejectUntrustedAction()) {
+    return { error: 'Please reload the sign-up page and try again.' }
+  }
+
   const supabase = await createClient()
   const email = normalizeEmail(formData.get('email'))
   const next = getSafeNextPath(formData.get('next'))
@@ -153,6 +193,10 @@ export async function forgotPassword(
   _prevState: AuthActionState,
   formData: FormData
 ): Promise<AuthActionState> {
+  if (await rejectUntrustedAction()) {
+    return { error: 'Please reload the password reset page and try again.' }
+  }
+
   const supabase = await createClient()
   const email = normalizeEmail(formData.get('email'))
 
@@ -178,6 +222,10 @@ export async function updatePassword(
   _prevState: AuthActionState,
   formData: FormData
 ): Promise<AuthActionState> {
+  if (await rejectUntrustedAction()) {
+    return { error: 'Please reload the password reset page and try again.' }
+  }
+
   const supabase = await createClient()
   const password = String(formData.get('password') ?? '')
   const confirmPassword = String(formData.get('confirm_password') ?? '')
@@ -217,6 +265,8 @@ export async function updatePassword(
 }
 
 export async function signout() {
+  if (await rejectUntrustedAction()) return
+
   const supabase = await createClient()
   await supabase.auth.signOut()
   revalidatePath('/', 'layout')

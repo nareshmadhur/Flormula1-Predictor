@@ -40,9 +40,13 @@ const publicCacheablePaths = new Set([
   '/',
   '/about',
   '/contact',
+  '/forgot-password',
   '/leaderboard',
+  '/login',
   '/privacy',
+  '/reset-password',
   '/season',
+  '/signup',
   '/terms',
   '/robots.txt',
   '/sitemap.xml',
@@ -79,11 +83,54 @@ function isPublicCacheableRequest(request: Request) {
   return publicCacheablePaths.has(url.pathname) || isPublicRacePage(url.pathname)
 }
 
+function hasTrustedFormOrigin(request: Request) {
+  const origin = request.headers.get('origin')?.trim()
+  const requestHost = request.headers.get('host')?.trim().toLowerCase()
+
+  if (!origin || origin === 'null' || !requestHost) return false
+
+  try {
+    const originUrl = new URL(origin)
+    return (
+      (originUrl.protocol === 'https:' || originUrl.protocol === 'http:') &&
+      originUrl.host.toLowerCase() === requestHost
+    )
+  } catch {
+    return false
+  }
+}
+
+function isUntrustedFormPost(request: Request) {
+  if (request.method !== 'POST') return false
+
+  const contentType = request.headers.get('content-type') || ''
+  if (!contentType.toLowerCase().startsWith('multipart/form-data')) return false
+
+  // Browser Server Actions include a same-origin Origin. Rejecting untrusted
+  // multipart posts at the edge keeps forged signup requests away from Next
+  // and Supabase.
+  return !hasTrustedFormOrigin(request)
+}
+
+function invalidFormRequestResponse() {
+  return new Response('Invalid form request.', {
+    status: 403,
+    headers: {
+      'cache-control': 'no-store',
+      'content-type': 'text/plain; charset=utf-8',
+    },
+  })
+}
+
 async function fetchApp(
   request: Request,
   env: WorkerEnv,
   ctx: ExecutionContextLike
 ) {
+  if (isUntrustedFormPost(request)) {
+    return invalidFormRequestResponse()
+  }
+
   if (!isPublicCacheableRequest(request)) {
     return appWorker.fetch(request, env, ctx)
   }
