@@ -1,6 +1,15 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { hasSupabaseAuthCookie } from '@/utils/supabase/auth-cookie'
+import { fetchWithTimeout } from '@/utils/supabase/fetch'
+
+const sessionRefreshPrefixes = ['/admin', '/api/admin', '/groups', '/me', '/predictions', '/race']
+
+function shouldRefreshSession(pathname: string) {
+  return sessionRefreshPrefixes.some(
+    (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`)
+  )
+}
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
@@ -10,7 +19,10 @@ export async function updateSession(request: NextRequest) {
   // Anonymous public requests do not need a round trip to Supabase Auth.
   // This keeps the public shell available while the database or Auth service
   // is recovering and avoids spending a request on every asset navigation.
-  if (!hasSupabaseAuthCookie(request.cookies.getAll())) {
+  if (
+    !hasSupabaseAuthCookie(request.cookies.getAll()) ||
+    !shouldRefreshSession(request.nextUrl.pathname)
+  ) {
     return supabaseResponse
   }
 
@@ -18,6 +30,9 @@ export async function updateSession(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      global: {
+        fetch: fetchWithTimeout,
+      },
       cookies: {
         getAll() {
           return request.cookies.getAll()
