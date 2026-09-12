@@ -21,8 +21,8 @@
     }
   ],
   "vars": {
-    "ENABLE_LIFECYCLE_CRON": "true",
-    "SUPABASE_TRAFFIC_PAUSED": "false"
+    "ENABLE_LIFECYCLE_CRON": "false",
+    "SUPABASE_TRAFFIC_PAUSED": "true"
   },
   "assets": {
     "directory": ".open-next/assets",
