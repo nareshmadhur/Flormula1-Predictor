@@ -1,12 +1,11 @@
 import type { Metadata } from 'next'
-import { createClient } from '@/utils/supabase/server'
 import { ArrowRight, ChevronRight, Flag, Gauge, Timer, Trophy, Users } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { differenceInCalendarDays, format, isPast } from 'date-fns'
 import { getCurrentSeason } from '@/utils/season'
 import { getProfileDisplayName } from '@/utils/profile-name'
 import { PendingLink } from '@/components/ui/pending-link'
-import { getUserTenantContext } from '@/utils/tenant'
+import { getRequestUserContext } from '@/utils/request-context'
 import { getCompetitionRank, sortCompetitionStandings } from '@/utils/competition'
 import { getRoundLabel } from '@/utils/race-copy'
 import { SectionHeader } from '@/components/ui/section-header'
@@ -273,27 +272,31 @@ function LandingPurposeGrid() {
 }
 
 export default async function HomePage() {
-  const supabase = await createClient()
-  const currentSeason = await getCurrentSeason(supabase)
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { supabase, user, tenantContext: groupContext } = await getRequestUserContext()
 
-  const groupContext = user
-    ? await getUserTenantContext(supabase, user.id)
-    : {
-        tenantId: null,
-        tenantName: null,
-        tenantSlug: null,
-        role: null,
-      }
+  // Keep the public entry point independent from the database. Visitors can
+  // still reach the auth and informational pages while Supabase is degraded.
+  if (!user) {
+    return (
+      <div className="space-y-6 animate-in fade-in duration-700">
+        <VisitorLandingHero
+          currentSeason={new Date().getFullYear()}
+          nextRace={null}
+          featuredLeaderboard={[]}
+        />
+        <LandingPurposeGrid />
+      </div>
+    )
+  }
+
+  const currentSeason = await getCurrentSeason(supabase)
 
   const hasGroup = Boolean(groupContext.tenantId)
   const activeView = hasGroup ? 'group' : 'global'
 
   const { data: seasonRaces } = await supabase
     .from('races')
-    .select('*, circuits(name, country, emoji)')
+    .select('id, race_name, round, status, race_start_at, prediction_lock_at, circuits(name, country, emoji)')
     .eq('season', currentSeason)
     .neq('status', 'cancelled')
     .order('race_start_at', { ascending: true })

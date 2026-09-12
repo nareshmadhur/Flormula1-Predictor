@@ -3,9 +3,7 @@ import { ArrowRight, CheckCircle2, Clock3, UsersRound } from 'lucide-react'
 import { redirect } from 'next/navigation'
 import { PendingLink } from '@/components/ui/pending-link'
 import { PageBackLink } from '@/components/ui/page-back-link'
-import { getAdminAccessContext } from '@/utils/admin-access'
-import { createClient } from '@/utils/supabase/server'
-import { getUserTenantContext } from '@/utils/tenant'
+import { getRequestUserContext } from '@/utils/request-context'
 import { RequestGroupForm } from './request-group-form'
 
 export const revalidate = 0
@@ -26,23 +24,16 @@ type GroupRequest = {
 }
 
 export default async function RequestGroupPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { supabase, user, tenantContext, isPlatformAdmin } = await getRequestUserContext()
 
   if (!user) redirect('/login?next=/groups/request')
 
-  const [tenantContext, access, requestResult] = await Promise.all([
-    getUserTenantContext(supabase, user.id),
-    getAdminAccessContext(supabase),
-    supabase
-      .from('group_requests')
-      .select('id, requested_name, description, expected_player_count, status, review_note, created_at')
-      .eq('requested_by', user.id)
-      .order('created_at', { ascending: false })
-      .limit(1),
-  ])
+  const requestResult = await supabase
+    .from('group_requests')
+    .select('id, requested_name, description, expected_player_count, status, review_note, created_at')
+    .eq('requested_by', user.id)
+    .order('created_at', { ascending: false })
+    .limit(1)
 
   const latestRequest = ((requestResult.data || [])[0] as GroupRequest | undefined) ?? null
   const currentGroupName = tenantContext.tenantName || 'your current group'
@@ -114,7 +105,7 @@ export default async function RequestGroupPage() {
                 <ArrowRight className="h-4 w-4" />
               </PendingLink>
             </div>
-          ) : access?.isPlatformAdmin ? (
+          ) : isPlatformAdmin ? (
             <div className="space-y-4 rounded-2xl border border-white/10 bg-black/25 p-5">
               <p className="text-sm leading-6 text-slate-300">
                 Platform admins can create groups directly and assign the organizer from group setup.

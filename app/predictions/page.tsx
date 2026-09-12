@@ -1,11 +1,10 @@
-import { createClient } from '@/utils/supabase/server'
 import { AlertCircle, Calendar, ChevronRight, Clock3, Flag, MapPin, Trophy, Users } from 'lucide-react'
 import { differenceInCalendarDays, format, formatDistanceToNowStrict } from 'date-fns'
 import { redirect } from 'next/navigation'
 import { getRoundLabel } from '@/utils/race-copy'
 import { getEffectiveRaceStatus, RaceStatus } from '@/utils/race-status'
 import { getCurrentSeason } from '@/utils/season'
-import { getUserTenantContext } from '@/utils/tenant'
+import { getRequestUserContext } from '@/utils/request-context'
 import { TenantAssignmentRequired } from '@/components/ui/tenant-assignment-required'
 import { PendingLink } from '@/components/ui/pending-link'
 import { RaceStatusPill } from '@/components/ui/race-status-pill'
@@ -342,6 +341,7 @@ function RaceListCard({
             <div className="w-full lg:w-auto">
               <PendingLink
                 href={actionHref}
+                prefetch={false}
                 className={`inline-flex w-full items-center justify-center gap-1.5 rounded-xl px-5 py-3 font-bold transition-all lg:w-auto ${
                   isPrimaryAction
                     ? 'bg-red-600 text-white shadow-[0_0_15px_rgba(239,68,68,0.3)] hover:bg-red-500'
@@ -390,17 +390,13 @@ function RaceListCard({
 }
 
 export default async function SeasonDashboardPage({ searchParams }: SeasonDashboardPageProps) {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { supabase, user, tenantContext } = await getRequestUserContext()
 
   if (!user) {
     redirect('/login')
   }
 
   const currentSeason = await getCurrentSeason(supabase)
-  const tenantContext = await getUserTenantContext(supabase, user.id)
 
   if (!tenantContext.tenantId) {
     return <TenantAssignmentRequired isAdmin={tenantContext.role === 'admin'} />
@@ -412,19 +408,26 @@ export default async function SeasonDashboardPage({ searchParams }: SeasonDashbo
 
   const { data: races } = await supabase
     .from('races')
-    .select('*, circuits(name, country, emoji)')
+    .select('id, round, season, race_name, status, race_start_at, prediction_lock_at, circuits(name, country, emoji)')
     .eq('season', currentSeason)
     .neq('status', 'cancelled')
     .order('race_start_at', { ascending: true })
 
-  const { data: predictions } = await supabase.from('predictions').select('race_id').eq('user_id', user.id)
-
-  const { data: scores } = await supabase
-    .from('user_race_scores')
-    .select('race_id, total_points')
-    .eq('user_id', user.id)
-
   const typedRaces = (races || []) as RaceCardData[]
+  const raceIds = typedRaces.map((race) => race.id)
+  const [{ data: predictions }, { data: scores }] = await Promise.all([
+    raceIds.length > 0
+      ? supabase.from('predictions').select('race_id').eq('user_id', user.id).in('race_id', raceIds)
+      : Promise.resolve({ data: [] as PredictionRow[] }),
+    raceIds.length > 0
+      ? supabase
+          .from('user_race_scores')
+          .select('race_id, total_points')
+          .eq('user_id', user.id)
+          .in('race_id', raceIds)
+      : Promise.resolve({ data: [] as ScoreRow[] }),
+  ])
+
   const typedPredictions = (predictions || []) as PredictionRow[]
   const typedScores = (scores || []) as ScoreRow[]
 

@@ -147,6 +147,7 @@ function PublicRaceRow({
 
             <PendingLink
               href={`/race/${race.id}`}
+              prefetch={false}
               className={`inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border px-4 py-2 text-sm font-bold transition-colors ${tone.button}`}
             >
               {actionLabel}

@@ -135,7 +135,7 @@ async function saveResults(formData: FormData) {
   revalidatePath(`/race/${raceId}/predict`)
 }
 
-export async function proxyPrediction(formData: FormData) {
+async function proxyPrediction(formData: FormData) {
   'use server'
   const supabase = await createClient()
   const access = await getAdminAccessContext(supabase)

@@ -1,11 +1,10 @@
-import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { CalendarClock, ChevronDown, Trophy } from 'lucide-react'
 import { format } from 'date-fns'
 import { getCurrentSeason } from '@/utils/season'
 import { getRoundLabel } from '@/utils/race-copy'
 import { getEffectiveRaceStatus, type RaceStatus } from '@/utils/race-status'
-import { getUserTenantContext } from '@/utils/tenant'
+import { getRequestUserContext } from '@/utils/request-context'
 import { TenantContextBanner } from '@/components/ui/tenant-context-banner'
 import { TenantAssignmentRequired } from '@/components/ui/tenant-assignment-required'
 import { PendingLink } from '@/components/ui/pending-link'
@@ -135,17 +134,13 @@ function getBonusQuestionLabel(questionText: string) {
 }
 
 export default async function UserHistoryPage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { supabase, user, tenantContext } = await getRequestUserContext()
 
   if (!user) {
     redirect('/login')
   }
 
   const currentSeason = await getCurrentSeason(supabase)
-  const tenantContext = await getUserTenantContext(supabase, user.id)
 
   if (!tenantContext.tenantId) {
     return <TenantAssignmentRequired isAdmin={tenantContext.role === 'admin'} />
@@ -162,25 +157,32 @@ export default async function UserHistoryPage() {
     console.error('Season races fetch error:', racesError)
   }
 
-  const { data: predictions, error: predictionsError } = await supabase
-    .from('predictions')
-    .select('id, race_id')
-    .eq('user_id', user.id)
+  const typedRaces = (races || []) as SeasonRace[]
+  const raceIds = typedRaces.map((race) => race.id)
+  const [{ data: predictions, error: predictionsError }, { data: scores }] = await Promise.all([
+    raceIds.length > 0
+      ? supabase
+          .from('predictions')
+          .select('id, race_id')
+          .eq('user_id', user.id)
+          .in('race_id', raceIds)
+      : Promise.resolve({ data: [], error: null }),
+    raceIds.length > 0
+      ? supabase
+          .from('user_race_scores')
+          .select('race_id, total_points, podium_points, bonus_points, exact_hits')
+          .eq('user_id', user.id)
+          .in('race_id', raceIds)
+      : Promise.resolve({ data: [] }),
+  ])
 
   if (predictionsError) {
     console.error('Predictions fetch error:', predictionsError)
   }
 
-  const { data: scores } = await supabase
-    .from('user_race_scores')
-    .select('race_id, total_points, podium_points, bonus_points, exact_hits')
-    .eq('user_id', user.id)
-
-  const typedRaces = (races || []) as SeasonRace[]
   const typedPredictions = (predictions || []) as PredictionRow[]
   const predictedRaceIds = new Set(typedPredictions.map((prediction) => prediction.race_id))
   const scoreByRaceId = new Map(((scores || []) as ScoreRow[]).map((score) => [score.race_id, score]))
-  const raceIds = typedRaces.map((race) => race.id)
   const predictionIds = typedPredictions.map((prediction) => prediction.id)
 
   const [{ data: bonusQuestions }, { data: predictionBonusAnswers }, { data: raceBonusAnswers }] = await Promise.all([
@@ -458,6 +460,7 @@ export default async function UserHistoryPage() {
                       <div className="shrink-0">
                         <PendingLink
                           href={`/race/${entry.race.id}/predict`}
+                          prefetch={false}
                           className="inline-flex items-center gap-1.5 font-bold text-red-400 transition-colors hover:text-red-300"
                         >
                           {getActionLabel(entry)}
@@ -485,6 +488,7 @@ export default async function UserHistoryPage() {
                 <PendingLink
                   key={entry.race.id}
                   href={`/race/${entry.race.id}/predict`}
+                  prefetch={false}
                   className="rounded-xl border border-white/5 bg-black/25 px-4 py-3 transition-colors hover:bg-white/[0.03]"
                 >
                   <div className="text-xs font-bold uppercase tracking-widest text-red-400">

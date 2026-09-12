@@ -1,33 +1,14 @@
-import { createClient } from '@/utils/supabase/server'
 import { signout } from '@/app/auth/actions'
-import { getUserTenantContext } from '@/utils/tenant'
-import { getAdminAccessContext } from '@/utils/admin-access'
 import { getProfileDisplayName } from '@/utils/profile-name'
+import { getRequestUserContext } from '@/utils/request-context'
 import { PendingLink } from '@/components/ui/pending-link'
 import { SignOutButton } from '@/components/ui/signout-button'
 import { ChevronDown } from 'lucide-react'
 import { NavbarLinks } from '@/components/ui/navbar-links'
 
 export default async function Navbar() {
-  const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
-
-  let profile = null
-  let tenantName: string | null = null
-  let isAdmin = false
-  if (user) {
-    const { data } = await supabase
-      .from('profiles')
-      .select('display_name, role')
-      .eq('id', user.id)
-      .single()
-    profile = data
-
-    const tenantContext = await getUserTenantContext(supabase, user.id)
-    tenantName = tenantContext.tenantName
-    const adminAccess = await getAdminAccessContext(supabase)
-    isAdmin = adminAccess?.isAdmin ?? false
-  }
+  const { user, profile, tenantContext, isAdmin } = await getRequestUserContext()
+  const tenantName = tenantContext.tenantName
 
   const primaryLinks = user
     ? [

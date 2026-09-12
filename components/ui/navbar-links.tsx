@@ -26,6 +26,7 @@ export function NavbarLinks({ links }: NavbarLinksProps) {
           <PendingLink
             key={link.href}
             href={link.href}
+            prefetch={false}
             aria-current={isActive ? 'page' : undefined}
             className={`inline-flex shrink-0 items-center rounded-full border px-3 py-1.5 text-sm font-medium transition-colors ${
               isActive

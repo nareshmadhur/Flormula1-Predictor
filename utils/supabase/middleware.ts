@@ -1,10 +1,18 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
+import { hasSupabaseAuthCookie } from '@/utils/supabase/auth-cookie'
 
 export async function updateSession(request: NextRequest) {
   let supabaseResponse = NextResponse.next({
     request,
   })
+
+  // Anonymous public requests do not need a round trip to Supabase Auth.
+  // This keeps the public shell available while the database or Auth service
+  // is recovering and avoids spending a request on every asset navigation.
+  if (!hasSupabaseAuthCookie(request.cookies.getAll())) {
+    return supabaseResponse
+  }
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

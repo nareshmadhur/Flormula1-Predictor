@@ -1,8 +1,7 @@
-import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { ArrowRight, IdCard, UserRound, UsersRound } from 'lucide-react'
 import { getProfileDisplayName } from '@/utils/profile-name'
-import { getUserTenantContext } from '@/utils/tenant'
+import { getRequestUserContext } from '@/utils/request-context'
 import { TenantContextBanner } from '@/components/ui/tenant-context-banner'
 import { PageBackLink } from '@/components/ui/page-back-link'
 import { ProfileForm } from './profile-form'
@@ -11,24 +10,17 @@ import { PendingLink } from '@/components/ui/pending-link'
 export const revalidate = 0
 
 export default async function ProfilePage() {
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { supabase, user, profile, tenantContext } = await getRequestUserContext()
 
   if (!user) {
     redirect('/login')
   }
 
-  const [{ data: profile }, { data: notificationPreferences }, tenantContext] = await Promise.all([
-    supabase.from('profiles').select('display_name, email').eq('id', user.id).single(),
-    supabase
-      .from('notification_preferences')
-      .select('race_reminder_emails_enabled, score_recap_emails_enabled')
-      .eq('user_id', user.id)
-      .maybeSingle(),
-    getUserTenantContext(supabase, user.id),
-  ])
+  const { data: notificationPreferences } = await supabase
+    .from('notification_preferences')
+    .select('race_reminder_emails_enabled, score_recap_emails_enabled')
+    .eq('user_id', user.id)
+    .maybeSingle()
 
   const resolvedDisplayName = getProfileDisplayName(
     profile?.display_name,

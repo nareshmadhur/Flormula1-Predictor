@@ -113,6 +113,7 @@ type ClaimedNotificationEvent = {
 type ExistingNotificationEvent = {
   id: string
   status: 'queued' | 'sent' | 'failed'
+  updated_at?: string | null
 }
 
 type UserRaceScore = {
@@ -193,6 +194,19 @@ function getPreviewLimit(options: RaceNotificationRunOptions) {
 
 function getTestLimit(options: RaceNotificationRunOptions) {
   return Math.max(1, Math.min(options.testLimit ?? 5, 50))
+}
+
+function getNotificationQueuedLeaseMinutes() {
+  return getPositiveNumber(process.env.NOTIFICATION_QUEUED_LEASE_MINUTES, 30)
+}
+
+function isStaleQueuedNotificationEvent(event: ExistingNotificationEvent | null, now = Date.now()) {
+  if (!event || event.status !== 'queued' || !event.updated_at) return false
+
+  const updatedAt = new Date(event.updated_at).getTime()
+  if (!Number.isFinite(updatedAt)) return false
+
+  return now - updatedAt >= getNotificationQueuedLeaseMinutes() * 60_000
 }
 
 function maskEmail(value: string | null | undefined) {
@@ -299,7 +313,7 @@ async function getExistingNotificationEvent(
 ): Promise<ExistingNotificationEvent | null> {
   const { data: existing, error: existingError } = await supabase
     .from('notification_events')
-    .select('id, status')
+    .select('id, status, updated_at')
     .eq('user_id', input.userId)
     .eq('race_id', input.raceId)
     .eq('event_key', input.eventKey)
@@ -322,21 +336,24 @@ async function getBlockingLiveNotificationEvent(
 ): Promise<ExistingNotificationEvent | null> {
   const { data: existing, error } = await supabase
     .from('notification_events')
-    .select('id, status')
+    .select('id, status, updated_at')
     .eq('user_id', input.userId)
     .eq('race_id', input.raceId)
     .eq('event_type', input.eventType)
     .in('status', ['queued', 'sent'])
     .not('event_key', 'like', 'test:%')
     .order('created_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
+    .limit(20)
 
   if (error) {
     throw new Error(`Failed to check notification event: ${error.message}`)
   }
 
-  return existing as ExistingNotificationEvent | null
+  const liveEvent = ((existing || []) as ExistingNotificationEvent[]).find(
+    (event) => event.status === 'sent' || !isStaleQueuedNotificationEvent(event)
+  )
+
+  return liveEvent || null
 }
 
 async function canClaimNotificationEvent(
@@ -364,9 +381,13 @@ async function claimNotificationEvent(
   const existing = await getExistingNotificationEvent(supabase, input)
 
   if (existing) {
-    if (existing.status !== 'failed') return null
+    if (existing.status === 'sent') return null
 
-    const { data, error } = await supabase
+    if (existing.status === 'queued' && !isStaleQueuedNotificationEvent(existing)) {
+      return null
+    }
+
+    let claimQuery = supabase
       .from('notification_events')
       .update({
         status: 'queued',
@@ -375,14 +396,21 @@ async function claimNotificationEvent(
         updated_at: new Date().toISOString(),
       })
       .eq('id', existing.id)
-      .select('id')
-      .single()
+      .eq('status', existing.status)
+
+    if (existing.status === 'queued' && existing.updated_at) {
+      claimQuery = claimQuery.eq('updated_at', existing.updated_at)
+    }
+
+    const { data, error } = await claimQuery.select('id').maybeSingle()
 
     if (error) {
       throw new Error(`Failed to re-queue notification event: ${error.message}`)
     }
 
-    return data as ClaimedNotificationEvent
+    // The status predicate makes the retry claim atomic. If another worker
+    // reclaimed the event first, no email should be sent by this worker.
+    return (data as ClaimedNotificationEvent | null) || null
   }
 
   const { data, error } = await supabase
@@ -1488,11 +1516,13 @@ export async function runPreLockReminderEmails(
         continue
       }
 
-      const canClaim = await canClaimNotificationEvent(supabase, {
-        userId: preference.user_id,
-        raceId: race.id,
-        eventKey,
-      })
+      const canClaim = options.dryRun
+        ? await canClaimNotificationEvent(supabase, {
+            userId: preference.user_id,
+            raceId: race.id,
+            eventKey,
+          })
+        : true
 
       const blockingLiveEvent =
         isLimitedTestSend || options.dryRun
@@ -1539,9 +1569,8 @@ export async function runPreLockReminderEmails(
         })
       }
 
-      attempted += 1
-
       if (options.dryRun) {
+        attempted += 1
         continue
       }
 
@@ -1557,6 +1586,8 @@ export async function runPreLockReminderEmails(
         skipped += 1
         continue
       }
+
+      attempted += 1
 
       const subject = `Prediction reminder: ${race.race_name}`
       const delivered = await sendClaimedEmail({
@@ -1708,11 +1739,13 @@ export async function runScoreRecapEmails(
         continue
       }
 
-      const canClaim = await canClaimNotificationEvent(supabase, {
-        userId: preference.user_id,
-        raceId: race.id,
-        eventKey,
-      })
+      const canClaim = options.dryRun
+        ? await canClaimNotificationEvent(supabase, {
+            userId: preference.user_id,
+            raceId: race.id,
+            eventKey,
+          })
+        : true
 
       const blockingLiveEvent =
         isLimitedTestSend || options.dryRun
@@ -1742,9 +1775,8 @@ export async function runScoreRecapEmails(
         })
       }
 
-      attempted += 1
-
       if (options.dryRun) {
+        attempted += 1
         continue
       }
 
@@ -1760,6 +1792,8 @@ export async function runScoreRecapEmails(
         skipped += 1
         continue
       }
+
+      attempted += 1
 
       const movement = getScoreMovement({
         userId: score.user_id,

@@ -63,6 +63,18 @@ function isPublicCacheableRequest(request: Request) {
   if (request.method !== 'GET') return false
   if (request.headers.has('cookie') || request.headers.has('authorization')) return false
 
+  // Next's RSC and prefetch requests are different response variants from a
+  // document request. Never store one in the same URL-keyed edge cache entry.
+  if (
+    request.headers.has('RSC') ||
+    request.headers.has('Next-Router-Prefetch') ||
+    request.headers.has('Next-Url') ||
+    request.headers.get('purpose') === 'prefetch' ||
+    (request.headers.get('accept') || '').includes('text/x-component')
+  ) {
+    return false
+  }
+
   const url = new URL(request.url)
   return publicCacheablePaths.has(url.pathname) || isPublicRacePage(url.pathname)
 }

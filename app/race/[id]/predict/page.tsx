@@ -1,11 +1,10 @@
-import { createClient } from '@/utils/supabase/server'
 import { redirect } from 'next/navigation'
 import { AlertCircle, ClipboardList, Flag, Lock, Sparkles, TimerReset, Trophy, Users } from 'lucide-react'
 import { format, formatDistanceToNowStrict } from 'date-fns'
 import PredictionForm from './prediction-form'
 import { getRoundLabel } from '@/utils/race-copy'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
-import { getUserTenantContext } from '@/utils/tenant'
+import { getRequestUserContext } from '@/utils/request-context'
 import { TenantAssignmentRequired } from '@/components/ui/tenant-assignment-required'
 import { getCompetitionRank, sortCompetitionStandings } from '@/utils/competition'
 import { RaceStatusPill } from '@/components/ui/race-status-pill'
@@ -25,6 +24,11 @@ type Driver = {
   code: string
   full_name: string
   emoji?: string | null
+  active?: boolean | null
+  constructors?:
+    | { name?: string | null; short_code?: string | null }
+    | Array<{ name?: string | null; short_code?: string | null }>
+    | null
 }
 
 type BonusOption = {
@@ -129,16 +133,11 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
   const params = await props.params
   const { id } = params
 
-  const supabase = await createClient()
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
+  const { supabase, user, tenantContext } = await getRequestUserContext()
 
   if (!user) {
     redirect('/login')
   }
-
-  const tenantContext = await getUserTenantContext(supabase, user.id)
 
   if (!tenantContext.tenantId) {
     return <TenantAssignmentRequired isAdmin={tenantContext.role === 'admin'} />
@@ -146,7 +145,7 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
 
   const { data: race, error: raceError } = await supabase
     .from('races')
-    .select('*, circuits(name, country, emoji)')
+    .select('id, season, round, race_name, status, race_start_at, prediction_lock_at, circuits(name, country, emoji)')
     .eq('id', id)
     .single()
 
@@ -154,25 +153,20 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
     return <div className="p-12 text-center text-slate-400">Race not found.</div>
   }
 
+  const circuit = Array.isArray(race.circuits) ? race.circuits[0] : race.circuits
   const effectiveStatus = getEffectiveRaceStatus(race)
   const isLocked = effectiveStatus !== 'upcoming'
   const shouldShowReadOnlyState = isLocked
   const groupRaceExperience = await getPrivateGroupRaceExperience(tenantContext.tenantId, race.id)
 
-  const { data: allDrivers } = await supabase
+  const { data: driverRows } = await supabase
     .from('drivers')
-    .select('id, code, full_name, emoji')
-    .order('full_name')
-
-  const { data: activeDrivers } = await supabase
-    .from('drivers')
-    .select('*, constructors(name, short_code)')
-    .eq('active', true)
+    .select('id, code, full_name, emoji, active, constructors(name, short_code)')
     .order('full_name')
 
   const { data: bonusQuestions } = await supabase
     .from('bonus_questions')
-    .select('*, bonus_options(*)')
+    .select('id, question_text, points, display_order, bonus_options(id, label, display_order)')
     .eq('race_id', id)
     .eq('tenant_id', tenantContext.tenantId)
     .eq('is_active', true)
@@ -180,7 +174,7 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
 
   const { data: prediction } = await supabase
     .from('predictions')
-    .select('*')
+    .select('id, p1_driver_id, p2_driver_id, p3_driver_id')
     .eq('race_id', id)
     .eq('user_id', user.id)
     .single()
@@ -196,7 +190,7 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
 
   const { data: raceResult } = await supabase
     .from('race_results')
-    .select('*')
+    .select('p1_driver_id, p2_driver_id, p3_driver_id')
     .eq('race_id', id)
     .single()
 
@@ -207,12 +201,13 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
 
   const { data: userScore } = await supabase
     .from('user_race_scores')
-    .select('*')
+    .select('total_points, podium_points, bonus_points, exact_hits')
     .eq('race_id', id)
     .eq('user_id', user.id)
     .single()
 
-  const drivers = (allDrivers || []) as Driver[]
+  const drivers = (driverRows || []) as Driver[]
+  const activeDrivers = drivers.filter((driver) => driver.active)
   const typedBonusQuestions = (bonusQuestions || []) as BonusQuestion[]
 
   const bonusAnswerMap = new Map<string, string>()
@@ -363,9 +358,9 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
           <SectionHeader title={race.race_name} description={compactNote} />
 
           <p className="flex flex-wrap items-center gap-2 text-sm text-slate-400 md:text-base">
-            <span className="text-lg">{race.circuits?.emoji}</span>
+            <span className="text-lg">{circuit?.emoji}</span>
             <span>
-              {race.circuits?.name}, {race.circuits?.country}
+              {circuit?.name}, {circuit?.country}
             </span>
           </p>
 

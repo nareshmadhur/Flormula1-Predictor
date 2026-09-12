@@ -8,6 +8,22 @@
     "nodejs_compat",
     "global_fetch_strictly_public"
   ],
+  "routes": [
+    {
+      "pattern": "flormula1.nl",
+      "zone_name": "flormula1.nl",
+      "custom_domain": true
+    },
+    {
+      "pattern": "www.flormula1.nl",
+      "zone_name": "flormula1.nl",
+      "custom_domain": true
+    }
+  ],
+  "vars": {
+    "ENABLE_LIFECYCLE_CRON": "true",
+    "SUPABASE_TRAFFIC_PAUSED": "false"
+  },
   "assets": {
     "directory": ".open-next/assets",
     "binding": "ASSETS"
@@ -15,7 +31,11 @@
   "services": [
     {
       "binding": "WORKER_SELF_REFERENCE",
-      "service": "flormula1-predictor"
+      "service": "flormula1-predictor",
+      "environment": "production"
     }
-  ]
+  ],
+  "triggers": {
+    "crons": ["0 6 * * *", "0 7 * * *"]
+  }
 }
