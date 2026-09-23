@@ -29,6 +29,22 @@ type RaceEditWindowRow = {
 
 const DRAFT_QUESTION_ID = '00000000-0000-0000-0000-000000000000'
 
+type ExistingBonusOption = {
+  id: string
+  option_type?: 'custom_text' | 'driver' | 'constructor' | null
+  driver_id?: string | null
+  constructor_id?: string | null
+  label?: string | null
+}
+
+type ExistingBonusQuestion = {
+  id: string
+  question_text: string
+  points: number
+  answer_type?: BonusAnswerType | null
+  bonus_options?: ExistingBonusOption[] | null
+}
+
 function revalidateTenantBonusPaths(raceId: string) {
   revalidatePath('/admin/tenant')
   revalidatePath('/leaderboard')
@@ -177,6 +193,8 @@ export async function updateTenantBonusQuestion(formData: FormData) {
   const points = Number.parseInt(String(formData.get('points') || '1'), 10)
   const optionLabels = Array.from(formData.getAll('options')).map((value) => String(value).trim())
   const optionIds = Array.from(formData.getAll('option_ids')).map((value) => String(value).trim())
+  const selectedDriverIds = getSelectedDriverOptionIds(formData)
+  const selectedConstructorIds = getSelectedConstructorOptionIds(formData)
 
   if (!questionId || !raceId || !questionText) {
     throw new Error('Question, race, and text are required.')
@@ -186,11 +204,15 @@ export async function updateTenantBonusQuestion(formData: FormData) {
     throw new Error('Bonus points must be between 1 and 25.')
   }
 
+  if (optionLabels.length !== optionIds.length) {
+    throw new Error('Bonus option inputs are out of sync. Reload the page and try again.')
+  }
+
   await assertQuestionEditWindow(supabase, raceId, isPlatformOverride)
 
-  const { data: existingQuestion, error: questionLookupError } = await supabase
+  const { data: existingQuestionResult, error: questionLookupError } = await supabase
     .from('bonus_questions')
-    .select('id, answer_type')
+    .select('id, question_text, points, answer_type, bonus_options(id, option_type, driver_id, constructor_id, label)')
     .eq('id', questionId)
     .eq('race_id', raceId)
     .eq('tenant_id', tenantId)
@@ -200,23 +222,28 @@ export async function updateTenantBonusQuestion(formData: FormData) {
     throw new Error(questionLookupError.message || 'Could not load the group bonus question.')
   }
 
-  if (!existingQuestion) {
+  if (!existingQuestionResult) {
     throw new Error('Group bonus question not found.')
   }
 
+  const existingQuestion = existingQuestionResult as unknown as ExistingBonusQuestion
   const answerType = (existingQuestion.answer_type || 'choice') as BonusAnswerType
-  if (answerType === 'choice' && optionLabels.filter(Boolean).length < 2) {
+  const optionCount = optionLabels.filter(Boolean).length + selectedDriverIds.length + selectedConstructorIds.length
+
+  if (answerType === 'choice' && optionCount < 2) {
     throw new Error('Keep at least two options on a bonus question.')
   }
 
-  const { error: questionError } = await supabase
-    .from('bonus_questions')
-    .update({ question_text: questionText, points })
-    .eq('id', questionId)
-    .eq('tenant_id', tenantId)
+  if (existingQuestion.question_text !== questionText || existingQuestion.points !== points) {
+    const { error: questionError } = await supabase
+      .from('bonus_questions')
+      .update({ question_text: questionText, points })
+      .eq('id', questionId)
+      .eq('tenant_id', tenantId)
 
-  if (questionError) {
-    throw new Error(questionError.message || 'Failed to update group bonus question.')
+    if (questionError) {
+      throw new Error(questionError.message || 'Failed to update group bonus question.')
+    }
   }
 
   if (answerType === 'numeric') {
@@ -224,35 +251,121 @@ export async function updateTenantBonusQuestion(formData: FormData) {
     return
   }
 
+  const existingOptions = existingQuestion.bonus_options || []
+  const existingOptionById = new Map(existingOptions.map((option) => [option.id, option]))
+  const submittedCustomOptions = new Map<string, string>()
+  const newCustomLabels: string[] = []
+
   for (let index = 0; index < optionLabels.length; index += 1) {
     const label = optionLabels[index]
     const optionId = optionIds[index]
 
-    if (label && optionId) {
-      const { error } = await supabase
-        .from('bonus_options')
-        .update({ label })
-        .eq('id', optionId)
-        .eq('bonus_question_id', questionId)
-
-      if (error) throw new Error(error.message || 'Failed to update group bonus option.')
-    } else if (label && !optionId) {
-      const { error } = await supabase.from('bonus_options').insert({
-        bonus_question_id: questionId,
-        option_type: 'custom_text',
-        label,
-      })
-
-      if (error) throw new Error(error.message || 'Failed to add group bonus option.')
-    } else if (!label && optionId) {
-      const { error } = await supabase
-        .from('bonus_options')
-        .delete()
-        .eq('id', optionId)
-        .eq('bonus_question_id', questionId)
-
-      if (error) throw new Error(error.message || 'Failed to delete group bonus option.')
+    if (!optionId) {
+      if (label) newCustomLabels.push(label)
+      continue
     }
+
+    const existingOption = existingOptionById.get(optionId)
+    if (!existingOption) {
+      throw new Error('One or more bonus options do not belong to this question.')
+    }
+
+    if (existingOption.option_type && existingOption.option_type !== 'custom_text') {
+      throw new Error('Reference options must be changed through their selector.')
+    }
+
+    submittedCustomOptions.set(optionId, label)
+  }
+
+  const referenceOptionRows = (await buildBonusOptionInsertRows(supabase, questionId, formData)).filter(
+    (option) => option.option_type !== 'custom_text'
+  )
+  const selectedReferenceKeys = new Set(
+    referenceOptionRows.map((option) =>
+      option.option_type === 'driver' ? `driver:${option.driver_id}` : `constructor:${option.constructor_id}`
+    )
+  )
+  const optionIdsToDelete: string[] = []
+  const customOptionsToUpdate: Array<{
+    id: string
+    bonus_question_id: string
+    option_type: 'custom_text'
+    label: string
+  }> = []
+
+  for (const option of existingOptions) {
+    if (!option.option_type || option.option_type === 'custom_text') {
+      if (!submittedCustomOptions.has(option.id)) continue
+
+      const label = submittedCustomOptions.get(option.id) || ''
+      if (!label) {
+        optionIdsToDelete.push(option.id)
+      } else if (label !== (option.label || '')) {
+        customOptionsToUpdate.push({
+          id: option.id,
+          bonus_question_id: questionId,
+          option_type: 'custom_text',
+          label,
+        })
+      }
+
+      continue
+    }
+
+    const referenceKey =
+      option.option_type === 'driver'
+        ? `driver:${option.driver_id}`
+        : `constructor:${option.constructor_id}`
+
+    if (!selectedReferenceKeys.has(referenceKey)) {
+      optionIdsToDelete.push(option.id)
+    }
+  }
+
+  const newReferenceOptionRows = referenceOptionRows.filter((option) => {
+    const alreadyExists = existingOptions.some((existingOption) => {
+      if (existingOption.option_type !== option.option_type) return false
+      return option.option_type === 'driver'
+        ? existingOption.driver_id === option.driver_id
+        : existingOption.constructor_id === option.constructor_id
+    })
+
+    return !alreadyExists
+  })
+
+  if (newReferenceOptionRows.length > 0) {
+    const { error } = await supabase.from('bonus_options').insert(newReferenceOptionRows)
+    if (error) throw new Error(error.message || 'Failed to add group bonus option.')
+  }
+
+  if (customOptionsToUpdate.length > 0) {
+    const { error } = await supabase
+      .from('bonus_options')
+      .upsert(customOptionsToUpdate, { onConflict: 'id' })
+
+    if (error) throw new Error(error.message || 'Failed to update group bonus option.')
+  }
+
+  if (optionIdsToDelete.length > 0) {
+    const { error } = await supabase
+      .from('bonus_options')
+      .delete()
+      .in('id', optionIdsToDelete)
+      .eq('bonus_question_id', questionId)
+
+    if (error) throw new Error(error.message || 'Failed to delete group bonus option.')
+  }
+
+  if (newCustomLabels.length > 0) {
+    const { error } = await supabase.from('bonus_options').insert(
+      newCustomLabels.map((label) => ({
+        bonus_question_id: questionId,
+        option_type: 'custom_text' as const,
+        label,
+      }))
+    )
+
+    if (error) throw new Error(error.message || 'Failed to add group bonus option.')
   }
 
   await recalculateAndRevalidateRaceIfReady(supabase, raceId)

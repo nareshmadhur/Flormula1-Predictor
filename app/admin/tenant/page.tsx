@@ -330,7 +330,7 @@ export default async function TenantAdminPage() {
     seasonRaceIds.length > 0
       ? await supabase
           .from('bonus_questions')
-          .select('id, race_id, question_text, points, answer_type, display_order, bonus_options(id, label)')
+          .select('id, race_id, question_text, points, answer_type, display_order, bonus_options(id, label, option_type, driver_id, constructor_id, display_order)')
           .in('race_id', seasonRaceIds)
           .eq('tenant_id', access.tenantId)
           .eq('is_active', true)

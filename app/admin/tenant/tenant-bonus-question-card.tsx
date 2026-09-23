@@ -8,10 +8,18 @@ import {
   updateTenantBonusQuestion,
 } from '@/app/actions/tenant-bonus'
 import { type BonusAnswerType } from '@/utils/bonus-answers'
+import {
+  ReferenceOptionPicker,
+  type ReferenceOptionPickerOption,
+} from './reference-option-picker'
 
 type BonusOption = {
   id: string
   label?: string | null
+  option_type?: 'custom_text' | 'driver' | 'constructor' | null
+  driver_id?: string | null
+  constructor_id?: string | null
+  display_order?: number | null
 }
 
 type BonusQuestion = {
@@ -27,6 +35,8 @@ type TenantBonusQuestionCardProps = {
   raceId: string
   canEdit: boolean
   scopeTenantId?: string
+  driverOptions?: ReferenceOptionPickerOption[]
+  constructorOptions?: ReferenceOptionPickerOption[]
 }
 
 export function TenantBonusQuestionCard({
@@ -34,11 +44,62 @@ export function TenantBonusQuestionCard({
   raceId,
   canEdit,
   scopeTenantId,
+  driverOptions = [],
+  constructorOptions = [],
 }: TenantBonusQuestionCardProps) {
   const router = useRouter()
   const [isEditing, setIsEditing] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [feedback, setFeedback] = useState<string | null>(null)
+  const customOptions = (question.bonus_options || [])
+    .filter((option) => !option.option_type || option.option_type === 'custom_text')
+    .sort((left, right) => (left.display_order || 0) - (right.display_order || 0))
+  const selectedDriverIds = Array.from(
+    new Set(
+      (question.bonus_options || [])
+        .filter((option) => option.option_type === 'driver' && option.driver_id)
+        .map((option) => option.driver_id as string)
+    )
+  )
+  const selectedConstructorIds = Array.from(
+    new Set(
+      (question.bonus_options || [])
+        .filter((option) => option.option_type === 'constructor' && option.constructor_id)
+        .map((option) => option.constructor_id as string)
+    )
+  )
+
+  function includeExistingReferenceOptions(
+    options: ReferenceOptionPickerOption[],
+    selectedIds: string[],
+    type: 'driver' | 'constructor'
+  ) {
+    const knownIds = new Set(options.map((option) => option.id))
+    const existingOptions: ReferenceOptionPickerOption[] = []
+
+    for (const option of question.bonus_options || []) {
+      if (option.option_type !== type) continue
+
+      const id = type === 'driver' ? option.driver_id : option.constructor_id
+      if (!id || knownIds.has(id) || !selectedIds.includes(id)) continue
+
+      existingOptions.push({
+        id,
+        primary: option.label || 'Existing option',
+        secondary: 'Existing question option',
+        searchText: option.label || '',
+      })
+    }
+
+    return [...options, ...existingOptions]
+  }
+
+  const editDriverOptions = includeExistingReferenceOptions(driverOptions, selectedDriverIds, 'driver')
+  const editConstructorOptions = includeExistingReferenceOptions(
+    constructorOptions,
+    selectedConstructorIds,
+    'constructor'
+  )
 
   const handleDelete = async () => {
     if (isSubmitting) return
@@ -111,23 +172,65 @@ export function TenantBonusQuestionCard({
               This question accepts a non-negative number. Its answer type is fixed once answers are saved.
             </p>
           ) : (
-            <div className="space-y-2">
-              <p className="text-xs font-bold uppercase text-slate-500">Options</p>
-              {[0, 1, 2, 3].map((index) => {
-                const option = question.bonus_options?.[index]
-
-                return (
-                  <div key={index} className="flex gap-2">
-                    <input type="hidden" name="option_ids" value={option?.id || ''} />
+            <div className="space-y-4">
+              <div className="space-y-2">
+                <p className="text-xs font-bold uppercase text-slate-500">Custom options</p>
+                {customOptions.map((option, index) => (
+                  <div key={option.id} className="flex gap-2">
+                    <input type="hidden" name="option_ids" value={option.id} />
                     <input
                       name="options"
-                      defaultValue={option?.label || ''}
-                      placeholder={`Option ${String.fromCharCode(65 + index)}`}
+                      defaultValue={option.label || ''}
+                      placeholder={`Custom option ${String.fromCharCode(65 + index)}`}
                       className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-sm"
                     />
                   </div>
-                )
-              })}
+                ))}
+                {[0, 1].map((index) => (
+                  <div key={`new-${index}`} className="flex gap-2">
+                    <input type="hidden" name="option_ids" value="" />
+                    <input
+                      name="options"
+                      placeholder={`Add custom option ${String.fromCharCode(65 + customOptions.length + index)}`}
+                      className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-sm"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              {editDriverOptions.length > 0 && (
+                <details
+                  open={selectedDriverIds.length > 0}
+                  className="rounded-xl border border-white/10 bg-black/20 p-3"
+                >
+                  <summary className="flex cursor-pointer list-none items-center text-xs font-bold uppercase tracking-[0.18em] text-slate-400 [&::-webkit-details-marker]:hidden">
+                    Driver options
+                  </summary>
+                  <ReferenceOptionPicker
+                    name="driver_options"
+                    options={editDriverOptions}
+                    initialSelectedIds={selectedDriverIds}
+                    searchPlaceholder="Search drivers"
+                  />
+                </details>
+              )}
+
+              {editConstructorOptions.length > 0 && (
+                <details
+                  open={selectedConstructorIds.length > 0}
+                  className="rounded-xl border border-white/10 bg-black/20 p-3"
+                >
+                  <summary className="flex cursor-pointer list-none items-center text-xs font-bold uppercase tracking-[0.18em] text-slate-400 [&::-webkit-details-marker]:hidden">
+                    Constructor options
+                  </summary>
+                  <ReferenceOptionPicker
+                    name="constructor_options"
+                    options={editConstructorOptions}
+                    initialSelectedIds={selectedConstructorIds}
+                    searchPlaceholder="Search constructors"
+                  />
+                </details>
+              )}
             </div>
           )}
 

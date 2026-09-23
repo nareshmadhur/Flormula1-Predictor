@@ -166,7 +166,7 @@ export default async function TenantRaceAdminPage(props: { params: Promise<{ id:
     supabase.from('race_results').select('p1_driver_id, p2_driver_id, p3_driver_id, entered_at').eq('race_id', id).maybeSingle(),
     supabase
       .from('bonus_questions')
-      .select('id, race_id, question_text, points, answer_type, display_order, bonus_options(id, label)')
+      .select('id, race_id, question_text, points, answer_type, display_order, bonus_options(id, label, option_type, driver_id, constructor_id, display_order)')
       .eq('race_id', id)
       .eq('tenant_id', access.tenantId)
       .eq('is_active', true)

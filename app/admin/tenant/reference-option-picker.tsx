@@ -14,15 +14,17 @@ type ReferenceOptionPickerProps = {
   name: string
   options: ReferenceOptionPickerOption[]
   searchPlaceholder: string
+  initialSelectedIds?: string[]
 }
 
 export function ReferenceOptionPicker({
   name,
   options,
   searchPlaceholder,
+  initialSelectedIds = [],
 }: ReferenceOptionPickerProps) {
   const [query, setQuery] = useState('')
-  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [selectedIds, setSelectedIds] = useState<string[]>(() => Array.from(new Set(initialSelectedIds)))
 
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds])
   const filteredOptions = useMemo(() => {

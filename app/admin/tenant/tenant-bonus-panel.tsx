@@ -24,6 +24,10 @@ type TenantBonusRace = {
 type TenantBonusOption = {
   id: string
   label?: string | null
+  option_type?: 'custom_text' | 'driver' | 'constructor' | null
+  driver_id?: string | null
+  constructor_id?: string | null
+  display_order?: number | null
 }
 
 export type TenantBonusDriverOption = {
@@ -234,6 +238,8 @@ export function TenantBonusPanel({
                         raceId={race.id}
                         canEdit={canEditQuestions}
                         scopeTenantId={scopeTenantId}
+                        driverOptions={driverPickerOptions}
+                        constructorOptions={constructorPickerOptions}
                       />
                     ))}
                   </div>
