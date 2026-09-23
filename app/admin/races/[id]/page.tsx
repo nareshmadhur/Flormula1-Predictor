@@ -287,7 +287,9 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
   const { data: tenants } = await supabase.from('tenants').select('id, name, slug, is_test').order('name')
   const { data: tenantBonusQuestions } = await supabase
     .from('bonus_questions')
-    .select('id, race_id, tenant_id, question_text, points, answer_type, display_order, bonus_options(id, label)')
+    .select(
+      'id, race_id, tenant_id, question_text, points, answer_type, display_order, bonus_options(id, label, option_type, driver_id, constructor_id, display_order)'
+    )
     .eq('race_id', id)
     .eq('is_active', true)
     .order('display_order', { ascending: true })
