@@ -234,6 +234,46 @@ export async function updateTenantBonusQuestion(formData: FormData) {
     throw new Error('Keep at least two options on a bonus question.')
   }
 
+  const hasQuestionMetadataChange =
+    existingQuestion.question_text !== questionText || existingQuestion.points !== points
+
+  if (hasQuestionMetadataChange) {
+    const [predictionAnswerRefs, raceAnswerRefs, scoreRefs] = await Promise.all([
+      supabase
+        .from('prediction_bonus_answers')
+        .select('id')
+        .eq('bonus_question_id', questionId)
+        .limit(1),
+      supabase
+        .from('race_bonus_answers')
+        .select('id')
+        .eq('bonus_question_id', questionId)
+        .limit(1),
+      supabase
+        .from('user_race_scores')
+        .select('user_id')
+        .eq('race_id', raceId)
+        .limit(1),
+    ])
+
+    const metadataLookupError = predictionAnswerRefs.error || raceAnswerRefs.error || scoreRefs.error
+
+    if (metadataLookupError) {
+      throw new Error(metadataLookupError.message || 'Could not verify whether this question can be changed.')
+    }
+
+    if (
+      (predictionAnswerRefs.data || []).length > 0 ||
+      (raceAnswerRefs.data || []).length > 0 ||
+      (scoreRefs.data || []).length > 0
+    ) {
+      return {
+        ok: false as const,
+        error: 'This question already has saved answers or scores, so its title and points are locked.',
+      }
+    }
+  }
+
   if (existingQuestion.question_text !== questionText || existingQuestion.points !== points) {
     const { error: questionError } = await supabase
       .from('bonus_questions')
