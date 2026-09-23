@@ -134,7 +134,13 @@ export function TenantBonusQuestionCard({
             setFeedback(null)
 
             try {
-              await updateTenantBonusQuestion(formData)
+              const result = await updateTenantBonusQuestion(formData)
+
+              if (result?.ok === false) {
+                setFeedback(result.error)
+                return
+              }
+
               setIsEditing(false)
               router.refresh()
             } catch (error) {

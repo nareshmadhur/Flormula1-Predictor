@@ -347,6 +347,57 @@ export async function updateTenantBonusQuestion(formData: FormData) {
   }
 
   if (optionIdsToDelete.length > 0) {
+    const [predictionAnswerRefs, raceAnswerRefs, scoreRefs] = await Promise.all([
+      supabase
+        .from('prediction_bonus_answers')
+        .select('bonus_option_id')
+        .in('bonus_option_id', optionIdsToDelete),
+      supabase
+        .from('race_bonus_answers')
+        .select('correct_bonus_option_id')
+        .in('correct_bonus_option_id', optionIdsToDelete),
+      supabase
+        .from('user_race_scores')
+        .select('user_id')
+        .eq('race_id', raceId)
+        .limit(1),
+    ])
+
+    const referenceLookupError =
+      predictionAnswerRefs.error || raceAnswerRefs.error || scoreRefs.error
+
+    if (referenceLookupError) {
+      throw new Error(referenceLookupError.message || 'Could not verify whether bonus options can be removed.')
+    }
+
+    if ((scoreRefs.data || []).length > 0) {
+      return {
+        ok: false as const,
+        error: 'This race already has published scores, so its bonus options cannot be removed.',
+      }
+    }
+
+    const protectedOptionIds = new Set([
+      ...((predictionAnswerRefs.data || []) as Array<{ bonus_option_id?: string | null }>)
+        .map((answer) => answer.bonus_option_id)
+        .filter((optionId): optionId is string => Boolean(optionId)),
+      ...((raceAnswerRefs.data || []) as Array<{ correct_bonus_option_id?: string | null }>)
+        .map((answer) => answer.correct_bonus_option_id)
+        .filter((optionId): optionId is string => Boolean(optionId)),
+    ])
+
+    if (protectedOptionIds.size > 0) {
+      const protectedLabels = existingOptions
+        .filter((option) => protectedOptionIds.has(option.id))
+        .map((option) => option.label || 'an existing option')
+
+      return {
+        ok: false as const,
+        error:
+          `Cannot remove ${protectedLabels.length === 1 ? protectedLabels[0] : `${protectedLabels.length} selected options`} because existing answers still use them. Keep those options, or clear the related answers before changing this question.`,
+      }
+    }
+
     const { error } = await supabase
       .from('bonus_options')
       .delete()
@@ -369,6 +420,7 @@ export async function updateTenantBonusQuestion(formData: FormData) {
   }
 
   await recalculateAndRevalidateRaceIfReady(supabase, raceId)
+  return { ok: true as const }
 }
 
 export async function deleteTenantBonusQuestion(formData: FormData) {
