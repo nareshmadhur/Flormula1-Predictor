@@ -118,7 +118,13 @@ export default async function PublicRacePage({ params }: PageProps) {
   const { race, drivers, bonusQuestions, raceResult, raceBonusAnswers, topScorers, previousRace, nextRace } = raceData
   const effectiveStatus = getEffectiveRaceStatus(race)
   const officialBonusAnswerMap = new Map(
-    raceBonusAnswers.map((answer) => [answer.bonus_question_id, answer.correct_bonus_option_id])
+    raceBonusAnswers.map((answer) => [
+      answer.bonus_question_id,
+      {
+        optionId: answer.correct_bonus_option_id,
+        numericValue: answer.numeric_value,
+      },
+    ])
   )
   const winningScore = topScorers[0]?.total_points ?? null
 
@@ -396,7 +402,7 @@ export default async function PublicRacePage({ params }: PageProps) {
 
         {bonusQuestions.length === 0 ? (
           <div className="mt-4 rounded-2xl border border-white/5 bg-black/30 p-5 text-slate-400">
-            Group bonus questions are private to each group. Sign in to view your group MCQs on the prediction page.
+            Group bonus questions are private to each group. Sign in to view your group questions on the prediction page.
           </div>
         ) : (
           <div className="mt-4 space-y-3">

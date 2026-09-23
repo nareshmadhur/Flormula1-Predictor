@@ -1,7 +1,9 @@
 import { cache } from 'react'
 import { createPublicClient } from '@/utils/supabase/public'
+import { getRequestUserContext } from '@/utils/request-context'
 import { RaceStatus } from '@/utils/race-status'
 import { isTestModeProfile } from '@/utils/test-mode'
+import { getBonusAnswerDisplay, type BonusAnswerType, type BonusAnswerValue } from '@/utils/bonus-answers'
 
 export type PublicRaceDriver = {
   id: string
@@ -19,6 +21,7 @@ export type PublicRaceBonusQuestion = {
   id: string
   question_text: string
   points: number
+  answer_type?: BonusAnswerType | null
   bonus_options?: PublicRaceBonusOption[]
 }
 
@@ -45,7 +48,8 @@ type PublicRaceResult = {
 
 type PublicRaceBonusAnswer = {
   bonus_question_id: string
-  correct_bonus_option_id: string
+  correct_bonus_option_id?: string | null
+  numeric_value?: string | number | null
 }
 
 type PublicRaceTopScorerProfile = {
@@ -88,35 +92,98 @@ function sortRaceTopScorers(scores: PublicRaceTopScorer[]) {
   })
 }
 
+function isMissingColumnError(error: { message?: string } | null | undefined, column: string) {
+  return Boolean(error?.message?.includes(column) && error.message.includes('does not exist'))
+}
+
 export const getPublicRacePageData = cache(async (raceId: string) => {
   const supabase = createPublicClient()
+  const { supabase: requestSupabase, tenantContext } = await getRequestUserContext()
 
-  const [raceResponse, driversResponse, bonusQuestionsResponse, raceResultResponse, raceBonusAnswersResponse, raceScoresResponse] =
-    await Promise.all([
-      supabase
-        .from('races')
-        .select('id, season, round, race_name, status, race_start_at, prediction_lock_at, circuits(name, country, emoji)')
-        .eq('id', raceId)
-        .maybeSingle(),
-      supabase
-        .from('drivers')
-        .select('id, code, full_name, emoji')
-        .order('full_name'),
-      Promise.resolve({ data: [] as PublicRaceBonusQuestion[] }),
-      supabase
-        .from('race_results')
-        .select('p1_driver_id, p2_driver_id, p3_driver_id')
-        .eq('race_id', raceId)
-        .maybeSingle(),
-      Promise.resolve({ data: [] as PublicRaceBonusAnswer[] }),
-      supabase
-        .from('user_race_scores')
-        .select('user_id, total_points, podium_points, bonus_points, exact_hits, profiles(display_name, email, is_test, tenants(is_test))')
-        .eq('race_id', raceId),
-    ])
+  const [raceResponse, driversResponse, raceResultResponse, raceScoresResponse] = await Promise.all([
+    supabase
+      .from('races')
+      .select('id, season, round, race_name, status, race_start_at, prediction_lock_at, circuits(name, country, emoji)')
+      .eq('id', raceId)
+      .maybeSingle(),
+    supabase
+      .from('drivers')
+      .select('id, code, full_name, emoji')
+      .order('full_name'),
+    supabase
+      .from('race_results')
+      .select('p1_driver_id, p2_driver_id, p3_driver_id')
+      .eq('race_id', raceId)
+      .maybeSingle(),
+    supabase
+      .from('user_race_scores')
+      .select('user_id, total_points, podium_points, bonus_points, exact_hits, profiles(display_name, email, is_test, tenants(is_test))')
+      .eq('race_id', raceId),
+  ])
 
   if (!raceResponse.data) {
     return null
+  }
+
+  let bonusQuestionsResponse = { data: [] as PublicRaceBonusQuestion[] }
+  let raceBonusAnswersResponse = { data: [] as PublicRaceBonusAnswer[] }
+
+  // Bonus questions are group-private. The public client intentionally cannot
+  // see them, so use the request session only when it identifies a group.
+  if (tenantContext.tenantId) {
+    const scopedQuestions = await requestSupabase
+      .from('bonus_questions')
+      .select('id, question_text, points, answer_type, bonus_options(id, label)')
+      .eq('race_id', raceId)
+      .eq('tenant_id', tenantContext.tenantId)
+      .eq('is_active', true)
+      .order('display_order', { ascending: true })
+
+    if (isMissingColumnError(scopedQuestions.error, 'answer_type')) {
+      const legacyQuestions = await requestSupabase
+        .from('bonus_questions')
+        .select('id, question_text, points, bonus_options(id, label)')
+        .eq('race_id', raceId)
+        .eq('tenant_id', tenantContext.tenantId)
+        .eq('is_active', true)
+        .order('display_order', { ascending: true })
+
+      bonusQuestionsResponse = {
+        data: ((legacyQuestions.data || []) as Array<Omit<PublicRaceBonusQuestion, 'answer_type'>>).map((question) => ({
+          ...question,
+          answer_type: 'choice',
+        })),
+      }
+    } else {
+      bonusQuestionsResponse = {
+        data: (scopedQuestions.data || []) as PublicRaceBonusQuestion[],
+      }
+    }
+
+    const questionIds = bonusQuestionsResponse.data.map((question) => question.id)
+    if (questionIds.length > 0) {
+      const scopedAnswers = await requestSupabase
+        .from('race_bonus_answers')
+        .select('bonus_question_id, correct_bonus_option_id, numeric_value')
+        .eq('race_id', raceId)
+        .in('bonus_question_id', questionIds)
+
+      if (isMissingColumnError(scopedAnswers.error, 'numeric_value')) {
+        const legacyAnswers = await requestSupabase
+          .from('race_bonus_answers')
+          .select('bonus_question_id, correct_bonus_option_id')
+          .eq('race_id', raceId)
+          .in('bonus_question_id', questionIds)
+
+        raceBonusAnswersResponse = {
+          data: (legacyAnswers.data || []) as PublicRaceBonusAnswer[],
+        }
+      } else {
+        raceBonusAnswersResponse = {
+          data: (scopedAnswers.data || []) as PublicRaceBonusAnswer[],
+        }
+      }
+    }
   }
 
   const legacyRaceScoresResponse = raceScoresResponse.error?.message?.includes('is_test')
@@ -170,10 +237,7 @@ export function getDriverLabel(drivers: PublicRaceDriver[], driverId?: string | 
 
 export function getBonusAnswerLabel(
   question: PublicRaceBonusQuestion,
-  optionId?: string | null
+  answer?: BonusAnswerValue
 ) {
-  if (!optionId) return 'Official answer pending'
-
-  const option = question.bonus_options?.find((entry) => entry.id === optionId)
-  return option?.label || 'Unknown option'
+  return getBonusAnswerDisplay(question, answer || {}, 'Official answer pending')
 }

@@ -5,7 +5,8 @@ import { createClient } from '@/utils/supabase/server'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { recalculateRaceScoresIfResultExists } from '@/utils/race-scoring'
-import { saveTenantRaceBonusAnswers } from '@/utils/result-pipeline'
+import { saveTenantRaceBonusAnswers, type BonusAnswer } from '@/utils/result-pipeline'
+import { normalizeNumericBonusValue, type BonusAnswerType } from '@/utils/bonus-answers'
 import {
   buildBonusOptionInsertRows,
   getCleanBonusOptionLabels,
@@ -33,6 +34,7 @@ function revalidateTenantBonusPaths(raceId: string) {
   revalidatePath('/leaderboard')
   revalidatePath('/predictions')
   revalidatePath('/me/history')
+  revalidatePath(`/race/${raceId}`)
   revalidatePath(`/race/${raceId}/predict`)
   revalidatePath(`/admin/tenant/races/${raceId}`)
   revalidatePath(`/admin/races/${raceId}`)
@@ -107,6 +109,7 @@ export async function addTenantBonusQuestion(formData: FormData) {
   const raceId = String(formData.get('race_id') || '').trim()
   const questionText = String(formData.get('question_text') || '').trim()
   const points = Number.parseInt(String(formData.get('points') || '1'), 10)
+  const answerType = String(formData.get('answer_type') || 'choice') as BonusAnswerType
   const optionCount =
     getCleanBonusOptionLabels(formData).length +
     getSelectedDriverOptionIds(formData).length +
@@ -120,8 +123,16 @@ export async function addTenantBonusQuestion(formData: FormData) {
     throw new Error('Bonus points must be between 1 and 25.')
   }
 
-  if (optionCount < 2) {
+  if (answerType !== 'choice' && answerType !== 'numeric') {
+    throw new Error('Choose whether the bonus question uses options or a number.')
+  }
+
+  if (answerType === 'choice' && optionCount < 2) {
     throw new Error('Add at least two options for a bonus question.')
+  }
+
+  if (answerType === 'numeric' && optionCount > 0) {
+    throw new Error('Numeric bonus questions cannot include answer options.')
   }
 
   await assertQuestionEditWindow(supabase, raceId, isPlatformOverride)
@@ -134,6 +145,7 @@ export async function addTenantBonusQuestion(formData: FormData) {
       tenant_id: tenantId,
       question_text: questionText,
       points,
+      answer_type: answerType,
     })
     .select('id')
     .single()
@@ -176,20 +188,24 @@ export async function updateTenantBonusQuestion(formData: FormData) {
 
   await assertQuestionEditWindow(supabase, raceId, isPlatformOverride)
 
-  const { data: existingQuestion } = await supabase
+  const { data: existingQuestion, error: questionLookupError } = await supabase
     .from('bonus_questions')
-    .select('id')
+    .select('id, answer_type')
     .eq('id', questionId)
     .eq('race_id', raceId)
     .eq('tenant_id', tenantId)
     .maybeSingle()
 
+  if (questionLookupError) {
+    throw new Error(questionLookupError.message || 'Could not load the group bonus question.')
+  }
+
   if (!existingQuestion) {
     throw new Error('Group bonus question not found.')
   }
 
-  const nonEmptyOptionCount = optionLabels.filter(Boolean).length
-  if (nonEmptyOptionCount < 2) {
+  const answerType = (existingQuestion.answer_type || 'choice') as BonusAnswerType
+  if (answerType === 'choice' && optionLabels.filter(Boolean).length < 2) {
     throw new Error('Keep at least two options on a bonus question.')
   }
 
@@ -203,6 +219,11 @@ export async function updateTenantBonusQuestion(formData: FormData) {
     throw new Error(questionError.message || 'Failed to update group bonus question.')
   }
 
+  if (answerType === 'numeric') {
+    await recalculateAndRevalidateRaceIfReady(supabase, raceId)
+    return
+  }
+
   for (let index = 0; index < optionLabels.length; index += 1) {
     const label = optionLabels[index]
     const optionId = optionIds[index]
@@ -212,6 +233,7 @@ export async function updateTenantBonusQuestion(formData: FormData) {
         .from('bonus_options')
         .update({ label })
         .eq('id', optionId)
+        .eq('bonus_question_id', questionId)
 
       if (error) throw new Error(error.message || 'Failed to update group bonus option.')
     } else if (label && !optionId) {
@@ -227,6 +249,7 @@ export async function updateTenantBonusQuestion(formData: FormData) {
         .from('bonus_options')
         .delete()
         .eq('id', optionId)
+        .eq('bonus_question_id', questionId)
 
       if (error) throw new Error(error.message || 'Failed to delete group bonus option.')
     }
@@ -247,15 +270,21 @@ export async function deleteTenantBonusQuestion(formData: FormData) {
 
   await assertQuestionEditWindow(supabase, raceId, isPlatformOverride)
 
-  const { error } = await supabase
+  const { data: deletedQuestion, error } = await supabase
     .from('bonus_questions')
     .delete()
     .eq('id', questionId)
     .eq('race_id', raceId)
     .eq('tenant_id', tenantId)
+    .select('id')
+    .maybeSingle()
 
   if (error) {
     throw new Error(error.message || 'Failed to delete group bonus question.')
+  }
+
+  if (!deletedQuestion) {
+    throw new Error('Group bonus question was not found or could not be deleted.')
   }
 
   await recalculateAndRevalidateRaceIfReady(supabase, raceId)
@@ -272,7 +301,7 @@ export async function saveTenantBonusAnswers(formData: FormData) {
 
   const { data: questions, error: questionsError } = await supabase
     .from('bonus_questions')
-    .select('id')
+    .select('id, answer_type')
     .eq('race_id', raceId)
     .eq('tenant_id', tenantId)
     .eq('is_active', true)
@@ -281,16 +310,28 @@ export async function saveTenantBonusAnswers(formData: FormData) {
     throw new Error(questionsError.message || 'Could not load group bonus questions.')
   }
 
-  const bonusAnswers = (questions || []).map((question) => {
-    const optionId = String(formData.get(`bonus_${question.id}`) || '').trim()
+  const bonusAnswers: BonusAnswer[] = (questions || []).map((question) => {
+    const rawValue = String(formData.get(`bonus_${question.id}`) || '').trim()
 
-    if (!optionId) {
+    if ((question.answer_type || 'choice') === 'numeric') {
+      const numericValue = normalizeNumericBonusValue(rawValue)
+      if (!numericValue) {
+        throw new Error('Enter a valid number for every numeric bonus question before saving.')
+      }
+
+      return {
+        questionId: question.id,
+        numericValue,
+      }
+    }
+
+    if (!rawValue) {
       throw new Error('Set every group bonus answer before saving.')
     }
 
     return {
       questionId: question.id,
-      optionId,
+      optionId: rawValue,
     }
   })
 

@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react'
 import { FormActionButton } from '@/components/ui/form-action-button'
 import { getProfileDisplayName } from '@/utils/profile-name'
+import { type BonusAnswerType } from '@/utils/bonus-answers'
 
 type ProfileRecord = {
   id: string
@@ -26,6 +27,7 @@ type BonusQuestion = {
   id: string
   tenant_id?: string | null
   question_text: string
+  answer_type?: BonusAnswerType | null
   bonus_options?: BonusOption[]
 }
 
@@ -186,27 +188,44 @@ export function HistoricPredictionForm({
                 <label className="mb-1 block text-xs font-bold uppercase tracking-[0.18em] text-slate-500">
                   {question.question_text}
                 </label>
-                <select
-                  key={`${selectedUserId || 'empty'}-${question.id}`}
-                  name={`historic_bonus_${question.id}`}
-                  defaultValue=""
-                  className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2"
-                >
-                  <option value="" className="bg-slate-900 text-white">
-                    {selectedPrediction?.bonus_answers?.[question.id]
-                      ? `Keep current - ${
-                          question.bonus_options?.find(
-                            (option) => option.id === selectedPrediction.bonus_answers?.[question.id]
-                          )?.label || 'Saved answer'
-                        }`
-                      : 'Leave unchanged'}
-                  </option>
-                  {question.bonus_options?.map((option) => (
-                    <option key={option.id} value={option.id} className="bg-slate-900 text-white">
-                      {option.label}
+                {question.answer_type === 'numeric' ? (
+                  <input
+                    key={`${selectedUserId || 'empty'}-${question.id}`}
+                    name={`historic_bonus_${question.id}`}
+                    type="number"
+                    min="0"
+                    step="any"
+                    inputMode="decimal"
+                    placeholder={
+                      selectedPrediction?.bonus_answers?.[question.id]
+                        ? `Keep current - ${selectedPrediction.bonus_answers[question.id]}`
+                        : 'Leave unchanged'
+                    }
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2"
+                  />
+                ) : (
+                  <select
+                    key={`${selectedUserId || 'empty'}-${question.id}`}
+                    name={`historic_bonus_${question.id}`}
+                    defaultValue=""
+                    className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2"
+                  >
+                    <option value="" className="bg-slate-900 text-white">
+                      {selectedPrediction?.bonus_answers?.[question.id]
+                        ? `Keep current - ${
+                            question.bonus_options?.find(
+                              (option) => option.id === selectedPrediction.bonus_answers?.[question.id]
+                            )?.label || 'Saved answer'
+                          }`
+                        : 'Leave unchanged'}
                     </option>
-                  ))}
-                </select>
+                    {question.bonus_options?.map((option) => (
+                      <option key={option.id} value={option.id} className="bg-slate-900 text-white">
+                        {option.label}
+                      </option>
+                    ))}
+                  </select>
+                )}
               </div>
             ))}
           </div>

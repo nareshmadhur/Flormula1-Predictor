@@ -33,6 +33,7 @@ import {
 } from '@/utils/notification-settings'
 import { formatAmsterdamDateTime } from '@/utils/amsterdam-time'
 import { getRaceFocus } from '@/utils/race-focus'
+import { getBonusAnswerDisplay, hasBonusAnswerValue, type BonusAnswerValue } from '@/utils/bonus-answers'
 import {
   getTenantRaceActionBadgeClasses,
   getTenantRaceActionLabel,
@@ -93,7 +94,8 @@ type PredictionEntry = {
 type PredictionBonusAnswerEntry = {
   prediction_id: string
   bonus_question_id: string
-  bonus_option_id: string
+  bonus_option_id?: string | null
+  numeric_value?: string | number | null
 }
 
 type DriverRecord = {
@@ -328,7 +330,7 @@ export default async function TenantAdminPage() {
     seasonRaceIds.length > 0
       ? await supabase
           .from('bonus_questions')
-          .select('id, race_id, question_text, points, display_order, bonus_options(id, label)')
+          .select('id, race_id, question_text, points, answer_type, display_order, bonus_options(id, label)')
           .in('race_id', seasonRaceIds)
           .eq('tenant_id', access.tenantId)
           .eq('is_active', true)
@@ -342,7 +344,7 @@ export default async function TenantAdminPage() {
     tenantBonusQuestionIds.length > 0
       ? await supabase
           .from('race_bonus_answers')
-          .select('race_id, bonus_question_id, correct_bonus_option_id')
+          .select('race_id, bonus_question_id, correct_bonus_option_id, numeric_value')
           .in('bonus_question_id', tenantBonusQuestionIds)
       : { data: [] as TenantBonusAnswer[] }
   const typedTenantBonusAnswers = (tenantBonusAnswers || []) as TenantBonusAnswer[]
@@ -359,7 +361,7 @@ export default async function TenantAdminPage() {
     bonusQuestionsByRaceId.set(question.race_id, current)
   })
   const answerByQuestionId = new Map(
-    typedTenantBonusAnswers.map((answer) => [answer.bonus_question_id, answer.correct_bonus_option_id])
+    typedTenantBonusAnswers.map((answer) => [answer.bonus_question_id, answer])
   )
   const pendingTenantBonusAnswerCount = typedTenantBonusQuestions.filter((question) => {
     const status = statusByRaceId.get(question.race_id)
@@ -426,7 +428,7 @@ export default async function TenantAdminPage() {
     predictionIds.length > 0
       ? supabase
           .from('prediction_bonus_answers')
-          .select('prediction_id, bonus_question_id, bonus_option_id')
+          .select('prediction_id, bonus_question_id, bonus_option_id, numeric_value')
           .in('prediction_id', predictionIds)
       : Promise.resolve({ data: [] as PredictionBonusAnswerEntry[] }),
   ])
@@ -511,18 +513,10 @@ export default async function TenantAdminPage() {
   const predictionByRaceAndUserId = new Map(
     typedSeasonRacePredictions.map((prediction) => [`${prediction.race_id}:${prediction.user_id}`, prediction])
   )
-  const bonusOptionLabelById = new Map<string, string>()
-  typedTenantBonusQuestions.forEach((question) => {
-    question.bonus_options?.forEach((option) => {
-      if (option.label) {
-        bonusOptionLabelById.set(option.id, option.label)
-      }
-    })
-  })
-  const predictionBonusAnswerByPredictionAndQuestionId = new Map(
+  const predictionBonusAnswerByPredictionAndQuestionId = new Map<string, BonusAnswerValue>(
     typedPredictionBonusAnswers.map((answer) => [
       `${answer.prediction_id}:${answer.bonus_question_id}`,
-      answer.bonus_option_id,
+      { optionId: answer.bonus_option_id, numericValue: answer.numeric_value },
     ])
   )
   const nextRacePredictionUserIds =
@@ -549,8 +543,11 @@ export default async function TenantAdminPage() {
           ],
           bonusLabels: featuredRaceQuestions
             .map((question) => {
-              const optionId = predictionBonusAnswerByPredictionAndQuestionId.get(`${prediction.id}:${question.id}`)
-              const label = optionId ? bonusOptionLabelById.get(optionId) : null
+              const answer = predictionBonusAnswerByPredictionAndQuestionId.get(`${prediction.id}:${question.id}`)
+              const answerType = question.answer_type || 'choice'
+              const label = hasBonusAnswerValue(answerType, answer || {})
+                ? getBonusAnswerDisplay(question, answer || {}, 'No answer')
+                : null
 
               return label ? `${question.question_text}: ${label}` : null
             })
@@ -562,13 +559,22 @@ export default async function TenantAdminPage() {
     (question) => !tenantAnsweredQuestionIds.has(question.id)
   )
   const featuredAnsweredBonusRows = featuredRaceQuestions.flatMap((question) => {
-    const optionId = answerByQuestionId.get(question.id)
-    const optionLabel = optionId ? question.bonus_options?.find((option) => option.id === optionId)?.label : null
-    if (!optionLabel) return []
+    const answer = answerByQuestionId.get(question.id)
+    const answerType = question.answer_type || 'choice'
+    const answerLabel = answer && hasBonusAnswerValue(answerType, {
+      optionId: answer.correct_bonus_option_id,
+      numericValue: answer.numeric_value,
+    })
+      ? getBonusAnswerDisplay(question, {
+          optionId: answer.correct_bonus_option_id,
+          numericValue: answer.numeric_value,
+        }, 'No answer')
+      : null
+    if (!answerLabel) return []
 
     return [{
       questionText: question.question_text,
-      answerLabel: optionLabel,
+      answerLabel,
     }]
   })
   const showMissingFirst = featuredActionState === 'race_readiness' || featuredActionState === 'weekend_live'

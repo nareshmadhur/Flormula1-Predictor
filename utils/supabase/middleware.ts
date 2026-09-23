@@ -3,7 +3,16 @@ import { NextResponse, type NextRequest } from 'next/server'
 import { hasSupabaseAuthCookie } from '@/utils/supabase/auth-cookie'
 import { fetchWithTimeout } from '@/utils/supabase/fetch'
 
-const sessionRefreshPrefixes = ['/admin', '/api/admin', '/groups', '/me', '/predictions', '/race']
+const sessionRefreshPrefixes = [
+  '/admin',
+  '/api/admin',
+  '/api/leaderboard',
+  '/groups',
+  '/leaderboard',
+  '/me',
+  '/predictions',
+  '/race',
+]
 
 function shouldRefreshSession(pathname: string) {
   return sessionRefreshPrefixes.some(

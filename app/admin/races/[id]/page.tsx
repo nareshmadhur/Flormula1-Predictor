@@ -10,7 +10,8 @@ import { calculateRaceScoresAction } from '@/app/actions/scoring'
 import { getAdminAccessContext } from '@/utils/admin-access'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
 import { recalculateRaceScores, recalculateRaceScoresIfResultExists } from '@/utils/race-scoring'
-import { saveHistoricPrediction, saveOfficialRaceResult } from '@/utils/result-pipeline'
+import { saveHistoricPrediction, saveOfficialRaceResult, type BonusAnswer } from '@/utils/result-pipeline'
+import { normalizeNumericBonusValue, type BonusAnswerType } from '@/utils/bonus-answers'
 import { getAdminRaceStatusBadgeClasses, getAdminRaceStatusLabel } from '@/utils/admin-race-status'
 import {
   buildOpenF1ScheduleReview,
@@ -93,7 +94,8 @@ type PredictionRecord = {
 type PredictionBonusAnswerRecord = {
   prediction_id: string
   bonus_question_id: string
-  bonus_option_id: string
+  bonus_option_id?: string | null
+  numeric_value?: string | number | null
 }
 
 type TenantRecord = {
@@ -190,39 +192,55 @@ async function proxyPrediction(formData: FormData) {
     existingPrediction?.id
       ? await supabase
           .from('prediction_bonus_answers')
-          .select('bonus_question_id, bonus_option_id')
+          .select('bonus_question_id, bonus_option_id, numeric_value')
           .eq('prediction_id', existingPrediction.id)
-      : { data: [] as Array<{ bonus_question_id: string; bonus_option_id: string }> }
+      : { data: [] as Array<{ bonus_question_id: string; bonus_option_id?: string | null; numeric_value?: string | number | null }> }
   const existingBonusAnswerByQuestionId = new Map(
-    ((existingBonusAnswerRows || []) as Array<{ bonus_question_id: string; bonus_option_id: string }>).map(
-      (answer) => [answer.bonus_question_id, answer.bonus_option_id]
+    ((existingBonusAnswerRows || []) as Array<{ bonus_question_id: string; bonus_option_id?: string | null; numeric_value?: string | number | null }>).map(
+      (answer) => [answer.bonus_question_id, String(answer.numeric_value ?? answer.bonus_option_id ?? '')]
     )
   )
   const { data: bonusQuestions } = targetTenantId
     ? await supabase
         .from('bonus_questions')
-        .select('id, bonus_options(id)')
+        .select('id, answer_type, bonus_options(id)')
         .eq('race_id', raceId)
         .eq('tenant_id', targetTenantId)
         .eq('is_active', true)
     : { data: [] }
-  const bonusAnswers = ((bonusQuestions || []) as Array<{ id: string; bonus_options?: Array<{ id: string }> | null }>)
-    .map((question) => {
-      const submittedOptionId = String(formData.get(`historic_bonus_${question.id}`) || '').trim()
-      const optionId = submittedOptionId || existingBonusAnswerByQuestionId.get(question.id) || ''
-      if (!optionId) return null
+  const bonusAnswers: BonusAnswer[] = ((bonusQuestions || []) as Array<{
+    id: string
+    answer_type?: BonusAnswerType | null
+    bonus_options?: Array<{ id: string }> | null
+  }>)
+    .map<BonusAnswer | null>((question) => {
+      const submittedValue = String(formData.get(`historic_bonus_${question.id}`) || '').trim()
+      const value = submittedValue || existingBonusAnswerByQuestionId.get(question.id) || ''
+      if (!value) return null
+
+      if ((question.answer_type || 'choice') === 'numeric') {
+        const numericValue = normalizeNumericBonusValue(value)
+        if (!numericValue) {
+          throw new Error('Historic numeric bonus answer must be a non-negative number.')
+        }
+
+        return {
+          questionId: question.id,
+          numericValue,
+        }
+      }
 
       const validOptionIds = new Set((question.bonus_options || []).map((option) => option.id))
-      if (!validOptionIds.has(optionId)) {
+      if (!validOptionIds.has(value)) {
         throw new Error('Historic bonus answer does not match the selected user group.')
       }
 
       return {
         questionId: question.id,
-        optionId,
+        optionId: value,
       }
     })
-    .filter((answer): answer is { questionId: string; optionId: string } => Boolean(answer))
+    .filter((answer): answer is BonusAnswer => answer !== null)
 
   const result = await saveHistoricPrediction(supabase, {
     raceId,
@@ -269,7 +287,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
   const { data: tenants } = await supabase.from('tenants').select('id, name, slug, is_test').order('name')
   const { data: tenantBonusQuestions } = await supabase
     .from('bonus_questions')
-    .select('id, race_id, tenant_id, question_text, points, display_order, bonus_options(id, label)')
+    .select('id, race_id, tenant_id, question_text, points, answer_type, display_order, bonus_options(id, label)')
     .eq('race_id', id)
     .eq('is_active', true)
     .order('display_order', { ascending: true })
@@ -296,7 +314,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
     tenantBonusQuestionIds.length > 0
       ? await supabase
           .from('race_bonus_answers')
-          .select('race_id, bonus_question_id, correct_bonus_option_id')
+          .select('race_id, bonus_question_id, correct_bonus_option_id, numeric_value')
           .in('bonus_question_id', tenantBonusQuestionIds)
       : { data: [] as TenantBonusAnswer[] }
   const historicPredictionIds = typedHistoricPredictions.map((prediction) => prediction.id)
@@ -304,7 +322,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
     historicPredictionIds.length > 0
       ? await supabase
           .from('prediction_bonus_answers')
-          .select('prediction_id, bonus_question_id, bonus_option_id')
+          .select('prediction_id, bonus_question_id, bonus_option_id, numeric_value')
           .in('prediction_id', historicPredictionIds)
       : { data: [] as PredictionBonusAnswerRecord[] }
   const typedTenantBonusAnswers = (tenantBonusAnswers || []) as TenantBonusAnswer[]
@@ -313,7 +331,7 @@ export default async function RaceAdminPage(props: { params: Promise<{ id: strin
   const historicBonusAnswersByPredictionId = new Map<string, Record<string, string>>()
   typedHistoricPredictionBonusAnswers.forEach((answer) => {
     const current = historicBonusAnswersByPredictionId.get(answer.prediction_id) || {}
-    current[answer.bonus_question_id] = answer.bonus_option_id
+    current[answer.bonus_question_id] = String(answer.numeric_value ?? answer.bonus_option_id ?? '')
     historicBonusAnswersByPredictionId.set(answer.prediction_id, current)
   })
   const historicPredictionEntries = typedHistoricPredictions.map((prediction) => ({

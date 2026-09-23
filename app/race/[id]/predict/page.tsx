@@ -18,6 +18,12 @@ import {
   getPrivateGroupRaceExperience,
 } from '@/utils/group-race-experience'
 import { getProfileDisplayName } from '@/utils/profile-name'
+import {
+  bonusAnswerValuesMatch,
+  getBonusAnswerDisplay,
+  type BonusAnswerType,
+  type BonusAnswerValue,
+} from '@/utils/bonus-answers'
 
 type Driver = {
   id: string
@@ -40,6 +46,7 @@ type BonusQuestion = {
   id: string
   question_text: string
   points: number
+  answer_type?: BonusAnswerType | null
   bonus_options?: BonusOption[]
 }
 
@@ -109,11 +116,8 @@ function getDriverLabel(drivers: Driver[], driverId?: string | null) {
   return `${driver.code} - ${driver.full_name}${driver.emoji ? ` ${driver.emoji}` : ''}`
 }
 
-function getBonusAnswerLabel(question: BonusQuestion, optionId?: string | null) {
-  if (!optionId) return 'No answer submitted'
-
-  const option = question.bonus_options?.find((entry) => entry.id === optionId)
-  return option?.label || 'Unknown option'
+function getBonusAnswerLabel(question: BonusQuestion, answer?: BonusAnswerValue) {
+  return getBonusAnswerDisplay(question, answer || {}, 'No answer submitted')
 }
 
 function getComparisonTone(predictedDriverId?: string | null, officialDriverId?: string | null, officialPodiumIds: string[] = []) {
@@ -166,7 +170,7 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
 
   const { data: bonusQuestions } = await supabase
     .from('bonus_questions')
-    .select('id, question_text, points, display_order, bonus_options(id, label, display_order)')
+    .select('id, question_text, points, answer_type, display_order, bonus_options(id, label, display_order)')
     .eq('race_id', id)
     .eq('tenant_id', tenantContext.tenantId)
     .eq('is_active', true)
@@ -179,11 +183,15 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
     .eq('user_id', user.id)
     .single()
 
-  let predictionBonusAnswers: Array<{ bonus_question_id: string; bonus_option_id: string }> = []
+  let predictionBonusAnswers: Array<{
+    bonus_question_id: string
+    bonus_option_id?: string | null
+    numeric_value?: string | number | null
+  }> = []
   if (prediction) {
     const { data: pba } = await supabase
       .from('prediction_bonus_answers')
-      .select('bonus_question_id, bonus_option_id')
+      .select('bonus_question_id, bonus_option_id, numeric_value')
       .eq('prediction_id', prediction.id)
     predictionBonusAnswers = pba || []
   }
@@ -196,7 +204,7 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
 
   const { data: raceBonusAnswers } = await supabase
     .from('race_bonus_answers')
-    .select('bonus_question_id, correct_bonus_option_id')
+    .select('bonus_question_id, correct_bonus_option_id, numeric_value')
     .eq('race_id', id)
 
   const { data: userScore } = await supabase
@@ -210,14 +218,20 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
   const activeDrivers = drivers.filter((driver) => driver.active)
   const typedBonusQuestions = (bonusQuestions || []) as BonusQuestion[]
 
-  const bonusAnswerMap = new Map<string, string>()
+  const bonusAnswerMap = new Map<string, BonusAnswerValue>()
   predictionBonusAnswers.forEach((answer) => {
-    bonusAnswerMap.set(answer.bonus_question_id, answer.bonus_option_id)
+    bonusAnswerMap.set(answer.bonus_question_id, {
+      optionId: answer.bonus_option_id,
+      numericValue: answer.numeric_value,
+    })
   })
 
-  const officialBonusAnswerMap = new Map<string, string>()
+  const officialBonusAnswerMap = new Map<string, BonusAnswerValue>()
   ;(raceBonusAnswers || []).forEach((answer) => {
-    officialBonusAnswerMap.set(answer.bonus_question_id, answer.correct_bonus_option_id)
+    officialBonusAnswerMap.set(answer.bonus_question_id, {
+      optionId: answer.correct_bonus_option_id,
+      numericValue: answer.numeric_value,
+    })
   })
 
   const predictionPodium = prediction
@@ -249,8 +263,11 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
   const missedPodiumSpots = Math.max(3 - podiumHitCount, 0)
   const correctBonusCount = typedBonusQuestions.filter(
     (question) =>
-      bonusAnswerMap.get(question.id) &&
-      bonusAnswerMap.get(question.id) === officialBonusAnswerMap.get(question.id)
+      bonusAnswerValuesMatch(
+        question.answer_type || 'choice',
+        bonusAnswerMap.get(question.id) || {},
+        officialBonusAnswerMap.get(question.id) || {}
+      )
   ).length
   const groupPredictionInsights = getGroupPredictionInsights(groupRaceExperience?.predictions || [], user.id)
   const currentGroupPrediction =
@@ -601,7 +618,11 @@ export default async function PredictPage(props: { params: Promise<{ id: string 
                   {typedBonusQuestions.map((question) => {
                     const predictedAnswer = bonusAnswerMap.get(question.id)
                     const officialAnswer = officialBonusAnswerMap.get(question.id)
-                    const isCorrect = Boolean(predictedAnswer && officialAnswer && predictedAnswer === officialAnswer)
+                    const isCorrect = bonusAnswerValuesMatch(
+                      question.answer_type || 'choice',
+                      predictedAnswer || {},
+                      officialAnswer || {}
+                    )
 
                     return (
                       <div key={question.id} className="rounded-2xl border border-white/8 bg-black/20 p-3">

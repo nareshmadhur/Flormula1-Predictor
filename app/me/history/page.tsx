@@ -13,6 +13,13 @@ import { RaceStatusPill } from '@/components/ui/race-status-pill'
 import { SectionHeader } from '@/components/ui/section-header'
 import { getMemberRaceActionLabel } from '@/utils/race-experience'
 import { getRaceWeekendConsistency } from '@/utils/group-race-experience'
+import {
+  bonusAnswerValuesMatch,
+  getBonusAnswerDisplay,
+  hasBonusAnswerValue,
+  type BonusAnswerType,
+  type BonusAnswerValue,
+} from '@/utils/bonus-answers'
 
 export const revalidate = 0
 
@@ -52,19 +59,22 @@ type BonusQuestionRow = {
   id: string
   race_id: string
   question_text: string
+  answer_type?: BonusAnswerType | null
   bonus_options?: BonusOptionRow[] | null
 }
 
 type PredictionBonusAnswerRow = {
   prediction_id: string
   bonus_question_id: string
-  bonus_option_id: string
+  bonus_option_id?: string | null
+  numeric_value?: string | number | null
 }
 
 type RaceBonusAnswerRow = {
   race_id: string
   bonus_question_id: string
-  correct_bonus_option_id: string
+  correct_bonus_option_id?: string | null
+  numeric_value?: string | number | null
 }
 
 type BonusHistoryItem = {
@@ -189,7 +199,7 @@ export default async function UserHistoryPage() {
     raceIds.length > 0
       ? supabase
           .from('bonus_questions')
-          .select('id, race_id, question_text, bonus_options(id, label)')
+          .select('id, race_id, question_text, answer_type, bonus_options(id, label)')
           .in('race_id', raceIds)
           .eq('tenant_id', tenantContext.tenantId)
           .eq('is_active', true)
@@ -198,13 +208,13 @@ export default async function UserHistoryPage() {
     predictionIds.length > 0
       ? supabase
           .from('prediction_bonus_answers')
-          .select('prediction_id, bonus_question_id, bonus_option_id')
+          .select('prediction_id, bonus_question_id, bonus_option_id, numeric_value')
           .in('prediction_id', predictionIds)
       : Promise.resolve({ data: [] as PredictionBonusAnswerRow[] }),
     raceIds.length > 0
       ? supabase
           .from('race_bonus_answers')
-          .select('race_id, bonus_question_id, correct_bonus_option_id')
+          .select('race_id, bonus_question_id, correct_bonus_option_id, numeric_value')
           .in('race_id', raceIds)
       : Promise.resolve({ data: [] as RaceBonusAnswerRow[] }),
   ])
@@ -217,14 +227,20 @@ export default async function UserHistoryPage() {
     questionsByRaceId.set(question.race_id, group)
   })
 
-  const predictionBonusAnswerMap = new Map<string, string>()
+  const predictionBonusAnswerMap = new Map<string, BonusAnswerValue>()
   ;((predictionBonusAnswers || []) as PredictionBonusAnswerRow[]).forEach((answer) => {
-    predictionBonusAnswerMap.set(`${answer.prediction_id}:${answer.bonus_question_id}`, answer.bonus_option_id)
+    predictionBonusAnswerMap.set(`${answer.prediction_id}:${answer.bonus_question_id}`, {
+      optionId: answer.bonus_option_id,
+      numericValue: answer.numeric_value,
+    })
   })
 
-  const raceBonusAnswerMap = new Map<string, string>()
+  const raceBonusAnswerMap = new Map<string, BonusAnswerValue>()
   ;((raceBonusAnswers || []) as RaceBonusAnswerRow[]).forEach((answer) => {
-    raceBonusAnswerMap.set(`${answer.race_id}:${answer.bonus_question_id}`, answer.correct_bonus_option_id)
+    raceBonusAnswerMap.set(`${answer.race_id}:${answer.bonus_question_id}`, {
+      optionId: answer.correct_bonus_option_id,
+      numericValue: answer.numeric_value,
+    })
   })
 
   const entries = typedRaces.map((race) => {
@@ -241,25 +257,29 @@ export default async function UserHistoryPage() {
 
     const bonusHistory = predictionId
       ? raceQuestions.flatMap((question) => {
-          const selectedOptionId = predictionBonusAnswerMap.get(`${predictionId}:${question.id}`)
-          const officialOptionId = raceBonusAnswerMap.get(`${race.id}:${question.id}`) || null
+          const selectedAnswer = predictionBonusAnswerMap.get(`${predictionId}:${question.id}`)
+          const officialAnswer = raceBonusAnswerMap.get(`${race.id}:${question.id}`)
+          const answerType = question.answer_type || 'choice'
 
-          if (!selectedOptionId && !officialOptionId) {
+          if (
+            !hasBonusAnswerValue(answerType, selectedAnswer || {}) &&
+            !hasBonusAnswerValue(answerType, officialAnswer || {})
+          ) {
             return []
           }
 
-          const selectedLabel =
-            question.bonus_options?.find((option) => option.id === selectedOptionId)?.label || 'No answer'
-          const officialLabel =
-            question.bonus_options?.find((option) => option.id === officialOptionId)?.label || null
+          const selectedLabel = getBonusAnswerDisplay(question, selectedAnswer || {}, 'No answer')
+          const officialLabel = hasBonusAnswerValue(answerType, officialAnswer || {})
+            ? getBonusAnswerDisplay(question, officialAnswer || {}, 'No answer')
+            : null
 
           return [
             {
               questionText: question.question_text,
               selectedLabel,
               officialLabel,
-              isCorrect: Boolean(selectedOptionId && officialOptionId && selectedOptionId === officialOptionId),
-              isResolved: Boolean(officialOptionId),
+              isCorrect: bonusAnswerValuesMatch(answerType, selectedAnswer || {}, officialAnswer || {}),
+              isResolved: hasBonusAnswerValue(answerType, officialAnswer || {}),
             } satisfies BonusHistoryItem,
           ]
         })

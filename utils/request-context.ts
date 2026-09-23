@@ -66,10 +66,18 @@ export const getRequestUserContext = cache(async (): Promise<RequestUserContext>
   // This context feeds navigation and RLS-backed reads. Middleware refreshes
   // protected requests, while privileged actions use getUser() separately.
   // Avoid a second network validation during every authenticated page render.
-  const {
-    data: { session },
-  } = await supabase.auth.getSession()
-  const user = session?.user ?? null
+  const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+  let user = sessionData.session?.user ?? null
+
+  // A session cookie can survive an interrupted refresh. Validate only this
+  // missing-session case so normal authenticated renders avoid another Auth
+  // round trip while stale cookies can still recover.
+  if (!user && !sessionError) {
+    const {
+      data: { user: validatedUser },
+    } = await supabase.auth.getUser()
+    user = validatedUser ?? null
+  }
 
   if (!user) {
     return {

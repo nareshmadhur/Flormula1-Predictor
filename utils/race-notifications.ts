@@ -151,7 +151,7 @@ type ReminderPredictionRow = {
 type ReminderBonusQuestionRow = {
   id: string
   tenant_id?: string | null
-  bonus_options?: Array<{ id: string }> | null
+  answer_type?: 'choice' | 'numeric' | null
 }
 
 type ReminderBonusAnswerRow = {
@@ -594,7 +594,7 @@ async function getPredictionReminderCompletions(
   if (tenantIds.length > 0) {
     const { data, error } = await supabase
       .from('bonus_questions')
-      .select('id, tenant_id, bonus_options(id)')
+      .select('id, tenant_id, answer_type')
       .eq('race_id', raceId)
       .eq('is_active', true)
       .in('tenant_id', tenantIds)
@@ -609,7 +609,7 @@ async function getPredictionReminderCompletions(
   const questionIdsByTenantId = new Map<string, Set<string>>()
   bonusQuestions.forEach((question) => {
     const tenantId = question.tenant_id
-    if (!tenantId || !question.bonus_options?.length) return
+    if (!tenantId) return
 
     const currentQuestionIds = questionIdsByTenantId.get(tenantId) || new Set<string>()
     currentQuestionIds.add(question.id)

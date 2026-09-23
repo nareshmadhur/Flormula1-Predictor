@@ -5,6 +5,7 @@ import { submitPrediction } from '@/app/actions/predictions'
 import { AlertCircle, CheckCircle, ChevronDown, ChevronUp, Search, X } from 'lucide-react'
 import { RaceStartLights } from '@/components/ui/race-start-lights'
 import { SectionHeader } from '@/components/ui/section-header'
+import { hasBonusAnswerValue, type BonusAnswerType } from '@/utils/bonus-answers'
 
 type RaceFormData = {
   id: string
@@ -39,6 +40,7 @@ type BonusQuestion = {
   id: string
   question_text: string
   points: number
+  answer_type?: BonusAnswerType | null
   bonus_options?: BonusOption[] | null
 }
 
@@ -51,7 +53,8 @@ type ExistingPrediction = {
 
 type ExistingBonusAnswer = {
   bonus_question_id: string
-  bonus_option_id: string
+  bonus_option_id?: string | null
+  numeric_value?: string | number | null
 }
 
 type PredictionFormProps = {
@@ -180,7 +183,9 @@ export default function PredictionForm({
 
   const initialBonusState: Record<string, string> = {}
   existingBonusAnswers?.forEach((answer) => {
-    initialBonusState[answer.bonus_question_id] = answer.bonus_option_id
+    initialBonusState[answer.bonus_question_id] = String(
+      answer.numeric_value ?? answer.bonus_option_id ?? ''
+    )
   })
 
   const [bonusAnswers, setBonusAnswers] = useState<Record<string, string>>(initialBonusState)
@@ -190,7 +195,12 @@ export default function PredictionForm({
   const selectedIds = { p1, p2, p3 }
   const hasDuplicate = p1 && p2 && p3 && new Set([p1, p2, p3]).size !== 3
   const isComplete = Boolean(p1 && p2 && p3 && !hasDuplicate)
-  const answeredBonusCount = (bonusQuestions || []).filter((question) => Boolean(bonusAnswers[question.id])).length
+  const answeredBonusCount = (bonusQuestions || []).filter((question) =>
+    hasBonusAnswerValue(question.answer_type || 'choice', {
+      optionId: question.answer_type === 'numeric' ? null : bonusAnswers[question.id],
+      numericValue: question.answer_type === 'numeric' ? bonusAnswers[question.id] : null,
+    })
+  ).length
 
   const driversById = useMemo(() => {
     return new Map((drivers || []).map((driver) => [driver.id, driver]))
@@ -259,10 +269,15 @@ export default function PredictionForm({
     formData.append('p2_driver_id', p2)
     formData.append('p3_driver_id', p3)
 
-    const bonusMap = Object.entries(bonusAnswers).map(([questionId, optionId]) => ({
-      question_id: questionId,
-      option_id: optionId,
-    }))
+    const questionById = new Map((bonusQuestions || []).map((question) => [question.id, question]))
+    const bonusMap = Object.entries(bonusAnswers)
+      .filter(([, value]) => value.trim())
+      .map(([questionId, value]) => {
+        const question = questionById.get(questionId)
+        return question?.answer_type === 'numeric'
+          ? { question_id: questionId, numeric_value: value }
+          : { question_id: questionId, option_id: value }
+      })
     formData.append('bonus_answers', JSON.stringify(bonusMap))
 
     try {
@@ -426,33 +441,50 @@ export default function PredictionForm({
                     </span>
                   </div>
 
-                  <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                    {question.bonus_options
-                      ?.slice()
-                      .sort((left, right) => (left.display_order || 0) - (right.display_order || 0))
-                      .map((option) => (
-                        <label
-                          key={option.id}
-                          className={`touch-target flex cursor-pointer items-center rounded-xl border p-3 transition-all ${
-                            bonusAnswers[question.id] === option.id
-                              ? 'border-red-500 bg-red-500/20 text-white'
-                              : 'border-white/5 bg-black/30 text-slate-300 hover:border-white/20'
-                          } ${isLocked ? 'cursor-default opacity-70' : ''}`}
-                        >
-                          <input
-                            type="radio"
-                            name={question.id}
-                            value={option.id}
-                            checked={bonusAnswers[question.id] === option.id}
-                            onChange={() => handleBonusChange(question.id, option.id)}
-                            disabled={isLocked}
-                            className="hidden"
-                          />
-                          <div className="flex-1 text-sm font-medium">{option.label || 'Option'}</div>
-                          {bonusAnswers[question.id] === option.id && <CheckCircle className="h-4 w-4 text-red-500" />}
-                        </label>
-                      ))}
-                  </div>
+                  {question.answer_type === 'numeric' ? (
+                    <label className={`mt-3 block max-w-xs ${isLocked ? 'opacity-70' : ''}`}>
+                      <span className="sr-only">Numeric answer</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        inputMode="decimal"
+                        value={bonusAnswers[question.id] || ''}
+                        onChange={(event) => handleBonusChange(question.id, event.target.value)}
+                        disabled={isLocked}
+                        placeholder="Enter a number"
+                        className="w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 text-white outline-none transition focus:border-red-500/60"
+                      />
+                    </label>
+                  ) : (
+                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                      {question.bonus_options
+                        ?.slice()
+                        .sort((left, right) => (left.display_order || 0) - (right.display_order || 0))
+                        .map((option) => (
+                          <label
+                            key={option.id}
+                            className={`touch-target flex cursor-pointer items-center rounded-xl border p-3 transition-all ${
+                              bonusAnswers[question.id] === option.id
+                                ? 'border-red-500 bg-red-500/20 text-white'
+                                : 'border-white/5 bg-black/30 text-slate-300 hover:border-white/20'
+                            } ${isLocked ? 'cursor-default opacity-70' : ''}`}
+                          >
+                            <input
+                              type="radio"
+                              name={question.id}
+                              value={option.id}
+                              checked={bonusAnswers[question.id] === option.id}
+                              onChange={() => handleBonusChange(question.id, option.id)}
+                              disabled={isLocked}
+                              className="hidden"
+                            />
+                            <div className="flex-1 text-sm font-medium">{option.label || 'Option'}</div>
+                            {bonusAnswers[question.id] === option.id && <CheckCircle className="h-4 w-4 text-red-500" />}
+                          </label>
+                        ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

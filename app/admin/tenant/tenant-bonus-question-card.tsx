@@ -1,11 +1,13 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 import { Edit3, Trash2 } from 'lucide-react'
 import {
   deleteTenantBonusQuestion,
   updateTenantBonusQuestion,
 } from '@/app/actions/tenant-bonus'
+import { type BonusAnswerType } from '@/utils/bonus-answers'
 
 type BonusOption = {
   id: string
@@ -16,6 +18,7 @@ type BonusQuestion = {
   id: string
   question_text: string
   points: number
+  answer_type?: BonusAnswerType | null
   bonus_options?: BonusOption[]
 }
 
@@ -32,16 +35,31 @@ export function TenantBonusQuestionCard({
   canEdit,
   scopeTenantId,
 }: TenantBonusQuestionCardProps) {
+  const router = useRouter()
   const [isEditing, setIsEditing] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [feedback, setFeedback] = useState<string | null>(null)
 
   const handleDelete = async () => {
+    if (isSubmitting) return
     if (!confirm('Delete this group bonus question?')) return
+
+    setIsSubmitting(true)
+    setFeedback(null)
 
     const formData = new FormData()
     formData.append('question_id', question.id)
     formData.append('race_id', raceId)
     if (scopeTenantId) formData.append('tenant_id', scopeTenantId)
-    await deleteTenantBonusQuestion(formData)
+
+    try {
+      await deleteTenantBonusQuestion(formData)
+      router.refresh()
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'Failed to delete group bonus question.')
+    } finally {
+      setIsSubmitting(false)
+    }
   }
 
   if (isEditing && canEdit) {
@@ -49,8 +67,20 @@ export function TenantBonusQuestionCard({
       <div className="rounded-xl border border-amber-500/40 bg-black/35 p-4">
         <form
           action={async (formData) => {
-            await updateTenantBonusQuestion(formData)
-            setIsEditing(false)
+            if (isSubmitting) return
+
+            setIsSubmitting(true)
+            setFeedback(null)
+
+            try {
+              await updateTenantBonusQuestion(formData)
+              setIsEditing(false)
+              router.refresh()
+            } catch (error) {
+              setFeedback(error instanceof Error ? error.message : 'Failed to update group bonus question.')
+            } finally {
+              setIsSubmitting(false)
+            }
           }}
           className="space-y-3"
         >
@@ -76,40 +106,56 @@ export function TenantBonusQuestionCard({
             />
           </div>
 
-          <div className="space-y-2">
-            <p className="text-xs font-bold uppercase text-slate-500">Options</p>
-            {[0, 1, 2, 3].map((index) => {
-              const option = question.bonus_options?.[index]
+          {question.answer_type === 'numeric' ? (
+            <p className="rounded-xl border border-white/10 bg-black/25 px-4 py-3 text-sm text-slate-400">
+              This question accepts a non-negative number. Its answer type is fixed once answers are saved.
+            </p>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-xs font-bold uppercase text-slate-500">Options</p>
+              {[0, 1, 2, 3].map((index) => {
+                const option = question.bonus_options?.[index]
 
-              return (
-                <div key={index} className="flex gap-2">
-                  <input type="hidden" name="option_ids" value={option?.id || ''} />
-                  <input
-                    name="options"
-                    defaultValue={option?.label || ''}
-                    placeholder={`Option ${String.fromCharCode(65 + index)}`}
-                    className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-sm"
-                  />
-                </div>
-              )
-            })}
-          </div>
+                return (
+                  <div key={index} className="flex gap-2">
+                    <input type="hidden" name="option_ids" value={option?.id || ''} />
+                    <input
+                      name="options"
+                      defaultValue={option?.label || ''}
+                      placeholder={`Option ${String.fromCharCode(65 + index)}`}
+                      className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-sm"
+                    />
+                  </div>
+                )
+              })}
+            </div>
+          )}
 
           <div className="flex justify-end gap-2 pt-2">
             <button
               type="button"
-              onClick={() => setIsEditing(false)}
+              onClick={() => {
+                setFeedback(null)
+                setIsEditing(false)
+              }}
+              disabled={isSubmitting}
               className="rounded-xl px-4 py-2 text-sm font-bold text-slate-400 transition-colors hover:bg-white/5 hover:text-white"
             >
               Cancel
             </button>
             <button
               type="submit"
+              disabled={isSubmitting}
               className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-amber-500"
             >
-              Save Changes
+              {isSubmitting ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
+          {feedback && (
+            <p role="alert" className="text-sm text-red-300">
+              {feedback}
+            </p>
+          )}
         </form>
       </div>
     )
@@ -121,6 +167,9 @@ export function TenantBonusQuestionCard({
         <span>{question.question_text}</span>
         <div className="flex shrink-0 items-center gap-3">
           <span className="text-red-400">{question.points} pt</span>
+          <span className="rounded-full border border-white/10 px-2 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-slate-500">
+            {question.answer_type === 'numeric' ? 'Number' : 'Options'}
+          </span>
           {canEdit && (
             <>
               <button
@@ -134,6 +183,7 @@ export function TenantBonusQuestionCard({
               <button
                 type="button"
                 onClick={handleDelete}
+                disabled={isSubmitting}
                 className="text-slate-500 opacity-0 transition-colors hover:text-red-400 focus:opacity-100 group-hover:opacity-100"
                 aria-label="Delete group bonus question"
               >
@@ -143,15 +193,24 @@ export function TenantBonusQuestionCard({
           )}
         </div>
       </div>
-      <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-400">
-        {question.bonus_options?.map((option) => (
-          <li key={option.id}>{option.label}</li>
-        ))}
-      </ul>
+      {question.answer_type === 'numeric' ? (
+        <p className="mt-2 text-sm text-slate-400">Members enter a non-negative number.</p>
+      ) : (
+        <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-slate-400">
+          {question.bonus_options?.map((option) => (
+            <li key={option.id}>{option.label}</li>
+          ))}
+        </ul>
+      )}
       {!canEdit && (
         <div className="mt-3 rounded-lg border border-white/5 bg-white/5 px-3 py-2 text-xs font-medium text-slate-400">
           Question locked after the prediction deadline.
         </div>
+      )}
+      {feedback && (
+        <p role="alert" className="mt-3 text-sm text-red-300">
+          {feedback}
+        </p>
       )}
     </div>
   )

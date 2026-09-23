@@ -11,7 +11,7 @@ FLO-RMULA 1 is a Formula 1 prediction pool built with Next.js and Supabase. User
 - Season dashboard for the current season
 - Podium prediction flow for open races
 - Locked, completed, and scored race states with read-only summaries
-- Bonus question support per race
+- Bonus question support per race, including multiple-choice and numeric answers
 - Personal season history with missed-weekend visibility
 - Tenant and global leaderboard views with smart defaults
 - Expandable leaderboard transparency with race-by-race podium audit on scored weekends
@@ -111,6 +111,8 @@ Detailed execution tracking lives in [docs/roadmap/README.md](</Users/nareshmadh
 - Data writes: Server Actions
 - Session handling: Supabase SSR helpers
 - Caching: `revalidatePath` and `leaderboard_cache`
+
+For the numeric bonus-answer rollout, apply `supabase/migrations/0032_numeric_bonus_answers.sql` before deploying the application build. The migration is additive and idempotent: it defaults existing questions to multiple choice, preserves existing answer IDs, and seeds the Madrid question only when its target race and group are present.
 
 Important app areas:
 - `app/page.tsx`: public homepage

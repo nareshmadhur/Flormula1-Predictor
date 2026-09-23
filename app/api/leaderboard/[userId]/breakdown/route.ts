@@ -3,6 +3,7 @@ import { getCurrentSeason } from '@/utils/season'
 import { getRequestUserContext } from '@/utils/request-context'
 import { buildUserLeaderboardBreakdowns } from '@/utils/leaderboard-breakdown'
 import { isTestModeProfile } from '@/utils/test-mode'
+import { type BonusAnswerType } from '@/utils/bonus-answers'
 
 type RouteProps = {
   params: Promise<{ userId: string }>
@@ -58,6 +59,7 @@ type BonusQuestionRow = {
   race_id: string
   tenant_id?: string | null
   question_text: string
+  answer_type?: BonusAnswerType | null
   display_order?: number | null
   bonus_options?: Array<{
     id: string
@@ -68,13 +70,15 @@ type BonusQuestionRow = {
 type PredictionBonusAnswerRow = {
   prediction_id: string
   bonus_question_id: string
-  bonus_option_id: string
+  bonus_option_id?: string | null
+  numeric_value?: string | number | null
 }
 
 type RaceBonusAnswerRow = {
   race_id: string
   bonus_question_id: string
-  correct_bonus_option_id: string
+  correct_bonus_option_id?: string | null
+  numeric_value?: string | number | null
 }
 
 type DriverRow = {
@@ -92,6 +96,10 @@ function isValidSeason(value: string | null) {
   if (!value) return false
   const season = Number(value)
   return Number.isInteger(season) && season >= 1950 && season <= 3000
+}
+
+function isMissingColumnError(error: { message?: string } | null | undefined, column: string) {
+  return Boolean(error?.message?.includes(column) && error.message.includes('does not exist'))
 }
 
 function jsonResponse(payload: Record<string, unknown>, status = 200) {
@@ -190,23 +198,53 @@ export async function GET(request: Request, { params }: RouteProps) {
         .in('race_id', scoredRaceIds),
       supabase
         .from('bonus_questions')
-        .select('id, race_id, tenant_id, question_text, display_order, bonus_options(id, label)')
+        .select('id, race_id, tenant_id, question_text, answer_type, display_order, bonus_options(id, label)')
         .in('race_id', scoredRaceIds)
         .eq('is_active', true)
         .order('display_order', { ascending: true }),
       supabase
         .from('race_bonus_answers')
-        .select('race_id, bonus_question_id, correct_bonus_option_id')
+        .select('race_id, bonus_question_id, correct_bonus_option_id, numeric_value')
         .in('race_id', scoredRaceIds),
       supabase.from('drivers').select('id, code, emoji'),
     ])
+
+  let bonusQuestionsData = (questionsResult.data || []) as BonusQuestionRow[]
+  let bonusQuestionsError = questionsResult.error
+  let correctBonusData = (correctBonusResult.data || []) as RaceBonusAnswerRow[]
+  let correctBonusError = correctBonusResult.error
+
+  if (isMissingColumnError(bonusQuestionsError, 'answer_type')) {
+    const legacyQuestionsResult = await supabase
+      .from('bonus_questions')
+      .select('id, race_id, tenant_id, question_text, display_order, bonus_options(id, label)')
+      .in('race_id', scoredRaceIds)
+      .eq('is_active', true)
+      .order('display_order', { ascending: true })
+
+    bonusQuestionsData = ((legacyQuestionsResult.data || []) as BonusQuestionRow[]).map((question) => ({
+      ...question,
+      answer_type: 'choice' as const,
+    }))
+    bonusQuestionsError = legacyQuestionsResult.error
+  }
+
+  if (isMissingColumnError(correctBonusError, 'numeric_value')) {
+    const legacyCorrectBonusResult = await supabase
+      .from('race_bonus_answers')
+      .select('race_id, bonus_question_id, correct_bonus_option_id')
+      .in('race_id', scoredRaceIds)
+
+    correctBonusData = (legacyCorrectBonusResult.data || []) as RaceBonusAnswerRow[]
+    correctBonusError = legacyCorrectBonusResult.error
+  }
 
   const queryError =
     predictionsResult.error ||
     raceResultsResult.error ||
     scoresResult.error ||
-    questionsResult.error ||
-    correctBonusResult.error ||
+    bonusQuestionsError ||
+    correctBonusError ||
     driversResult.error
 
   if (queryError) {
@@ -219,11 +257,30 @@ export async function GET(request: Request, { params }: RouteProps) {
     predictionIds.length > 0
       ? await supabase
           .from('prediction_bonus_answers')
-          .select('prediction_id, bonus_question_id, bonus_option_id')
+          .select('prediction_id, bonus_question_id, bonus_option_id, numeric_value')
           .in('prediction_id', predictionIds)
       : { data: [], error: null }
 
-  if (predictionBonusResult.error) {
+  let predictionBonusData = (predictionBonusResult.data || []) as PredictionBonusAnswerRow[]
+  let predictionBonusError = predictionBonusResult.error
+
+  if (isMissingColumnError(predictionBonusError, 'numeric_value')) {
+    const legacyPredictionBonusResult =
+      predictionIds.length > 0
+        ? await supabase
+            .from('prediction_bonus_answers')
+            .select('prediction_id, bonus_question_id, bonus_option_id')
+            .in('prediction_id', predictionIds)
+        : { data: [], error: null }
+
+    predictionBonusData = (legacyPredictionBonusResult.data || []).map((answer) => ({
+      ...answer,
+      numeric_value: null,
+    })) as PredictionBonusAnswerRow[]
+    predictionBonusError = legacyPredictionBonusResult.error
+  }
+
+  if (predictionBonusError) {
     return jsonResponse({ error: 'Race detail is unavailable.' }, 500)
   }
 
@@ -232,9 +289,9 @@ export async function GET(request: Request, { params }: RouteProps) {
     predictions: predictionRows,
     raceResults: (raceResultsResult.data || []) as RaceResultRow[],
     raceScores: (scoresResult.data || []) as RaceScoreRow[],
-    bonusQuestions: (questionsResult.data || []) as BonusQuestionRow[],
-    predictionBonusAnswers: (predictionBonusResult.data || []) as PredictionBonusAnswerRow[],
-    raceBonusAnswers: (correctBonusResult.data || []) as RaceBonusAnswerRow[],
+    bonusQuestions: bonusQuestionsData,
+    predictionBonusAnswers: predictionBonusData,
+    raceBonusAnswers: correctBonusData,
     driversById: new Map(
       ((driversResult.data || []) as DriverRow[]).map((driver) => [driver.id, { code: driver.code, emoji: driver.emoji }])
     ),

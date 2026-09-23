@@ -3,6 +3,7 @@ import { FormActionButton } from '@/components/ui/form-action-button'
 import { RaceStatusPill } from '@/components/ui/race-status-pill'
 import { getRoundLabel } from '@/utils/race-copy'
 import { type RaceStatus } from '@/utils/race-status'
+import { type BonusAnswerType } from '@/utils/bonus-answers'
 import {
   addTenantBonusQuestion,
   saveTenantBonusAnswers,
@@ -44,6 +45,7 @@ export type TenantBonusQuestion = {
   race_id: string
   question_text: string
   points: number
+  answer_type?: BonusAnswerType | null
   display_order?: number | null
   bonus_options?: TenantBonusOption[]
 }
@@ -51,7 +53,8 @@ export type TenantBonusQuestion = {
 export type TenantBonusAnswer = {
   race_id: string
   bonus_question_id: string
-  correct_bonus_option_id: string
+  correct_bonus_option_id?: string | null
+  numeric_value?: string | number | null
 }
 
 type TenantBonusPanelProps = {
@@ -121,7 +124,7 @@ export function TenantBonusPanel({
   sectionId = 'group-bonus',
 }: TenantBonusPanelProps) {
   const questionsByRaceId = new Map<string, TenantBonusQuestion[]>()
-  const answerByQuestionId = new Map<string, string>()
+  const answerByQuestionId = new Map<string, TenantBonusAnswer>()
   const dedupedConstructorOptions = getDedupedConstructorOptions(constructorOptions)
   const driverPickerOptions = getDriverPickerOptions(driverOptions)
   const constructorPickerOptions = getConstructorPickerOptions(dedupedConstructorOptions)
@@ -140,7 +143,7 @@ export function TenantBonusPanel({
   })
 
   answers.forEach((answer) => {
-    answerByQuestionId.set(answer.bonus_question_id, answer.correct_bonus_option_id)
+    answerByQuestionId.set(answer.bonus_question_id, answer)
   })
 
   const liveRaces = races.filter((race) => race.effectiveStatus !== 'cancelled')
@@ -265,9 +268,20 @@ export function TenantBonusPanel({
                         aria-label="Bonus points"
                         className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2"
                       />
-                      <div className="grid gap-2 md:grid-cols-2">
+                      <div className="grid gap-2 md:grid-cols-[minmax(0,13rem)_minmax(0,1fr)]">
+                        <select
+                          name="answer_type"
+                          defaultValue="choice"
+                          aria-label="Answer type"
+                          className="rounded-xl border border-white/10 bg-black/40 px-3 py-2 text-sm"
+                        >
+                          <option value="choice">Multiple choice</option>
+                          <option value="numeric">Numeric answer</option>
+                        </select>
+                        <div className="grid gap-2 md:grid-cols-2">
                         <input name="options" placeholder="Custom option A" className="rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-sm" />
                         <input name="options" placeholder="Custom option B" className="rounded-xl border border-white/10 bg-black/40 px-4 py-2 text-sm" />
+                        </div>
                       </div>
                     </div>
 
@@ -318,21 +332,35 @@ export function TenantBonusPanel({
                         <label className="mb-1 block text-xs font-bold uppercase tracking-[0.18em] text-emerald-100/70">
                           {question.question_text}
                         </label>
-                        <select
-                          name={`bonus_${question.id}`}
-                          defaultValue={answerByQuestionId.get(question.id) || ''}
-                          required
-                          className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2"
-                        >
-                          <option value="" disabled className="bg-slate-900 text-white">
-                            Select correct option
-                          </option>
-                          {question.bonus_options?.map((option) => (
-                            <option key={option.id} value={option.id} className="bg-slate-900 text-white">
-                              {option.label}
+                        {question.answer_type === 'numeric' ? (
+                          <input
+                            name={`bonus_${question.id}`}
+                            type="number"
+                            min="0"
+                            step="any"
+                            inputMode="decimal"
+                            defaultValue={String(answerByQuestionId.get(question.id)?.numeric_value ?? '')}
+                            required
+                            placeholder="Enter the official number"
+                            className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2"
+                          />
+                        ) : (
+                          <select
+                            name={`bonus_${question.id}`}
+                            defaultValue={answerByQuestionId.get(question.id)?.correct_bonus_option_id || ''}
+                            required
+                            className="w-full rounded-xl border border-white/10 bg-black/40 px-4 py-2"
+                          >
+                            <option value="" disabled className="bg-slate-900 text-white">
+                              Select correct option
                             </option>
-                          ))}
-                        </select>
+                            {question.bonus_options?.map((option) => (
+                              <option key={option.id} value={option.id} className="bg-slate-900 text-white">
+                                {option.label}
+                              </option>
+                            ))}
+                          </select>
+                        )}
                       </div>
                     ))}
                     <FormActionButton idleLabel="Save group answers" pendingLabel="Saving answers..." tone="primary" />

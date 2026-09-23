@@ -1,3 +1,10 @@
+import {
+  bonusAnswerValuesMatch,
+  getBonusAnswerDisplay,
+  type BonusAnswerType,
+  type BonusAnswerValue,
+} from '@/utils/bonus-answers'
+
 type DriverRecord = {
   code?: string | null
   emoji?: string | null
@@ -33,6 +40,7 @@ type BonusQuestion = {
   race_id: string
   tenant_id?: string | null
   question_text: string
+  answer_type?: BonusAnswerType | null
   display_order?: number | null
   bonus_options?: Array<{
     id: string
@@ -43,13 +51,15 @@ type BonusQuestion = {
 type PredictionBonusAnswer = {
   prediction_id: string
   bonus_question_id: string
-  bonus_option_id: string
+  bonus_option_id?: string | null
+  numeric_value?: string | number | null
 }
 
 type RaceBonusAnswer = {
   race_id: string
   bonus_question_id: string
-  correct_bonus_option_id: string
+  correct_bonus_option_id?: string | null
+  numeric_value?: string | number | null
 }
 
 type ScoredRace = {
@@ -147,16 +157,11 @@ export function buildUserLeaderboardBreakdowns({
   )
 
   const questionsByRaceId = new Map<string, BonusQuestion[]>()
-  const optionLabelById = new Map<string, string>()
-
   bonusQuestions.forEach((question) => {
     const current = questionsByRaceId.get(question.race_id) || []
     current.push(question)
     questionsByRaceId.set(question.race_id, current)
 
-    question.bonus_options?.forEach((option) => {
-      optionLabelById.set(option.id, option.label?.trim() || 'Unknown option')
-    })
   })
 
   questionsByRaceId.forEach((questions, raceId) => {
@@ -166,11 +171,17 @@ export function buildUserLeaderboardBreakdowns({
     )
   })
 
-  const bonusAnswerByPredictionQuestion = new Map(
-    predictionBonusAnswers.map((answer) => [`${answer.prediction_id}:${answer.bonus_question_id}`, answer.bonus_option_id])
+  const bonusAnswerByPredictionQuestion = new Map<string, BonusAnswerValue>(
+    predictionBonusAnswers.map((answer) => [
+      `${answer.prediction_id}:${answer.bonus_question_id}`,
+      { optionId: answer.bonus_option_id, numericValue: answer.numeric_value },
+    ])
   )
-  const correctBonusByRaceQuestion = new Map(
-    raceBonusAnswers.map((answer) => [`${answer.race_id}:${answer.bonus_question_id}`, answer.correct_bonus_option_id])
+  const correctBonusByRaceQuestion = new Map<string, BonusAnswerValue>(
+    raceBonusAnswers.map((answer) => [
+      `${answer.race_id}:${answer.bonus_question_id}`,
+      { optionId: answer.correct_bonus_option_id, numericValue: answer.numeric_value },
+    ])
   )
 
   const breakdowns = new Map<string, UserRaceLeaderboardBreakdown[]>()
@@ -213,20 +224,17 @@ export function buildUserLeaderboardBreakdowns({
       (question) => !question.tenant_id || question.tenant_id === predictionTenantId
     )
     const bonusItems: BonusBreakdownItem[] = raceQuestions.map((question) => {
-      const selectedOptionId = bonusAnswerByPredictionQuestion.get(`${prediction.id}:${question.id}`)
-      const correctOptionId = correctBonusByRaceQuestion.get(`${prediction.race_id}:${question.id}`)
-      const selectedLabel = selectedOptionId
-        ? optionLabelById.get(selectedOptionId) || 'Unknown option'
-        : 'No pick'
-      const correctLabel = correctOptionId
-        ? optionLabelById.get(correctOptionId) || 'Unknown option'
-        : 'Awaiting answer'
+      const selectedAnswer = bonusAnswerByPredictionQuestion.get(`${prediction.id}:${question.id}`) || {}
+      const correctAnswer = correctBonusByRaceQuestion.get(`${prediction.race_id}:${question.id}`) || {}
+      const answerType = question.answer_type || 'choice'
+      const selectedLabel = getBonusAnswerDisplay(question, selectedAnswer, 'No pick')
+      const correctLabel = getBonusAnswerDisplay(question, correctAnswer, 'Awaiting answer')
 
       return {
         label: shortenQuestionLabel(question.question_text),
         selectedLabel,
         correctLabel,
-        isCorrect: Boolean(selectedOptionId && correctOptionId && selectedOptionId === correctOptionId),
+        isCorrect: bonusAnswerValuesMatch(answerType, selectedAnswer, correctAnswer),
       }
     })
 

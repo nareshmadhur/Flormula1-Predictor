@@ -2,7 +2,13 @@ import { createClient } from '@/utils/supabase/server'
 
 type ResultPipelineClient = Pick<Awaited<ReturnType<typeof createClient>>, 'rpc'>
 
-type BonusAnswer = {
+export type BonusAnswer = {
+  questionId: string
+  optionId?: string | null
+  numericValue?: string | number | null
+}
+
+type ChoiceBonusAnswer = {
   questionId: string
   optionId: string
 }
@@ -13,11 +19,21 @@ type Podium = {
   p3: string
 }
 
-function getBonusArrays(bonusAnswers: BonusAnswer[]) {
+function getBonusArrays(bonusAnswers: ChoiceBonusAnswer[]) {
   return {
     p_bonus_question_ids: bonusAnswers.map((answer) => answer.questionId),
     p_bonus_option_ids: bonusAnswers.map((answer) => answer.optionId),
   }
+}
+
+function getBonusJson(bonusAnswers: BonusAnswer[]) {
+  return bonusAnswers.map((answer) => ({
+    question_id: answer.questionId,
+    ...(answer.optionId ? { option_id: answer.optionId } : {}),
+    ...(answer.numericValue !== undefined && answer.numericValue !== null
+      ? { numeric_value: String(answer.numericValue) }
+      : {}),
+  }))
 }
 
 function throwPipelineError(error: { message: string } | null, fallback: string) {
@@ -31,7 +47,7 @@ export async function saveOfficialRaceResult(
   input: {
     raceId: string
     podium: Podium
-    bonusAnswers: BonusAnswer[]
+    bonusAnswers: ChoiceBonusAnswer[]
   }
 ) {
   const { error } = await supabase.rpc('save_official_race_result', {
@@ -52,9 +68,9 @@ export async function saveTenantRaceBonusAnswers(
     bonusAnswers: BonusAnswer[]
   }
 ) {
-  const { error } = await supabase.rpc('save_tenant_race_bonus_answers', {
+  const { error } = await supabase.rpc('save_tenant_race_bonus_answers_v2', {
     p_race_id: input.raceId,
-    ...getBonusArrays(input.bonusAnswers),
+    p_bonus_answers: getBonusJson(input.bonusAnswers),
   })
 
   throwPipelineError(error, 'Could not save group bonus answers.')
@@ -69,13 +85,13 @@ export async function saveHistoricPrediction(
     bonusAnswers: BonusAnswer[]
   }
 ) {
-  const { data, error } = await supabase.rpc('save_historic_prediction', {
+  const { data, error } = await supabase.rpc('save_historic_prediction_v2', {
     p_race_id: input.raceId,
     p_user_id: input.userId,
     p_p1_driver_id: input.podium.p1,
     p_p2_driver_id: input.podium.p2,
     p_p3_driver_id: input.podium.p3,
-    ...getBonusArrays(input.bonusAnswers),
+    p_bonus_answers: getBonusJson(input.bonusAnswers),
   })
 
   throwPipelineError(error, 'Could not save the historic prediction.')

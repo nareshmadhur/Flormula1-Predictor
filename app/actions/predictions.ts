@@ -3,10 +3,12 @@
 import { createClient } from '@/utils/supabase/server'
 import { revalidatePath } from 'next/cache'
 import { getEffectiveRaceStatus } from '@/utils/race-status'
+import { normalizeNumericBonusValue, type BonusAnswerType } from '@/utils/bonus-answers'
 
 type SubmittedBonusAnswer = {
   question_id: string
-  option_id: string
+  option_id?: string | null
+  numeric_value?: string | number | null
 }
 
 type ProfileTenantRow = {
@@ -92,7 +94,7 @@ export async function submitPrediction(formData: FormData) {
 
       const { data: validQuestions, error: questionsError } = await supabase
         .from('bonus_questions')
-        .select('id, bonus_options(id)')
+        .select('id, answer_type, bonus_options(id)')
         .eq('race_id', raceId)
         .eq('tenant_id', tenantId)
         .eq('is_active', true)
@@ -101,22 +103,53 @@ export async function submitPrediction(formData: FormData) {
         return { error: 'Could not validate bonus answers. Please try again.' }
       }
 
-      const optionIdsByQuestion = new Map(
+      const questionsById = new Map(
         (validQuestions || []).map((question) => [
           question.id,
-          new Set((question.bonus_options || []).map((option) => option.id)),
+          {
+            answerType: (question.answer_type || 'choice') as BonusAnswerType,
+            optionIds: new Set((question.bonus_options || []).map((option) => option.id)),
+          },
         ])
       )
       const submittedQuestionIds = new Set<string>()
+      const normalizedAnswers: Array<{
+        question_id: string
+        option_id: string | null
+        numeric_value: string | null
+      }> = []
 
       for (const answer of parsedAnswers) {
-        if (
-          !answer?.question_id ||
-          !answer.option_id ||
-          submittedQuestionIds.has(answer.question_id) ||
-          !optionIdsByQuestion.get(answer.question_id)?.has(answer.option_id)
-        ) {
+        const question = answer?.question_id ? questionsById.get(answer.question_id) : null
+        if (!answer?.question_id || !question || submittedQuestionIds.has(answer.question_id)) {
           return { error: 'One or more bonus answers are invalid. Please review your entry.' }
+        }
+
+        if (question.answerType === 'numeric') {
+          const numericValue = normalizeNumericBonusValue(answer.numeric_value)
+          if (answer.option_id || !numericValue) {
+            return { error: 'One or more bonus answers are invalid. Please review your entry.' }
+          }
+
+          normalizedAnswers.push({
+            question_id: answer.question_id,
+            option_id: null,
+            numeric_value: numericValue,
+          })
+        } else {
+          if (
+            !answer.option_id ||
+            answer.numeric_value !== undefined && answer.numeric_value !== null ||
+            !question.optionIds.has(answer.option_id)
+          ) {
+            return { error: 'One or more bonus answers are invalid. Please review your entry.' }
+          }
+
+          normalizedAnswers.push({
+            question_id: answer.question_id,
+            option_id: answer.option_id,
+            numeric_value: null,
+          })
         }
 
         submittedQuestionIds.add(answer.question_id)
@@ -131,11 +164,12 @@ export async function submitPrediction(formData: FormData) {
         return { error: 'Could not replace your bonus answers. Please try again.' }
       }
 
-      if (parsedAnswers.length > 0) {
-        const bulkInserts = parsedAnswers.map((a) => ({
+      if (normalizedAnswers.length > 0) {
+        const bulkInserts = normalizedAnswers.map((a) => ({
           prediction_id: prediction.id,
           bonus_question_id: a.question_id,
-          bonus_option_id: a.option_id
+          bonus_option_id: a.option_id,
+          numeric_value: a.numeric_value,
         }))
 
         const { error: bonusError } = await supabase
